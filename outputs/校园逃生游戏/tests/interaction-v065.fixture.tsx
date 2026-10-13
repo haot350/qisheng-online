@@ -1,0 +1,24 @@
+import React,{useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {CombatBriefing,type CombatBriefingMode} from '../src/CombatBriefing';
+import {NearbyInteractionUI} from '../src/NearbyInteractionUI';
+import {OnlineHUD,onlineTaskGuidance} from '../src/multiplayer/MultiplayerUI';
+import {OnlineMap} from '../src/multiplayer/OnlineMap';
+import {EscapeMapCanvas} from '../src/EscapeMapCanvas';
+import {onlineMapSnapshot} from '../src/multiplayer/task-map';
+import type {RoomSnapshot,PlayerState,TaskState} from '../src/multiplayer/shared/protocol';
+import type {NearbyInteraction} from '../src/nearby-interaction';
+import '../src/escape-hud.css';
+const q=new URLSearchParams(location.search),scene=q.get('scene')??'briefing',touch=q.get('touch')==='1';
+const actions:any[]=[];(window as any).__fixtureActions=actions;
+const me={id:'me',nickname:'我',avatar:'campus-a',shortId:'TEST',team:'blue',connected:true,life:'alive',position:[0,0,0],yaw:0,weapon:'m4a1',primaryWeapon:'m4a1',ammo:30,reserve:90,health:100,stamina:100,kills:0,carryingTask:null} as PlayerState;
+const makeTask=(id:string,x:number,floor:number):TaskState=>({id,kind:'take',label:id==='tracked'?'庭院物资':'楼上设备',positions:[[x,0,-5]],floors:[floor],status:'pending',progress:0,duration:15,radius:4,visited:[],carrierId:null,drop:null,blocked:null});
+const room={roomId:'fixture',mode:'coop',phase:'playing',difficulty:'standard',remaining:420,elapsed:10,players:[me],npcs:[],tasks:[makeTask('tracked',30,0),makeTask('near',2,2)],drops:[],supplies:[],smokes:[],events:[],eventSerial:0,teamScores:{blue:1,red:2},extraction:{available:false,position:[30,0,30],progress:0,duration:20,blocked:null},maxPlayers:4,pauseVote:null,pauseLeft:0,pauseUses:0} as unknown as RoomSnapshot;
+function App(){const [id,setId]=useState('target'),[selected,setSelected]=useState('tracked');const interaction:NearbyInteraction={kind:q.get('revive')==='1'?'revive':'task',id,taskId:'near',siteId:'0',action:q.get('revive')==='1'?'revive':'take',available:q.get('full')!=='1'};const press=(pressed:boolean)=>actions.push({pressed});(window as any).__changeInteraction=()=>setId('changed');(window as any).__guidance=onlineTaskGuidance(room,me,touch,'tracked');
+ if(scene==='briefing')return <CombatBriefing mode={(q.get('mode')??'solo') as CombatBriefingMode} touch={touch} onContinue={()=>actions.push({type:'continue'})} onClose={()=>actions.push({type:'close'})} continueLabel="开始突围"/>;
+ if(scene==='nearby')return <NearbyInteractionUI interaction={interaction} label="庭院物资" touch={touch} onPress={press} screen={{x:.55,y:.57}}/>;
+ if(scene==='map')return <OnlineMap room={room} playerId="me" onClose={()=>actions.push({type:'close'})} selectedTaskId={selected} onSelectTask={taskId=>{setSelected(taskId);actions.push({taskId});}}/>;
+ if(scene==='minimap')return <div style={{width:150,height:150}}><EscapeMapCanvas snapshot={onlineMapSnapshot(room,'me','near',[])} floor={0} minimap/></div>;
+ return <OnlineHUD room={room} playerId="me" onMenu={()=>actions.push({type:'menu'})} onAction={a=>actions.push(a)} touch={touch} selectedTaskId="tracked" interaction={interaction} interactionScreen={{x:.55,y:.57}} onInteract={press}/>;
+}
+createRoot(document.getElementById('root')!).render(<App/>);

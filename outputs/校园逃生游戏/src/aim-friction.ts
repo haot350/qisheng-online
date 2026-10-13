@@ -1,0 +1,2 @@
+/** Touch-only slowdown. It never modifies yaw/pitch or reveals occluded targets. */
+export function touchAimFriction(input:{touch:boolean;enabled:boolean;mode:string;angularDistance:number;visible:boolean;distance:number;angularRadius?:number}){if(!input.touch||!input.enabled||input.mode!=='escape'||!input.visible||input.distance>90)return 1;const radius=Math.max(.025,Math.min(.11,input.angularRadius??.065)),edge=Math.min(1,Math.max(0,input.angularDistance/radius));return edge>=1?1:.64+.36*edge*edge;}

@@ -1,0 +1,3 @@
+'use client';
+import {useEffect} from 'react';
+export default function PageMotion(){useEffect(()=>{if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add('reveal-visible');observer.unobserve(entry.target)}}),{threshold:.08});const elements=document.querySelectorAll<HTMLElement>('[data-reveal]');elements.forEach(element=>{if(element.getBoundingClientRect().top>innerHeight){element.classList.add('reveal-ready');observer.observe(element)}});return()=>{observer.disconnect();elements.forEach(el=>el.classList.remove('reveal-ready','reveal-visible'))}},[]);return null}

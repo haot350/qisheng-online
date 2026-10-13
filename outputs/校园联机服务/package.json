@@ -1,0 +1,36 @@
+{
+  "name": "qisheng-campus-realtime",
+  "version": "0.8.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/typecheck.mjs && node scripts/build.mjs",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "start": "node dist/server.mjs",
+    "loadtest": "node scripts/loadtest.mjs",
+    "typecheck": "node scripts/typecheck.mjs"
+  },
+  "dependencies": {
+    "@colyseus/core": "0.18.18",
+    "@colyseus/redis-driver": "0.18.4",
+    "@colyseus/redis-presence": "0.18.5",
+    "@colyseus/schema": "5.0.36",
+    "@colyseus/sdk": "0.18.5",
+    "@colyseus/ws-transport": "0.18.4",
+    "@dimforge/rapier3d-compat": "0.19.3",
+    "ioredis": "5.8.2",
+    "recast-navigation": "0.43.1",
+    "three": "0.183.0",
+    "express": "5.2.1",
+    "@qisheng/shared": "file:vendor/qisheng-shared-0.8.1.tgz"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.3",
+    "@types/node": "22.19.19",
+    "@types/three": "0.183.0",
+    "esbuild": "0.25.11",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "license": "MIT"
+}

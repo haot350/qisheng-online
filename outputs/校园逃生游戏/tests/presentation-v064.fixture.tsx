@@ -1,0 +1,10 @@
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import MultiplayerUI,{OnlineHUD} from '../src/multiplayer/MultiplayerUI';
+import type {LobbyView,RoomSnapshot,PlayerState} from '../src/multiplayer/shared/protocol';
+const q=new URLSearchParams(location.search),scene=q.get('scene')??'pickup';
+const me={id:'me',nickname:'我',avatar:'campus-a',shortId:'TEST',team:'blue',connected:true,life:'alive',position:[0,0,0],yaw:0,weapon:'m4a1',primaryWeapon:'m4a1',ammo:30,reserve:90,health:100,stamina:100,kills:0,carryingTask:null} as PlayerState;
+const room={roomId:'fixture',mode:'pvp',variant:'tdm',phase:'playing',remaining:590,elapsed:10,players:[me],npcs:[],tasks:[],drops:[],supplies:[],smokes:[],events:[],eventSerial:0,teamScores:{blue:1,red:2},extraction:{available:false,position:[30,0,30],progress:0,duration:20,blocked:null},maxPlayers:8,pauseVote:null,pauseLeft:0,pauseUses:0} as unknown as RoomSnapshot;
+(window as any).__fixtureActions=[];const onAction=(a:any)=>(window as any).__fixtureActions.push(a);
+const view={status:'error',rooms:[],currentRoom:null,error:'connection error',errorCode:scene==='expired'?'RECONNECT_EXPIRED':'RECONNECT_RETRY'} as LobbyView;
+createRoot(document.getElementById('root')!).render(scene==='pickup'?<OnlineHUD room={room} playerId="me" onMenu={()=>onAction({type:'menu'})} onAction={onAction} touch={q.get('touch')==='1'} pickup={{id:'drop',weapon:q.get('same')==='1'?'m4a1':'mp5',label:q.get('same')==='1'?'M4A1':'MP5',loading:false,error:false}} onPickup={()=>onAction({type:'interact'})}/>:<MultiplayerUI view={view} playerId="me" onAction={onAction} onClose={()=>onAction({type:'close'})}/>);

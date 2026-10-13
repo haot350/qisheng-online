@@ -1,0 +1,42 @@
+{
+  "name": "qisheng-after-class",
+  "version": "0.8.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev-profile.mjs",
+    "build": "node scripts/build-profile.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "assets": "node scripts/build-map.mjs && node scripts/build-fairness-map-070.mjs && node scripts/build-combat-map-071.mjs",
+    "test": "node scripts/test-current.mjs",
+    "check:map": "node --experimental-transform-types --test tests/v16-integration.check.ts",
+    "test:legacy": "node --experimental-transform-types --test --test-concurrency=1 tests/engine-round.test.ts",
+    "build:production": "node scripts/build-profile.mjs production",
+    "dev:production": "node scripts/dev-profile.mjs production"
+  },
+  "dependencies": {
+    "@colyseus/sdk": "0.18.5",
+    "@dimforge/rapier3d-compat": "0.19.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "recast-navigation": "0.43.1",
+    "three": "0.183.0",
+    "@qisheng/shared": "file:vendor/qisheng-shared-0.8.1.tgz"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.3.0",
+    "@gltf-transform/extensions": "4.3.0",
+    "@gltf-transform/functions": "4.3.0",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.183.0",
+    "@vitejs/plugin-react": "6.0.2",
+    "meshoptimizer": "0.25.0",
+    "sharp": "0.35.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vite": "8.0.16"
+  },
+  "license": "MIT"
+}

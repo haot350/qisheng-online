@@ -1,0 +1,9 @@
+import {ArrowUpRight, Menu} from 'lucide-react';
+import PageMotion from './page-motion';
+type Page='home'|'school'|'making'|'astra'|'game'|'explore'|'feedback';
+const links:{id:Page;href:string;label:string}[]=[{id:'home',href:'/',label:'首页'},{id:'school',href:'/school',label:'认识齐盛'},{id:'making',href:'/making',label:'制作过程'},{id:'astra',href:'/astra',label:'关于 Astra'},{id:'game',href:'/game',label:'齐盛Online'},{id:'feedback',href:'/feedback',label:'反馈与进展'},{id:'explore',href:'/explore',label:'探索校园'}];
+export function SiteHeader({active='home'}:{active?:Page}){
+ const navigation=links.map(link=><a key={link.id} href={link.href} aria-current={active===link.id?'page':undefined} className={link.id==='explore'?'site-enter':undefined}>{link.label}{link.id==='explore'&&<ArrowUpRight aria-hidden="true"/>}</a>);
+ return <><a href="#main-content" className="skip-link">跳至内容</a><header className="site-header"><a href="/" className="site-brand" aria-label="齐盛数字校园首页"><svg viewBox="0 0 32 38" fill="none" aria-hidden="true"><path d="M2 35V10h28v25M1 7l15-5 15 5M8 16h16M8 23h16M9 35V16m7 0v19m7-19v19" stroke="currentColor" strokeWidth="1.5"/></svg><span>齐盛 · 数字校园</span></a><nav className="site-nav" aria-label="主导航">{navigation}</nav><details className="site-mobile-nav"><summary aria-label="打开网站导航"><Menu aria-hidden="true"/><span>菜单</span></summary><nav aria-label="手机主导航">{navigation}</nav></details></header><PageMotion/></>;
+}
+export function SiteFooter(){return <footer className="site-footer"><div><a href="/" className="footer-brand">齐盛 · 数字校园</a><p>一份可以走近的校园记录。</p></div><div className="footer-info"><p>目前为预览版。个人校园数字重建项目，非学校官方网站。</p><p>资料提供与校准由项目发起者完成，GPT-6 Astra 协助制作。</p><a href="/feedback">反馈与处理进展 <ArrowUpRight aria-hidden="true"/></a><a href="/making">了解制作过程 <ArrowUpRight aria-hidden="true"/></a></div></footer>}

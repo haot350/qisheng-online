@@ -1,0 +1,39 @@
+name: Public source and local demo
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  clean-linux-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install locked source modules
+        shell: bash
+        run: |
+          for module in 校园共享模块 校园逃生游戏 校园排行榜服务 校园联机服务 校园交互网站/site; do
+            (cd "outputs/$module" && npm ci --no-audit --no-fund)
+          done
+      - name: Build default demo and backend source
+        shell: bash
+        run: |
+          (cd outputs/校园共享模块 && npm run build)
+          (cd outputs/校园逃生游戏 && npm run build)
+          (cd outputs/校园排行榜服务 && npm run build)
+          (cd outputs/校园联机服务 && npm run build)
+          (cd outputs/校园交互网站/site && npm run build)
+          node scripts/public-source.mjs --check
+      - name: Verify isolated account API and two demo clients
+        shell: bash
+        run: |
+          node scripts/dev-demo.mjs > /tmp/openqs-demo.log 2>&1 &
+          task_pid=$!
+          trap 'kill "$task_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:2577/health > /dev/null && curl --fail --silent http://127.0.0.1:8792/health > /dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/check-demo.mjs

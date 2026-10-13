@@ -1,0 +1,13 @@
+import {readFile} from 'node:fs/promises';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {SimWorld} from '../../校园逃生游戏/src/multiplayer/shared/sim-world';
+import type {MapIdentity} from '../../校园逃生游戏/src/multiplayer/shared/protocol';
+const directory=process.env.MAP_DIRECTORY??path.resolve(process.cwd(),'../校园逃生游戏/public/map');
+const [manifestBytes,collision,nav]=await Promise.all(['manifest.json','collision.bin','navigation.bin'].map(p=>readFile(path.join(directory,p))));
+export const manifest=JSON.parse(manifestBytes.toString());
+const vision=manifest.visionUrl?await readFile(path.join(directory,path.basename(manifest.visionUrl))):undefined;
+const hash=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
+export const mapIdentity:MapIdentity={sourceVersion:manifest.sourceVersion??manifest.source,manifestHash:hash(manifestBytes),collisionHash:hash(collision),navigationHash:hash(nav),...(vision?{visionHash:hash(vision)}:{})};
+const buffer=(b:Buffer)=>b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength) as ArrayBuffer;
+export const createWorld=()=>SimWorld.create(manifest,buffer(collision),new Uint8Array(nav),vision?buffer(vision):undefined);

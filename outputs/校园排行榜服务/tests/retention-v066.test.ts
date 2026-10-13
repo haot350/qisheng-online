@@ -1,0 +1,24 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createApp} from '../dist/app.js';
+import {applyRunRetention,inspectRunRetention} from '../dist/retention.js';
+import {COOP_RULE_VERSION,DAFEI_RULE_VERSION} from '../dist/shared.js';
+const DAY=86400000,now=Date.UTC(2026,9,8),config={mode:'dafei',ruleVersion:DAFEI_RULE_VERSION,seed:1,weapon:'vehicle',roster:['jiang','meng','xu','luan'],tasks:[],controls:'keyboard',transmission:'auto'};
+async function fixture(){let time=now;const {app,db}=await createApp({dbPath:':memory:',clock:()=>time,credentialSecret:'retention-isolated-test'});const player=(await app.inject({method:'POST',url:'/v1/identity/register',payload:{nickname:'维护测试'}})).json();const request=(method:string,url:string,payload?:unknown)=>app.inject({method:method as any,url,payload,headers:{authorization:'Bearer '+player.token}});return{app,db,player,request,advance:(n:number)=>time+=n};}
+test('expired pending credentials become terminal and never appear as a completed recent match',async()=>{
+ const f=await fixture();try{const issued=(await f.request('POST','/v1/runs',{clientRunId:'expiry-v066-test',config})).json();f.advance(DAY+1);
+  for(const [method,url,payload]of [['GET','/v1/runs/'+issued.runId+'/status',undefined],['POST','/v1/runs/'+issued.runId+'/events',{credential:issued.credential,events:[]}],['POST','/v1/runs/'+issued.runId+'/finalize',{credential:issued.credential,eventCount:0,summary:{}}]] as const){const response=await f.request(method,url,payload);assert.equal(response.statusCode,410,response.body);assert.equal(response.json().error.code,'EXPIRED');}
+  assert.equal((f.db.prepare('SELECT status FROM runs WHERE id=?').get(issued.runId) as any).status,'expired');assert.deepEqual((await f.request('GET','/v1/identity/recent')).json().runs,[]);
+ }finally{await f.app.close();}
+});
+test('read-only retention preview and apply preserve score rows and all pending review evidence',async()=>{
+ const f=await fixture();try{for(const [id,status,created,expires,submitted]of [['old-pending','pending',now-40*DAY,now-39*DAY,null],['young-pending','pending',now-2*DAY,now-DAY,null],['still-live','pending',now-40*DAY,now+DAY,null],['review','review',now-40*DAY,now-39*DAY,now-35*DAY],['ranked','ranked',now-40*DAY,now-39*DAY,now-35*DAY]] as const){f.db.prepare('INSERT INTO runs(id,player_id,client_id,credential_hash,created,expires,config,status,submitted,summary) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id,f.player.player.id,id,'hash',created,expires,JSON.stringify(config),status,submitted,status==='ranked'||status==='review'?'{"score":123}':null);f.db.prepare('INSERT INTO events VALUES(?,?,?)').run(id,1,'{}');}
+  f.db.pragma('query_only=ON');const preview=applyRunRetention(f.db,now);assert.equal(preview.dryRun,true);assert.equal(preview.expirePending,2);assert.equal(preview.unsubmittedEvents,1);assert.equal(preview.processedEvents,1);assert.equal((f.db.prepare('SELECT count(*) n FROM events').get() as any).n,5);assert.deepEqual(inspectRunRetention(f.db,now),Object.fromEntries(Object.entries(preview).filter(([k])=>!['dryRun','changed'].includes(k))));f.db.pragma('query_only=OFF');
+  const done=applyRunRetention(f.db,now,{dryRun:false});assert.deepEqual(done.changes,{expired:2,unsubmitted:1,submitted:1});assert.equal((f.db.prepare('SELECT count(*) n FROM runs').get() as any).n,5);assert.deepEqual((f.db.prepare('SELECT run_id FROM events ORDER BY run_id').all() as any[]).map(r=>r.run_id),['review','still-live','young-pending']);assert.equal((f.db.prepare('SELECT summary FROM runs WHERE id=?').get('ranked') as any).summary,'{"score":123}');assert.equal(applyRunRetention(f.db,now,{dryRun:false}).changed,0);
+ }finally{await f.app.close();}
+});
+test('cooperative leaderboard defaults to the new rule even when a newer legacy result exists',async()=>{
+ const f=await fixture();try{for(const [id,version,time]of [['new',COOP_RULE_VERSION,now-1000],['old','coop-0.5.0',now]] as const){f.db.prepare('INSERT INTO multiplayer_results(id,room_id,mode,rule_version,team_key,difficulty,team_count,score,elapsed,won,week,submitted,result,content_hash,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(id,'room','coop',version,f.player.player.id,'standard',2,90,200,1,'2026-10-05',time,JSON.stringify({team:{tasks:[]}}),id,'valid');f.db.prepare('INSERT INTO multiplayer_participants VALUES(?,?,?,?)').run(id,f.player.player.id,'{}',1);}
+  const current=(await f.request('GET','/v1/multiplayer/boards?period=all&players=2')).json();assert.equal(current.ruleVersion,COOP_RULE_VERSION);assert.equal(current.total,1);assert.equal(current.entries[0].id,'new');assert.deepEqual(current.versions,[COOP_RULE_VERSION,'coop-0.5.0']);const old=(await f.request('GET','/v1/multiplayer/boards?period=all&players=2&ruleVersion=coop-0.5.0')).json();assert.equal(old.total,1);assert.equal(old.entries[0].id,'old');
+ }finally{await f.app.close();}
+});

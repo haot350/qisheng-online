@@ -1,0 +1,2 @@
+import {SiteHeader,SiteFooter} from './site-shell';
+export default function NotFound(){return <><SiteHeader/><main id="main-content" style={{maxWidth:1100,margin:'0 auto',padding:'100px 6% 140px'}}><h1 style={{fontFamily:'var(--serif)',fontSize:42,fontWeight:400}}>这里暂时没有页面。</h1><p style={{fontSize:18,color:'#6b7362',lineHeight:2}}>可以回到首页，或继续探索校园。</p><a className="section-link" href="/">返回首页</a><a className="section-link" style={{marginLeft:30}} href="/explore">探索校园</a></main><SiteFooter/></>}

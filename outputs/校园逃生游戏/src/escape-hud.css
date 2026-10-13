@@ -1,0 +1,168 @@
+/* Escape-only overlays: other modes retain their existing interface. */
+.fps-hud{z-index:4;pointer-events:none;--fps-ink:#edf1e6;--fps-muted:#c8d0c0;--fps-accent:#e4c383;color:var(--fps-ink);font-variant-numeric:tabular-nums;line-height:1.2}
+.fps-hud button,.fps-map-panel button,.fps-touch-settings button,.fps-layout-editor button{font:inherit;color:inherit;cursor:pointer}
+.fps-hud button:focus-visible,.fps-map-panel button:focus-visible,.fps-layout-editor button:focus-visible{outline:2px solid #f1d797;outline-offset:2px}
+.fps-hud button{pointer-events:auto}
+.fps-minimap{position:absolute;left:calc(env(safe-area-inset-left) + 20px);top:calc(env(safe-area-inset-top) + 20px);width:150px;height:150px;padding:0;border:1px solid #dae4c654;border-radius:2px;background:#172521;color:#e6ecda;overflow:hidden;box-shadow:0 2px 14px #0003}
+.fps-minimap>span{position:absolute;bottom:4px;right:5px;font-size:10px;letter-spacing:.05em;pointer-events:none}
+.fps-mission{position:absolute;left:calc(env(safe-area-inset-left) + 184px);top:calc(env(safe-area-inset-top) + 20px);width:270px;pointer-events:none;text-shadow:0 1px 4px #000a}
+.fps-mission-list{display:flex;gap:4px;pointer-events:auto}
+.fps-mission-list button{display:flex;align-items:center;gap:6px;min-height:44px;padding:4px 10px;background:#15221ab3;border:1px solid #cbd8b826;border-bottom:2px solid #cbd8b850;border-radius:2px;font-size:12px;font-weight:600;color:#d0d8c5;white-space:nowrap}
+.fps-mission-list button>span{font-size:10px;opacity:.8}
+.fps-mission-list button.selected{border-bottom-color:var(--fps-accent);color:#f4e1b7;background:#273627b8}
+.fps-mission-list button.complete{opacity:.58}
+.fps-current{padding:6px 0 0 3px}
+.fps-current p{margin:0;font-size:13px;font-weight:600;max-width:100%;line-height:1.45}
+.fps-current kbd{display:inline-block;margin-left:6px;padding:1px 4px;border:1px solid #d1d6c978;border-radius:2px;font:inherit;font-size:11px;color:#f1d594;white-space:nowrap}
+.fps-objective-location{display:flex;align-items:center;gap:10px;min-height:18px;font-size:11px;color:var(--fps-muted)}
+.fps-route{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.fps-route i{display:inline-block;font-size:16px;font-style:normal;font-weight:600;color:var(--fps-accent);transform-origin:center}
+.fps-current .fps-blocked{font-size:11px;color:#e9bfa1;font-weight:500}
+.fps-current progress{display:block;margin-top:5px;width:190px;height:4px;appearance:none;border:0;background:#e6ebcf30;border-radius:0}
+.fps-current progress::-webkit-progress-bar{background:#e6ebcf30}
+.fps-current progress::-webkit-progress-value{background:#dfca91}
+.fps-current progress::-moz-progress-bar{background:#dfca91}
+.fps-clock{position:absolute;top:calc(env(safe-area-inset-top) + 20px);right:calc(env(safe-area-inset-right) + 20px);display:flex;align-items:center;gap:10px}
+.fps-clock time{font-size:26px;font-weight:500;letter-spacing:.04em;text-shadow:0 2px 5px #000a}
+.fps-clock time.urgent{color:#f0a28a}
+.fps-clock button{width:44px;height:44px;border:1px solid #e5ecd52b;background:#16201891;border-radius:2px;font-size:20px}
+.fps-vitals{position:absolute;left:calc(env(safe-area-inset-left) + 24px);bottom:calc(env(safe-area-inset-bottom) + 24px);width:160px;display:grid;gap:7px}
+.fps-vitals>div{display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 10px}
+.fps-vitals span{font-size:10px;letter-spacing:.06em;color:#d0d8c8}
+.fps-vitals strong{font-size:24px;font-weight:600}
+.fps-vitals i{height:3px;grid-column:1/-1;background:#eff4db30;display:block;overflow:hidden}
+.fps-vitals b{height:100%;background:#e6ebd7;display:block}
+.fps-vitals .fps-stamina strong{font-size:13px}
+.fps-vitals .fps-stamina b{background:#b9c99a}
+.fps-vitals.critical strong,.fps-ammo .low{color:#f29a82}
+.fps-vitals.critical>div:first-child b{background:#ea8d76}
+.fps-ammo{position:absolute;right:calc(env(safe-area-inset-right) + 24px);bottom:calc(env(safe-area-inset-bottom) + 24px);text-align:right;min-width:110px}
+.fps-ammo>span{display:block;font-size:11px;color:#cdd6c3;margin-bottom:2px}
+.fps-ammo>strong{font-size:38px;font-weight:500;line-height:1;letter-spacing:.01em}
+.fps-ammo small{font-size:17px;color:#cdd6c3}
+.fps-notice{position:absolute;right:calc(env(safe-area-inset-right) + 22px);top:calc(env(safe-area-inset-top) + 72px);max-width:230px;margin:0;font-size:12px;text-align:right;color:#f1e2be;text-shadow:0 1px 5px #000b;pointer-events:none}
+.fps-music-retry{position:absolute;right:calc(env(safe-area-inset-right) + 22px);top:calc(env(safe-area-inset-top) + 110px);border:0;border-bottom:1px solid #c3c7b778;background:#19251b7a;padding:5px 8px;min-height:44px;font-size:11px}
+.fps-hud-touch .fps-minimap{width:96px;height:96px;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 10px)}
+.fps-hud-touch .fps-mission{left:calc(env(safe-area-inset-left) + 118px);top:calc(env(safe-area-inset-top) + 10px);width:218px}
+.fps-hud-touch .fps-mission-list button{padding:3px 6px;gap:4px;font-size:10px;min-width:54px}
+.fps-hud-touch .fps-current{padding-top:3px}
+.fps-hud-touch .fps-current p{font-size:11px;line-height:1.35}
+.fps-hud-touch .fps-current kbd{font-size:10px;margin-left:4px}
+.fps-hud-touch .fps-objective-location{font-size:10px;min-height:16px;gap:8px}
+.fps-hud-touch .fps-current .fps-blocked{font-size:10px}
+.fps-hud-touch .fps-current progress{width:170px;height:3px}
+.fps-hud-touch .fps-clock{top:calc(env(safe-area-inset-top) + 10px);right:calc(env(safe-area-inset-right) + 10px);gap:8px}
+.fps-hud-touch .fps-clock time{font-size:21px}
+.fps-hud-touch .fps-vitals{left:calc(env(safe-area-inset-left) + 12px);top:calc(env(safe-area-inset-top) + 113px);bottom:auto;width:92px;gap:5px}
+.fps-hud-touch .fps-vitals>div{gap:2px 9px}
+.fps-hud-touch .fps-vitals span{font-size:9px}
+.fps-hud-touch .fps-vitals strong{font-size:17px}
+.fps-hud-touch .fps-vitals .fps-stamina strong{font-size:11px}
+.fps-hud-touch .fps-vitals i{height:2px}
+.fps-hud-touch .fps-ammo{right:calc(env(safe-area-inset-right) + 16px);bottom:calc(env(safe-area-inset-bottom) + 219px);min-width:95px}
+.fps-hud-touch .fps-ammo>span{font-size:9px}
+.fps-hud-touch .fps-ammo>strong{font-size:24px}
+.fps-hud-touch .fps-ammo small{font-size:12px}
+.fps-hud-touch .fps-notice{top:calc(env(safe-area-inset-top) + 61px);right:calc(env(safe-area-inset-right) + 12px);max-width:178px;font-size:10px;line-height:1.3}
+.fps-hud-touch .fps-music-retry{top:calc(env(safe-area-inset-top) + 93px);font-size:10px;max-width:170px}
+/* North-up maps retain screen-pixel labels at every zoom level. */
+.fps-map-canvas{position:relative;min-width:0;min-height:0;width:100%;height:100%;overflow:hidden;touch-action:none;cursor:grab}
+.fps-map-canvas:active{cursor:grabbing}
+.fps-map-canvas>svg{width:100%;height:100%;display:block}
+.fps-map-mini{cursor:pointer}
+.fps-map-label{font-size:13px;fill:#cad9bb;paint-order:stroke;stroke:#17251d;stroke-width:3px}
+.fps-map-entry{font-size:10px;fill:#aabca3;paint-order:stroke;stroke:#17251d;stroke-width:3px}
+.fps-map-north{font-size:11px;fill:#d8e0c9;font-weight:700}
+.fps-map-floor-mark{font-size:10px;fill:#f0caa2;font-weight:700;paint-order:stroke;stroke:#13211f;stroke-width:2px}
+.fps-map-objective[role=button]{cursor:pointer}
+.fps-map-objective:focus{outline:none}
+.fps-map-objective:focus circle:nth-child(2){stroke:white;stroke-width:3}
+.fps-map-shade{position:absolute;inset:0;background:#070d0bf2;z-index:12;color:#e4ecda}
+.fps-map-panel{position:absolute;inset:calc(env(safe-area-inset-top) + 10px) calc(env(safe-area-inset-right) + 12px) calc(env(safe-area-inset-bottom) + 10px) calc(env(safe-area-inset-left) + 12px);display:flex;flex-direction:column;min-height:0;outline:none}
+.fps-map-panel>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px}
+.fps-map-panel>header>div{display:flex;align-items:baseline;gap:14px}
+.fps-map-panel h2{font-size:20px;margin:0;font-weight:600}
+.fps-map-panel header span{font-size:11px;color:#b6c4a9}
+.fps-map-panel button{border:1px solid #c7d8b536;background:#22332a;color:#e7efdc;border-radius:2px;min-height:44px;padding:5px 12px;font-size:12px}
+.fps-map-panel button:hover{background:#324738}
+.fps-map-body{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:12px;flex:1;min-height:0}
+.fps-map-view{display:grid;grid-template-rows:44px minmax(0,1fr) 44px;gap:5px;min-height:0}
+.fps-map-floors{display:flex;gap:4px}
+.fps-map-floors button{flex:1;padding:3px 5px;font-size:11px;min-width:44px}
+.fps-map-floors [aria-pressed=true]{border-color:#e2c68e;color:#f2ddb1;background:#3f4934}
+.fps-map-focus{display:flex;gap:5px}
+.fps-map-focus button{flex:1;font-size:11px;padding:3px 6px}
+.fps-map-objectives{overflow:auto;display:flex;flex-direction:column;gap:7px;padding:0 3px 3px 0}
+.fps-map-objectives>button{display:flex;align-items:center;gap:10px;padding:8px;text-align:left;min-height:58px}
+.fps-map-objectives>button>span{display:grid;place-items:center;min-width:22px;height:22px;background:#4a5f47;color:#e2e7d3;font-size:12px}
+.fps-map-objectives>button.selected{border-color:#ddbc7c}
+.fps-map-objectives>button.selected>span{background:#dfbc7b;color:#1c2a1d}
+.fps-map-objectives strong{display:block;font-size:12px;font-weight:600;line-height:1.3}
+.fps-map-objectives small{display:block;font-size:10px;color:#aebd9f;margin-top:3px}
+.fps-map-action{font-size:11px;line-height:1.4;margin:0 4px;color:#d5dfc7}
+.fps-map-legend{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;color:#adbea5;margin:4px}
+.fps-map-legend span{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.fps-map-legend span:before{content:'';display:inline-block;width:6px;height:6px;background:#e4edd6}
+.fps-map-legend .task:before{background:#dfbd7e;border-radius:50%}
+.fps-map-legend .supply:before{background:#8dc69b}
+.fps-map-legend .exit:before{background:#d8dca4;transform:rotate(45deg)}
+.fps-map-legend .seen:before{background:#ef785e;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.fps-map-legend .heard:before{background:transparent;border:1px dashed #dfaf77;border-radius:50%;width:8px;height:8px}
+.fps-map-panel>footer{padding-top:7px;font-size:10px;color:#a9b8a0;text-align:right}
+.fps-map-zoom{position:absolute;bottom:8px;left:8px;display:flex;gap:5px}
+.fps-map-zoom button{width:44px;height:44px;padding:0;background:#14241cdd;font-size:19px;touch-action:manipulation}
+@media(max-height:500px){.fps-map-panel{inset:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 10px) calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px)}.fps-map-panel>header{padding-bottom:5px}.fps-map-panel h2{font-size:16px}.fps-map-panel>header>div{gap:8px}.fps-map-body{grid-template-columns:minmax(0,1fr) 172px;gap:8px}.fps-map-objectives{gap:4px}.fps-map-objectives>button{min-height:49px;padding:5px;gap:6px}.fps-map-objectives strong{font-size:11px}.fps-map-objectives small{font-size:9px}.fps-map-legend{gap:4px;font-size:9px}.fps-map-panel>footer{padding-top:4px}}
+/* Every touch action owns its pointer; the central view remains transparent. */
+.fps-touch-controls{position:absolute;inset:0;z-index:3;pointer-events:none;touch-action:none;user-select:none;-webkit-user-select:none}
+.fps-touch-look{position:absolute;inset:0 0 0 24%;pointer-events:auto;touch-action:none;z-index:0}
+.fps-control{position:absolute;transform:translate(-50%,-50%);z-index:1;pointer-events:auto;touch-action:none;opacity:var(--fps-control-opacity,.72);color:#edf2e4;box-sizing:border-box}
+.fps-action,.fps-edit-control{border:1px solid #eef1da66;border-radius:50%;background:#16251d83;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:2px;text-shadow:0 1px 3px #0009;font:inherit}
+.fps-action svg,.fps-edit-control svg{width:20px;height:20px;flex-shrink:0}
+.fps-action span,.fps-edit-control span{font-size:9px;line-height:1.1;white-space:nowrap}
+.fps-action-fire svg{width:26px;height:26px}
+.fps-action.active{background:#576b429e;border-color:#e1d8ae;opacity:1}
+.fps-action:active{background:#6f7d53a8}
+.fps-joystick{border-radius:50%;border:1px solid #e3ecd44d;background:#14241c5e;display:grid;place-items:center}
+.fps-joystick i{position:absolute;inset:12px;border:1px solid #d3dfc029;border-radius:50%}
+.fps-joystick span{display:block;width:38px;height:38px;border:1px solid #edf1d86b;border-radius:50%;background:#dde6ca3d;will-change:transform;pointer-events:none}
+.fps-touch-settings{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0}
+.fps-touch-settings label{display:flex;align-items:center;gap:12px;font-size:13px}
+.fps-touch-settings select{max-width:160px;min-height:44px;font:inherit}
+.fps-layout-editor{position:absolute;inset:0;z-index:20;background:#0c1512fa;color:#e4ecda;outline:none;touch-action:none;overflow:hidden}
+.fps-layout-editor>header{position:absolute;left:calc(env(safe-area-inset-left) + 12px);right:calc(env(safe-area-inset-right) + 12px);top:calc(env(safe-area-inset-top) + 8px);display:flex;justify-content:space-between;align-items:center;gap:12px;z-index:3;pointer-events:none}
+.fps-layout-editor h2{margin:0;font-size:17px;font-weight:600}
+.fps-layout-editor header p{margin:3px 0 0;font-size:10px;color:#afbea3}
+.fps-layout-editor header>div:last-child{display:flex;gap:7px;pointer-events:auto}
+.fps-layout-editor button:not(.fps-control){min-height:44px;padding:5px 12px;border:1px solid #c7d8b54d;border-radius:2px;background:#2b3d2e;color:#e4ecda;font-size:12px;touch-action:manipulation}
+.fps-layout-editor button:disabled{opacity:.45;cursor:default}
+.fps-layout-preview{position:absolute;inset:0;pointer-events:none}
+.fps-edit-control{pointer-events:auto;cursor:grab}
+.fps-edit-control.selected{outline:2px solid #e3c486;outline-offset:3px;opacity:1}
+.fps-edit-control.overlapping{border-color:#e98b76;background:#60372d}
+.fps-layout-editor>footer{position:absolute;left:calc(env(safe-area-inset-left) + 12px);right:calc(env(safe-area-inset-right) + 12px);top:calc(env(safe-area-inset-top) + 69px);display:flex;align-items:center;gap:12px;background:#1d2a2199;padding:7px;border:1px solid #c1d3ac21;z-index:3}
+.fps-layout-editor footer label{display:flex;flex-direction:column;gap:4px;font-size:10px;min-width:0;flex:1}
+.fps-layout-editor footer select{min-height:34px;background:#203128;color:#e4ecda;border:1px solid #c1d3ac40;border-radius:2px;padding:3px;font:inherit;font-size:12px}
+.fps-layout-editor footer input{width:100%;min-height:25px;accent-color:#d4bd87;margin:0;touch-action:pan-x}
+.fps-layout-editor footer button{flex-shrink:0}
+@media(prefers-reduced-motion:reduce){.fps-hud *,.fps-touch-controls *{transition:none!important;animation:none!important}}
+
+.fps-target-name{display:block;margin:0 0 2px;font-size:11px;line-height:1.2;color:#e4c383;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fps-hud-touch .fps-target-name{font-size:10px;margin-bottom:1px}
+
+
+.fps-map-panel button{touch-action:manipulation}
+
+/* One world render; the optical frame masks its edge without darkening controls. */
+.fps-scope{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.fps-scope-lens{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:88vmin;height:88vmin;border:4px solid #18201b;border-radius:50%;box-shadow:0 0 0 200vmax #060a08;box-sizing:border-box}
+.fps-scope-lens>svg{width:100%;height:100%;display:block;overflow:hidden;border-radius:50%}
+.fps-scope-lens svg g{stroke:#101812;stroke-width:.34;fill:none}
+.fps-scope-lens svg circle{fill:#192219}.fps-scope-lens svg text{font-size:3px;fill:#16251b;font-weight:600;paint-order:stroke;stroke:#d5dfc944;stroke-width:.25px}
+.fps-scope-hit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-style:normal;font-size:30px;line-height:1;color:#e8eee0;text-shadow:0 0 2px #111}.fps-scope-hit.head{color:#e7bd79}
+.fps-hud .fps-minimap,.fps-hud .fps-mission,.fps-hud .fps-clock,.fps-hud .fps-vitals,.fps-hud .fps-ammo,.fps-hud .fps-notice,.fps-hud .fps-pickup,.fps-hud .fps-music-retry{z-index:1}
+.fps-weapon-action{display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-top:5px;color:#e1c994;font-size:10px}.fps-weapon-action progress{width:92px;height:3px;border:0;appearance:none;background:#e9ecd132}.fps-weapon-action progress::-webkit-progress-bar{background:#e9ecd132}.fps-weapon-action progress::-webkit-progress-value{background:#dac08c}.fps-weapon-action progress::-moz-progress-bar{background:#dac08c}
+.fps-pickup{position:absolute;left:50%;top:64%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;max-width:260px;padding:6px 8px;background:#14231bc2;border-left:2px solid #ddc38b;font-size:12px;line-height:1.25;pointer-events:none}.fps-pickup>span{min-width:0;max-width:170px}.fps-pickup button{border:1px solid #d5dfc359;background:#283a2ad9;min-height:44px;padding:6px 10px;font-size:11px;white-space:nowrap}.fps-pickup button:disabled{opacity:.7}
+.fps-hud-touch .fps-pickup{top:59%;gap:7px;padding:3px 6px;font-size:10px;max-width:218px}.fps-hud-touch .fps-pickup>span{max-width:128px}.fps-hud-touch .fps-pickup button{font-size:10px;padding:4px 8px}.fps-hud-touch .fps-weapon-action{margin-top:3px;font-size:9px}.fps-hud-touch .fps-weapon-action progress{width:75px}
+
+/* Scope darkening remains below controls and interactive HUD. */
+.fps-hud{z-index:auto}.fps-scope{z-index:2}.fps-touch-controls{z-index:5}.fps-hud .fps-minimap,.fps-hud .fps-mission,.fps-hud .fps-clock,.fps-hud .fps-vitals,.fps-hud .fps-ammo,.fps-hud .fps-notice,.fps-hud .fps-pickup,.fps-hud .fps-music-retry{z-index:6}.fps-layout-editor{z-index:65}.fps-reserved-zone{position:absolute;display:grid;place-items:center;background:#405b4355;border:1px dashed #c7d8b5;color:#d9e6cc;font-size:12px;pointer-events:none}
+.fps-hud-touch .fps-current p{font-size:14px;line-height:1.4}.fps-hud-touch .fps-current .fps-blocked{font-size:12px}.fps-hud-touch .fps-current kbd{font-size:12px}.fps-hud-touch .fps-target-name{font-size:12px}.fps-hud-touch .fps-notice,.fps-hud-touch .fps-music-retry{font-size:12px}.fps-hud-touch .fps-mission-list button{min-height:44px;font-size:12px}.fps-hud-touch .fps-objective-location{font-size:12px}.fps-hud-touch .fps-ammo>span,.fps-hud-touch .fps-vitals span{font-size:12px}.fps-map-zoom button,.fps-map-panel button{min-height:44px;min-width:44px}.fps-map-panel{max-height:calc(var(--usable-height,100dvh) - 24px);overflow:auto}.fps-map-overlay{z-index:45}

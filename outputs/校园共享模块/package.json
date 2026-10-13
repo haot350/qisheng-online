@@ -1,0 +1,110 @@
+{
+  "name": "@qisheng/shared",
+  "version": "0.8.1",
+  "private": true,
+  "type": "module",
+  "description": "Canonical game rules, protocol and opt-in browser modules",
+  "exports": {
+    "./operations": {
+      "types": "./src/operations.ts",
+      "default": "./dist/operations.js"
+    },
+    "./rules": {
+      "types": "./src/rules.ts",
+      "default": "./dist/rules.js"
+    },
+    "./ammo": {
+      "types": "./src/ammo.ts",
+      "default": "./dist/ammo.js"
+    },
+    "./npc-combat": {
+      "types": "./src/npc-combat.ts",
+      "default": "./dist/npc-combat.js"
+    },
+    "./ranking": {
+      "types": "./src/ranking.ts",
+      "default": "./dist/ranking.js"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./dist/types.js"
+    },
+    "./protocol": {
+      "types": "./src/protocol.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./community": {
+      "types": "./src/community/index.ts",
+      "default": "./dist/community/index.js"
+    },
+    "./community/client": {
+      "types": "./src/community/client.ts",
+      "default": "./dist/community/client.js"
+    },
+    "./community/unread": {
+      "types": "./src/community/feedback-unread.ts",
+      "default": "./dist/community/feedback-unread.js"
+    },
+    "./community/dialog-focus": {
+      "types": "./src/community/dialog-focus.ts",
+      "default": "./dist/community/dialog-focus.js"
+    },
+    "./community/modal-focus": {
+      "types": "./src/community/modal-focus.ts",
+      "default": "./dist/community/modal-focus.js"
+    },
+    "./map-client": {
+      "types": "./src/map-client/index.ts",
+      "default": "./dist/map-client/index.js"
+    },
+    "./player-content": {
+      "types": "./src/player-content/index.ts",
+      "default": "./dist/player-content/index.js"
+    },
+    "./player-content/FAQContent": {
+      "types": "./src/player-content/FAQContent.tsx",
+      "default": "./dist/player-content/FAQContent.js"
+    },
+    "./community/ranking.css": "./dist/community/ranking.css",
+    "./community/feedback.css": "./dist/community/feedback.css",
+    "./player-content/reading.css": "./dist/player-content/reading.css",
+    "./accounts": {
+      "types": "./src/accounts.ts",
+      "default": "./dist/accounts.js"
+    },
+    "./achievements": {
+      "types": "./src/achievements.ts",
+      "default": "./dist/achievements.js"
+    },
+    "./community/account.css": "./dist/community/account.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "scripts/build.mjs"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node --test tests/*.test.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=19.2.6 <20",
+    "react-dom": ">=19.2.6 <20"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3"
+  },
+  "license": "MIT"
+}

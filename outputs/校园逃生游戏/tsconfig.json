@@ -1,0 +1,89 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "vite/client"
+    ],
+    "paths": {
+      "@qisheng/shared/rules": [
+        "../校园共享模块/src/rules.ts"
+      ],
+      "@qisheng/shared/ammo": [
+        "../校园共享模块/src/ammo.ts"
+      ],
+      "@qisheng/shared/npc-combat": [
+        "../校园共享模块/src/npc-combat.ts"
+      ],
+      "@qisheng/shared/ranking": [
+        "../校园共享模块/src/ranking.ts"
+      ],
+      "@qisheng/shared/types": [
+        "../校园共享模块/src/types.ts"
+      ],
+      "@qisheng/shared/protocol": [
+        "../校园共享模块/src/protocol.ts"
+      ],
+      "@qisheng/shared/community": [
+        "../校园共享模块/src/community/index.ts"
+      ],
+      "@qisheng/shared/community/client": [
+        "../校园共享模块/src/community/client.ts"
+      ],
+      "@qisheng/shared/community/unread": [
+        "../校园共享模块/src/community/feedback-unread.ts"
+      ],
+      "@qisheng/shared/community/dialog-focus": [
+        "../校园共享模块/src/community/dialog-focus.ts"
+      ],
+      "@qisheng/shared/community/modal-focus": [
+        "../校园共享模块/src/community/modal-focus.ts"
+      ],
+      "@qisheng/shared/map-client": [
+        "../校园共享模块/src/map-client/index.ts"
+      ],
+      "@qisheng/shared/player-content": [
+        "../校园共享模块/src/player-content/index.ts"
+      ],
+      "@qisheng/shared/player-content/FAQContent": [
+        "../校园共享模块/src/player-content/FAQContent.tsx"
+      ],
+      "@qisheng/shared/community/ranking.css": [
+        "../校园共享模块/dist/community/ranking.css"
+      ],
+      "@qisheng/shared/community/feedback.css": [
+        "../校园共享模块/dist/community/feedback.css"
+      ],
+      "@qisheng/shared/player-content/reading.css": [
+        "../校园共享模块/dist/player-content/reading.css"
+      ],
+      "@qisheng/shared/accounts": [
+        "../校园共享模块/src/accounts.ts"
+      ],
+      "@qisheng/shared/achievements": [
+        "../校园共享模块/src/achievements.ts"
+      ],
+      "@qisheng/shared/community/account.css": [
+        "../校园共享模块/src/community/account.css"
+      ]
+    },
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": [
+    "src"
+  ]
+}

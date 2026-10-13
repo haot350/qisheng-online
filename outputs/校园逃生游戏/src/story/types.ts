@@ -1,0 +1,52 @@
+export type StoryVec3 = [number, number, number];
+export type StoryCharacter = 'xu-yuan' | 'lin-cen' | 'zhou-xu' | 'dafei' | 'principal' | 'narrator';
+export type StoryPose = 'idle' | 'walk' | 'listen' | 'point' | 'camera' | 'shield' | 'wave' | 'strap';
+export type StoryActor = {id:'lin-cen'|'zhou-xu'; name:string; position:StoryVec3; destination:StoryVec3; pose:StoryPose; visible:boolean; holding?:boolean};
+export type StoryLine = {speaker:StoryCharacter; text:string};
+export type StoryChoice = {label:string; reply?:StoryLine[]; flags?:Record<string,string>; next?:string};
+export type StoryTarget = {position:StoryVec3; radius:number; label:string; lookAt?:StoryVec3; anchorId?:string};
+export type StoryStep = {
+  id:string; chapter:number; title:string; objective:string;
+  kind:'dialogue'|'travel'|'photo'|'cooperate'|'compare'|'edit'|'screening'|'finish';
+  lines?:StoryLine[]; choices?:StoryChoice[]; target?:StoryTarget; next?:string;
+  hints?:string[]; actors?:Partial<Record<'lin-cen'|'zhou-xu',{at:StoryVec3; pose?:StoryPose; route?:StoryVec3[]}>>;
+  echo?:'none'|'morning'|'noon'|'night'|'all'; photoLabel?:string; requiredFlag?:string;
+  rhythm?:{period:number;windowStart:number;windowEnd:number;label:string};
+  /** Only these companions gate this interaction, not every actor in the world. */
+  participants?:StoryActor['id'][];
+  photoSubjects?:StoryActor['id'][];
+};
+export type StoryPhoto = {id:string; url?:string; position:StoryVec3; lookAt?:StoryVec3; focalLength?:number; anchorId?:string; subjects?:string[]; subjectsVerified?:boolean; frameClear?:boolean; taskId?:string; capturedAt?:number; label?:string; chapter?:number; exposureStepId?:string; actorsReady?:boolean; rhythmReady?:boolean; persisted?:boolean};
+export type StoryGuidanceAction='skip'|'replay'|'raised'|'focused'|'closed'|'enable-sync'|'route-help';
+export type StoryGuidanceStage='move'|'look'|'follow'|'raise'|'focus'|'shutter'|'close'|'complete'|'skipped';
+export type StoryGuidance={active:boolean;stage:StoryGuidanceStage;title:string;body:string;replaying:boolean;canSkip:boolean;stalled:boolean;routeHelpRequested:boolean};
+export type StoryInteraction={state:'dialogue'|'choices'|'travel'|'waiting'|'ready'|'photo'|'timing'|'complete';label:string;reason:string;enabled:boolean};
+export type StoryPhotoTask={id:string;title:string;objective:string;subjects:string[];status:'approach'|'waiting'|'ready'|'retry'|'completed';message:string;acceptedPhotoId?:string};
+export type StoryCaptureResult={photoId:string;url?:string;taskId?:string;title:string;status:'saved'|'retry'|'completed';message:string;persisted:boolean};
+export type StoryHistory = StoryLine & {step:string};
+export type StoryIntroCamera = {position:StoryVec3;lookAt:StoryVec3;fov:number};
+export type StoryFilm = {id:string; title:string; photos:StoryPhoto[]; caption:string; seconds:number};
+export type StoryCheckpoint = {
+  format:'qisheng-story'; version:1; savedAt:number; step:string; line:number; revealed:number;
+  elapsed:number; introTime:number; finished:boolean; flags:Record<string,string>;
+  photos:StoryPhoto[]; selected:string[]; history:StoryHistory[]; hintLevel:number; presentOnly:boolean;
+  actors:StoryActor[]; screeningTime:number;
+  cooperationTime?:number;
+  cinematicTime?:number;
+  reply?:StoryLine[]; replyNext?:string; actorRoutes?:Partial<Record<'lin-cen'|'zhou-xu',StoryVec3[]>>;
+};
+export type StorySnapshot = {
+  chapter:number; chapterTitle:string; chapterCount:number; step:string; stepTitle:string; kind:StoryStep['kind'];
+  objective:string; target:StoryTarget|null; distance:number|null; canInteract:boolean; dialogue:(StoryLine&{text:string; fullText:string; complete:boolean; speakerName:string; portraitUrl?:string})|null;
+  options:{label:string; index:number}[]; actors:StoryActor[]; introTime:number; introActive:boolean;
+  cinematicActive:boolean; cinematicTime:number; cinematicDuration:number;
+  introCamera:StoryIntroCamera|null; introTitle:string; introCredit:boolean; cameraReceived:boolean;
+  echo:StoryStep['echo']; presentOnly:boolean; finished:boolean; elapsed:number; hint:string; hintLevel:number;
+  history:StoryHistory[]; notice:string; photos:StoryPhoto[]; film:StoryFilm[]; selected:string[];
+  screeningTime:number; screeningDuration:number; screeningActive:boolean; checkpointLabel:string;
+  cooperation:{label:string;ready:boolean;phase:number;period:number;cycles:number;gesture:0|1|2|3;assisted:boolean;canEnableAssist:boolean}|null;
+  guidance:StoryGuidance; interaction:StoryInteraction; photoTask:StoryPhotoTask|null;
+  captureEligibility:{stepId:string;actorsReady:boolean;rhythmReady:boolean};lastCaptureResult:StoryCaptureResult|null;
+  comparison:StoryPhoto[];
+  navigation?:{label:string;bearing:number;distance:number;floorHint?:string;visible?:boolean};
+};

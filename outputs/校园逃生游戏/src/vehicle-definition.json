@@ -1,0 +1,26 @@
+{
+  "version": "1.2.2",
+  "model": "bao5",
+  "displayName": "深灰豹5",
+  "assetUrl": "/vehicles/bao5-v122.glb",
+  "dimensions": {"length": 4.89, "width": 1.97, "height": 1.92, "wheelbase": 2.8, "track": 1.66},
+  "physics": {
+    "anchor": 0.85,
+    "wheels": [[-0.83,-0.18,-1.4],[0.83,-0.18,-1.4],[-0.83,-0.18,1.4],[0.83,-0.18,1.4]],
+    "wheelRadius": 0.4,
+    "suspension": {"restLength": 0.32, "stiffness": 42, "compression": 5.2, "relaxation": 5.8, "maxTravel": 0.2, "maxForce": 13000},
+    "mass": 1500,
+    "centerOfMass": [0,-0.2,0.08],
+    "inertia": [2300,3400,1400],
+    "chassis": {"half": [0.96,0.37,2.23], "center": [0,-0.02,0.01]},
+    "roof": {"half": [0.845,0.39,1.47], "center": [0,0.69,0.28]},
+    "spare": {"half": [0.46,0.46,0.205], "center": [0,0.48,2.44]},
+    "engineForce": 7950,
+    "boostForce": 11700,
+    "brakeForce": 175
+  },
+  "camera": {"targetHeight": 1.12, "distance": 8.5, "height": 4.2},
+  "clearance": {"half": [1.15,0.87,2.5], "center": [0,1.08,0.2]},
+  "visual": {"paint": [0.145,0.16,0.17], "wheelWidth": 0.285, "wheelCenterHeight": 0.4, "bodyFront": -2.245, "bodyRear": 2.23, "spareRear": 2.645, "roofHeight": 1.875, "mirrorWidth": 2.22},
+  "notes": "Metres, Y up, -Z forward. Dimensions follow the confirmed Bao 5 reference silhouette. Mass, suspension and engine force are arcade-game tuning, not vehicle specifications. Wheel pivots are fixed to the shared physics coordinates."
+}

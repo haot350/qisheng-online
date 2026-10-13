@@ -1,0 +1,11 @@
+import {useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {PhotoUI} from '../src/PhotoUI';
+import {DEFAULT_PHOTO_SETTINGS,type PhotoControl,type PhotoSnapshot} from '../src/photography/types';
+const query=new URLSearchParams(location.search),touch=query.get('touch')!=='0';
+const state:PhotoSnapshot={open:true,settings:{...DEFAULT_PHOTO_SETTINGS},exposure:{aperture:8,shutter:1/125,iso:100,gain:1,meterEV:0,limited:false},state:'viewfinder',remaining:0,progress:0,viewReady:true,viewFailed:false,viewProgress:1,focusConfirmed:false,focusState:'idle',shutterPending:false,focusDistance:20,focusPoint:[0,0],roll:0,histogram:[],message:'',albumCount:0,lastPhotoId:null,width:1440,height:960,bufferBytes:0};
+const actions:any[]=[];(window as any).__photoActions=actions;
+const record=(action:any)=>actions.push(action);
+const system:PhotoControl={snapshot:()=>state,configure:p=>{Object.assign(state.settings,p);record({type:'configure',value:p});},focus:(x,y)=>record({type:'point',x,y}),setFocusHeld:(source,held)=>record({type:'focus',source,held}),capture:async()=>{record({type:'capture'});return null;},cancel:()=>record({type:'cancel'}),close:()=>record({type:'close'})};
+function Fixture(){const [activeSystem,setActiveSystem]=useState<PhotoControl>(()=>system);(window as any).__replaceSystem=()=>setActiveSystem({...system,setFocusHeld:(source,held)=>record({type:'new-focus',source,held})});const [blocked,setBlocked]=useState(false),[mounted,setMounted]=useState(true);(window as any).__setBlocked=setBlocked;(window as any).__unmount=()=>setMounted(false);return mounted?<PhotoUI snapshot={state} system={activeSystem} touch={touch} keyboardBlocked={blocked} onClose={()=>record({type:'close'})} onPause={()=>record({type:'pause'})} onObserve={()=>record({type:'observe'})} onCursorRelease={()=>record({type:'cursor'})} onMove={(x,y)=>record({type:'move',x,y})} onLook={(x,y)=>record({type:'look',x,y})} onPanelState={open=>record({type:'panel',open})} task={{label:'庭院',objective:'拍下林岑和庭院'}}/>:null;}
+createRoot(document.getElementById('root')!).render(<Fixture/>);

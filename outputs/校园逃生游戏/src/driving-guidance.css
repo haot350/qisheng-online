@@ -1,0 +1,5 @@
+.drive-area-guides{position:absolute;top:max(26px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;gap:12px;max-width:44vw;pointer-events:none;color:#fff;font-size:13px;line-height:20px;text-shadow:0 1px 3px #15211ddd}
+.drive-area-guides>span{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.drive-area-guides svg{width:15px;height:15px;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 1px 2px #15211ddd)}
+.touch-layout .drive-area-guides{top:max(12px,env(safe-area-inset-top));font-size:12px;gap:9px}
+@media(max-width:720px){.touch-layout .drive-area-guides{top:calc(max(12px,env(safe-area-inset-top)) + 29px);gap:7px;font-size:11px}.touch-layout .drive-area-guides svg{width:12px;height:12px}}

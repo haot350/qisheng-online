@@ -1,0 +1,33 @@
+{
+  "name": "qisheng-ranking",
+  "version": "0.8.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.1.0",
+    "@fastify/rate-limit": "10.3.0",
+    "@qisheng/shared": "file:vendor/qisheng-shared-0.8.1.tgz",
+    "better-sqlite3": "13.0.3",
+    "fastify": "5.12.5",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "24.10.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "typescript": "5.9.3",
+    "vite": "8.0.16"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,3 @@
+export function escapeRandom(seed:number){let state=seed>>>0;return ()=>{state=(state+0x6D2B79F5)>>>0;let n=state;n=Math.imul(n^(n>>>15),n|1);n^=n+Math.imul(n^(n>>>7),n|61);return ((n^(n>>>14))>>>0)/4294967296;};}
+export function escapeShuffle<T>(items:readonly T[],random:()=>number):T[]{const result=[...items];for(let i=result.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[result[i],result[j]]=[result[j],result[i]];}return result;}
+export function selectEscapeRoster<T>(seed:number,identities:readonly T[]){if(identities.length!==6)throw new Error('突围名单必须有六位不同身份。');if(new Set(identities).size!==6)throw new Error('突围名单不能包含重复身份。');const all=escapeShuffle(identities,escapeRandom(seed^0x51a743));return {all,initial:all.slice(0,4),reinforcements:all.slice(4)};}

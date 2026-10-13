@@ -1,0 +1,21 @@
+/* A zero-size point keeps every aiming mark centred on the render canvas. */
+.combat-crosshair-layer{position:fixed;inset:0;pointer-events:none;z-index:3}
+.reticle.escape-reticle.combat-crosshair{position:absolute;left:50%;top:50%;width:0;height:0;transform:none;display:block;overflow:visible;pointer-events:none}
+.reticle.escape-reticle.combat-crosshair>.combat-crosshair-dot{position:absolute;left:0;top:0;display:block;width:4px;height:4px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #111b,0 0 3px #0009;transform:translate(-50%,-50%)}
+.reticle.escape-reticle.combat-crosshair>.reticle-line{position:absolute;display:block;background:#fff;box-shadow:0 0 0 1px #1118,0 1px 2px #0009;pointer-events:none}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.top{left:-1px;top:calc(-1 * var(--spread-gap) - 7px);width:2px;height:7px}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.bottom{left:-1px;top:var(--spread-gap);width:2px;height:7px}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.left{left:calc(-1 * var(--spread-gap) - 7px);top:-1px;width:7px;height:2px}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.right{left:var(--spread-gap);top:-1px;width:7px;height:2px}
+.reticle.escape-reticle.combat-crosshair.is-aiming>.reticle-line{display:none}
+.reticle.escape-reticle.combat-crosshair>.combat-crosshair-hit{position:absolute;left:0;top:0;width:38px;height:38px;transform:translate(-50%,-50%);font-style:normal;line-height:1;color:#f3dbab}
+.reticle.escape-reticle.combat-crosshair>.combat-crosshair-hit.hit-head{color:#fff0b6}
+.reticle.escape-reticle.combat-crosshair>.combat-crosshair-hit.hit-suppressed{color:#fff}
+.combat-crosshair-layer>.combat-crosshair-scope{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.combat-crosshair-scope>.combat-crosshair-lens{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:88vmin;height:88vmin;border:4px solid #18201b;border-radius:50%;box-shadow:0 0 0 200vmax #060a08;box-sizing:border-box}
+.combat-crosshair-lens>svg{display:block;width:100%;height:100%;overflow:hidden;border-radius:50%}
+.combat-crosshair-lens svg g{stroke:#101812;stroke-width:.34;fill:none}
+.combat-crosshair-lens svg circle{fill:#192219}
+.combat-crosshair-lens svg text{font-size:3px;fill:#16251b;font-weight:600;paint-order:stroke;stroke:#d5dfc944;stroke-width:.25px}
+.combat-crosshair-lens>.fps-scope-hit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-style:normal;font-size:30px;line-height:1;color:#e8eee0;text-shadow:0 0 2px #111}
+.combat-crosshair-lens>.fps-scope-hit.head{color:#e7bd79}
