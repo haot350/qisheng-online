@@ -353,7 +353,7 @@
 !/outputs/校园交互网站/site/scripts/telemetry.test.mjs
 !/outputs/校园交互网站/site/scripts/validate-static-styles.mjs
 !/outputs/校园交互网站/site/tsconfig.json
-!/outputs/校园交互网站/site/vendor/qisheng-shared-0.8.1.tgz
+!/outputs/校园交互网站/site/vendor/qisheng-shared-0.8.2.tgz
 !/outputs/校园交互网站/site/vite.config.ts
 !/outputs/校园交互网站/site/vite.production.config.ts
 !/outputs/校园共享模块/README.md
@@ -467,7 +467,7 @@
 !/outputs/校园排行榜服务/tests/security-efficiency-v070.test.ts
 !/outputs/校园排行榜服务/tests/upgrade.test.ts
 !/outputs/校园排行榜服务/tsconfig.json
-!/outputs/校园排行榜服务/vendor/qisheng-shared-0.8.1.tgz
+!/outputs/校园排行榜服务/vendor/qisheng-shared-0.8.2.tgz
 !/outputs/校园服务器部署/README.md
 !/outputs/校园服务器部署/scripts/admin-csp-policy.mjs
 !/outputs/校园服务器部署/scripts/deployment-target.mjs
@@ -536,7 +536,7 @@
 !/outputs/校园联机服务/tests/simulation.test.mjs
 !/outputs/校园联机服务/tests/snapshot-query-cache-v070.test.mjs
 !/outputs/校园联机服务/tests/support/rejected-snapshot-cache.mjs
-!/outputs/校园联机服务/vendor/qisheng-shared-0.8.1.tgz
+!/outputs/校园联机服务/vendor/qisheng-shared-0.8.2.tgz
 !/outputs/校园逃生游戏/README.md
 !/outputs/校园逃生游戏/account/index.html
 !/outputs/校园逃生游戏/demo/arena.json
@@ -562,6 +562,7 @@
 !/outputs/校园逃生游戏/scripts/npc-pose-release-v032.mjs
 !/outputs/校园逃生游戏/scripts/package-release.mjs
 !/outputs/校园逃生游戏/scripts/private-npc-profile.mjs
+!/outputs/校园逃生游戏/scripts/render-weapon-cards.mjs
 !/outputs/校园逃生游戏/scripts/spatial-split.mjs
 !/outputs/校园逃生游戏/scripts/sync-fresh-helper.mjs
 !/outputs/校园逃生游戏/scripts/test-current.mjs
@@ -577,6 +578,7 @@
 !/outputs/校园逃生游戏/src/EscapeTouchUI.tsx
 !/outputs/校园逃生游戏/src/EscapeUI.tsx
 !/outputs/校园逃生游戏/src/FAQContent.tsx
+!/outputs/校园逃生游戏/src/FPSCombatHUD.tsx
 !/outputs/校园逃生游戏/src/FeedbackUI.tsx
 !/outputs/校园逃生游戏/src/MainMenu.tsx
 !/outputs/校园逃生游戏/src/MenuPages.tsx
@@ -589,6 +591,7 @@
 !/outputs/校园逃生游戏/src/RealityUI.tsx
 !/outputs/校园逃生游戏/src/StoryUI.tsx
 !/outputs/校园逃生游戏/src/TouchControls.tsx
+!/outputs/校园逃生游戏/src/WeaponLoadout.tsx
 !/outputs/校园逃生游戏/src/account-entry.tsx
 !/outputs/校园逃生游戏/src/account-page.css
 !/outputs/校园逃生游戏/src/achievement-icons.ts
@@ -644,6 +647,7 @@
 !/outputs/校园逃生游戏/src/faq.ts
 !/outputs/校园逃生游戏/src/feedback-unread.ts
 !/outputs/校园逃生游戏/src/feedback.css
+!/outputs/校园逃生游戏/src/fps-combat.css
 !/outputs/校园逃生游戏/src/frame-diagnostics.ts
 !/outputs/校园逃生游戏/src/fresh-browser.ts
 !/outputs/校园逃生游戏/src/game-config-store.ts
@@ -852,6 +856,7 @@
 !/outputs/校园逃生游戏/tests/navigation-support-031.check.ts
 !/outputs/校园逃生游戏/tests/nearby-interaction-v065.test.ts
 !/outputs/校园逃生游戏/tests/netcode-v062.test.ts
+!/outputs/校园逃生游戏/tests/netcode-v082.test.ts
 !/outputs/校园逃生游戏/tests/network.test.ts
 !/outputs/校园逃生游戏/tests/npc-assets.test.ts
 !/outputs/校园逃生游戏/tests/npc-combat-v070.test.ts
@@ -938,7 +943,7 @@
 !/outputs/校园逃生游戏/tests/weapons.test.ts
 !/outputs/校园逃生游戏/tests/world-ray.test.ts
 !/outputs/校园逃生游戏/tsconfig.json
-!/outputs/校园逃生游戏/vendor/qisheng-shared-0.8.1.tgz
+!/outputs/校园逃生游戏/vendor/qisheng-shared-0.8.2.tgz
 !/outputs/校园逃生游戏/vite.config.ts
 !/outputs/校园逃生游戏/vite.production.config.ts
 !/scripts/check-demo.mjs

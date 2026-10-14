@@ -5,6 +5,7 @@ import type { EscapeTaskSnapshot } from './escape';
 import './escape-hud.css';
 import { useModalFocus } from './modal-focus';
 import { WEAPONS } from './rules';
+import { FPSVitals,FPSAmmo } from './FPSCombatHUD';
 import type { GameAPI,Settings,Snapshot } from './types';
 export { EscapeTouchControls,EscapeTouchEditor,EscapeTouchSettings } from './EscapeTouchUI';
 export const ESCAPE_DIFFICULTIES=[{id:'easy',label:'轻松',description:'10 分钟，适合先熟悉路线。'},{id:'standard',label:'标准',description:'8 分钟，兼顾转移与交火。'},{id:'hard',label:'挑战',description:'7 分钟，防守更紧、撤离更久。'}] as const;
@@ -23,16 +24,13 @@ export function EscapeHUD({snapshot,api,onPause,onFullscreen,touch,children}:{sn
  const interaction=snapshot.interaction,interactionTask=interaction?.taskId?round.tasks.find(t=>t.id===interaction.taskId):undefined,interactionLabel=interaction?.kind==='task'?(interaction.action==='extract'?'校门撤离':interactionTask?.name??'任务目标'):interaction?.kind==='weapon'?WEAPONS[interaction.weapon as keyof typeof WEAPONS]?.label??'掉落武器':interaction?.kind==='supply'?(round.supplies?.find(s=>s.id===interaction.id)?.name??'补给箱'):'';
  const action=round.graceLeft>0?'准备出发 · '+Math.ceil(round.graceLeft)+' 秒':round.extractionAvailable?(round.phase==='extraction'?'守住撤离范围':'前往校门，互动开始撤离'):selected?.currentAction??'选择任务，准备出发';
  const destinationFloor=round.extractionAvailable?0:site?.floor??0;
- const weaponAction=snapshot.weaponAction,actionStage=weaponAction?.stage;
- const stageLabels:Record<string,string>={'mag-out':'装填中','mag-in':'装填中',chamber:'上膛中','open-cover':'装填中','belt-in':'装填中','close-cover':'装填中',shell:'装填中',bolt:'拉栓中',pump:'泵动中'};
- const actionLabel=weaponAction?.phase==='cycle'?null:snapshot.reloading||weaponAction?.phase==='reload'?(stageLabels[actionStage??'']??'装填中'):null;
  return <div className={'hud escape-hud fps-hud'+(touch?' fps-hud-touch':'')}>
   <button type="button" className="fps-minimap" aria-label="打开任务地图" onClick={()=>void api?.taskMap?.(true)}><EscapeMapCanvas snapshot={snapshot} floor={round.playerFloor??round.mapFloor??0} minimap/><span>{floorName(round.playerFloor??round.mapFloor??0)} · {touch?'地图':'M 地图'}</span></button>
   <section className="fps-mission" aria-label="本局任务"><div className="fps-mission-list">{round.tasks.map((task,i)=><button type="button" key={task.id} className={(task.selected?' selected':'')+(task.state==='complete'?' complete':'')} disabled={task.state==='complete'} onClick={()=>api?.selectEscapeTask?.(task.id)} title={task.name} aria-label={(task.state==='complete'?'已完成：':'选择任务：')+task.name} aria-pressed={task.selected}><span>{task.state==='complete'?'✓':i+1}</span>{taskKind(task)}</button>)}</div><div className="fps-current"><span className="fps-target-name">{round.extractionAvailable?'校门撤离':selected?.name}</span><p>{action}</p><div className="fps-objective-location">{round.graceLeft<=0&&snapshot.goalDistance>0&&<span className="fps-route"><i style={{transform:'rotate('+snapshot.goalAngle+'rad)'}}>↑</i>{Math.round(snapshot.goalDistance)} 米</span>}{destinationFloor!==(round.playerFloor??round.mapFloor??0)&&<span>{floorName(destinationFloor)}</span>}{round.completed>0&&<span>{round.completed}/3 完成</span>}</div>{waiting&&<p className="fps-blocked">{waiting}</p>}{progress>0&&<progress aria-label={round.extractionAvailable?'撤离进度':'守点进度'} value={progress} max={Math.max(1,duration)}/>}</div></section>
   <div className="fps-clock"><time className={round.remaining<60?'urgent':''}>{clock(round.remaining)}</time>{!touch&&<button type="button" aria-label="切换全屏" onClick={onFullscreen}>↗</button>}<button type="button" aria-label="暂停游戏" onClick={onPause}>Ⅱ</button></div>
   {children}
-  <section className={'fps-vitals'+(snapshot.health<=30?' critical':'')} aria-label="生命与体力"><div><span>生命</span><strong>{Math.ceil(snapshot.health)}</strong><i><b style={{width:Math.max(0,Math.min(100,snapshot.health))+'%'}}/></i></div><div className="fps-stamina"><span>体力</span><strong>{Math.round(snapshot.stamina)}</strong><i><b style={{width:Math.max(0,Math.min(100,snapshot.stamina))+'%'}}/></i></div></section>
-  <section className="fps-ammo" aria-label="弹药"><span>{WEAPONS[snapshot.weapon].label}</span><strong className={snapshot.ammo<=Math.min(5,Math.ceil(WEAPONS[snapshot.weapon].capacity*.2))?'low':''}>{snapshot.ammo}<small> / {snapshot.reserve}</small></strong>{actionLabel&&<div className="fps-weapon-action"><span>{actionLabel}</span>{weaponAction&&<progress aria-label={actionLabel+'进度'} value={Math.max(0,Math.min(1,weaponAction.progress))} max={1}/>}</div>}</section>
+  <FPSVitals health={snapshot.health} stamina={snapshot.stamina} touch={touch}/>
+  <FPSAmmo weapon={snapshot.weapon} ammo={snapshot.ammo} reserve={snapshot.reserve} action={snapshot.weaponAction} reloading={snapshot.reloading} touch={touch}/>
   {interaction&&<NearbyInteractionUI interaction={interaction} screen={snapshot.interactionScreen} label={interactionLabel} touch={touch} onPress={pressed=>api?.action('interact',pressed)} loading={interaction.kind==='weapon'&&snapshot.pickup?.loading} error={interaction.kind==='weapon'&&snapshot.pickup?.error}/>}
   {snapshot.notice&&<p className="fps-notice" role="status">{snapshot.notice}</p>}{snapshot.musicError&&<button type="button" className="fps-music-retry" onClick={()=>api?.retryMusic()}>音乐未载入 · 重试</button>}
  </div>;

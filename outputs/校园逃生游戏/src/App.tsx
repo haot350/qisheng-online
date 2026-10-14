@@ -1,3 +1,4 @@
+import {WeaponLoadout} from './WeaponLoadout';
 import {Crosshair} from './Crosshair';
 import {
   lazy,
@@ -67,7 +68,7 @@ import { rankingClient } from "./ranking/client";
 import {achievementIconUrls} from "./achievement-icons";
 import type { RankingPlayer } from "./ranking/shared";
 import { RELEASE_LABEL } from "./release";
-import { PRIMARY_WEAPONS, WEAPONS } from "./rules";
+import { PRIMARY_WEAPONS } from "./rules";
 import { ResourceSlot, SessionOperations, SessionScope } from "./session-flow";
 import { deviceGuidance } from "./story/guidance";
 import "./styles.css";
@@ -158,14 +159,6 @@ const INITIAL: Snapshot = {
   mapProgress: 1,
 };
 type PrimaryWeapon = (typeof PRIMARY_WEAPONS)[number];
-const PRIMARY_DESCRIPTIONS: Record<PrimaryWeapon, string> = {
-  mp5: "轻快连发，适合近距离转移。",
-  m4a1: "稳定均衡，适合初次突围。",
-  ak47: "单发伤害较高，后坐力更明显。",
-  r870: "近距离散射，可以逐发装填。",
-  awm: "固定六倍镜，胸部一枪击倒。",
-  m249: "大弹量连发，适合持续火力。",
-};
 function loadPrimary(): PrimaryWeapon {
   try {
     const value = localStorage.getItem("qisheng-game-primary");
@@ -604,10 +597,11 @@ export default function App() {
     ),
     [escapeEntry, setEscapeEntry] = useState<EscapeEntry>("single"),
     [pvpVariant, setPvpVariant] = useState<"tdm" | "ffa">("tdm");
-  const pages = useMenuPages(new URLSearchParams(location.search).get("panel")==="leaderboard"?"ranking":null);
+  const [accountBusy,setAccountBusy] = useState(false);
+  const pages = useMenuPages(new URLSearchParams(location.search).get("panel")==="leaderboard"?"ranking":null,accountBusy);
   const [requestedRankPanel,setRequestedRankPanel] = useState<"board"|"recent">("board");
   const [leaveConfirmation,setLeaveConfirmation] = useState(false);
-  const [accountBusy,setAccountBusy] = useState(false);
+  const [replayGuidanceOnContinue,setReplayGuidanceOnContinue]=useState(false);
   const openMenuPage = (page:MenuPageId) => {
     if(accountBusy)return;
     game.current?.clearInput?.();
@@ -1178,7 +1172,7 @@ export default function App() {
     else start(selectedMode);
   };
   const resume = () => {
-    void runOperation((api) => api.resume(), {
+    void runOperation((api) => {if(replayGuidanceOnContinue){api.storyGuidance("replay");setReplayGuidanceOnContinue(false);}return api.resume();}, {
       label: "Game resume failed",
       message: "尚未恢复游戏，请再次点击继续；键鼠操作需允许鼠标观察。",
     });
@@ -1230,13 +1224,14 @@ export default function App() {
     const leavingOnline = !!onlineRoomKey || !!onlineClient.current?.view.currentRoom;
     pages.clear();
     setLeaveConfirmation(false);
-    if(onlineClient.current?.view.currentRoom){void onlineClient.current.leave();setOnlineRoomKey(null);setOnlineOpen(false);}
+    if(onlineClient.current?.view.currentRoom||onlineOpen||['connecting','queued','reconnecting'].includes(onlineClient.current?.view.status??'')){void onlineClient.current?.leave();setOnlineRoomKey(null);setOnlineOpen(false);}
     localRoundAccepted.current = false;
     setNoticesOpen(false);
     setModeBlocked(null);
     setBriefing(null);
     setConnectionDetails(false);
     setMenuScreen("home");
+    setReplayGuidanceOnContinue(false);
     setMenuReading(null);
     setFeedbackOpen(false);
     setArchiveOpen(false);
@@ -1295,7 +1290,7 @@ export default function App() {
         retry: chooseImport,
       },
     );
-  const continueStory = (previous = false) =>
+  const continueStory = (previous = false, keepPaused = false) =>
     guardEntry('story') && runOperation(
       async (api, current) => {
         api.unlockAudio("story");
@@ -1307,6 +1302,7 @@ export default function App() {
           if (!current()) return;
           if (!cp) throw Error("没有可恢复的存档");
           await api.restoreStory(cp);
+          if(current()&&keepPaused)api.pause();
         } finally {
           await store.close();
         }
@@ -1314,7 +1310,7 @@ export default function App() {
       {
         label: "Story restore failed",
         message: "故事进度暂时无法读取，请重试。",
-        retry: () => void continueStory(previous),
+        retry: () => void continueStory(previous,keepPaused),
       },
     );
   const chooseImport = () => {
@@ -1418,6 +1414,15 @@ export default function App() {
     setConnectionDetails(false);
   }, [onlineRoomKey, onlineTransportReady]);
   const helpMode = isMenu ? selectedMode : snapshot.mode;
+  const previousMenuPage=useRef(pages.active);
+  useEffect(()=>{
+    if(previousMenuPage.current&&!pages.active){
+      if(onlineView.currentRoom?.phase==='lobby')setOnlineOpen(true);
+      else if(isMenu&&!onlineView.currentRoom){game.current?.cancelModePreparation?.();setPrepareRequested(false);setOnlineOpen(false);setMenuScreen('home');}
+    }
+    previousMenuPage.current=pages.active;
+  },[pages.active,isMenu,onlineView.currentRoom?.phase]);
+  const menuRootLabel=onlineView.currentRoom?.phase==='lobby'?'返回房间':isMenu?'返回主菜单':'返回对局菜单';
   const { unread: feedbackUnread } = useFeedbackUnread(isMenu || feedbackOpen);
   const announcementEntry = isMenu && menuScreen !== 'prepare' ? undefined : onlineView.currentRoom ? entryFor('escape', onlineView.currentRoom.mode==='coop'?'coop':'pvp', onlineView.currentRoom.variant==='ffa'?'ffa':'tdm') : isMenu ? selectedEntry : entryFor(snapshot.mode);
   const announcements = useAnnouncements(announcementEntry, operational.config.revision, playing);
@@ -1458,6 +1463,7 @@ export default function App() {
   );
   return (
     <main
+      data-reduced-motion={(!settings.headBob&&!settings.recoilShake)||matchMedia("(prefers-reduced-motion: reduce)").matches}
       className={
         "game-shell" +
         (!fullscreenSupported ? " no-fullscreen" : "") +
@@ -1491,7 +1497,7 @@ export default function App() {
       {upgradePrompt&&isMenu&&!rankingPanel&&<MenuReadingPanel title="保留记录，升级账号" onClose={deferUpgrade}><p>设置用户名和密码，保存新的恢复码，即可继续使用原来的成绩、反馈和联机身份。</p><p>升级后可以跨设备登录，查看竞技档案与成就。照片、故事进度和本机成绩仍留在当前浏览器。</p><div className="upgrade-prompt-actions"><button className="primary" onClick={()=>{setUpgradePrompt(false);openRanking("identity");}}>升级账号</button><button className="secondary" onClick={deferUpgrade}>稍后再说</button></div></MenuReadingPanel>}
       {isMenu && (
         <MainMenu
-          active={!pages.active}
+          active={!pages.active&&!onlineOpen}
           unavailable={menuUnavailable}
           announcement={<AnnouncementBanner items={announcements.list} onOpen={openNotices}/>}
           screen={menuScreen}
@@ -1512,7 +1518,7 @@ export default function App() {
           onHome={() => {
             game.current?.cancelModePreparation?.();
             setPrepareRequested(false);
-            setMenuScreen(menuScreen === "prepare" ? "modes" : "home");
+            setMenuScreen("home");
           }}
           onModes={() => setMenuScreen("modes")}
           onAbout={() => setMenuReading("about")}
@@ -1599,53 +1605,14 @@ export default function App() {
           controls={
             <>
               {selectedMode === "escape" ? (
-                <div className="loadout-choice">
-                  <label htmlFor="primary-weapon">主枪</label>
-                  <label htmlFor="escape-difficulty">难度</label>
-                  <select
-                    id="primary-weapon"
-                    value={primary}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setPrimary(e.target.value as PrimaryWeapon)
-                    }
-                  >
-                    {PRIMARY_WEAPONS.map((id) => (
-                      <option key={id} value={id}>
-                        {WEAPONS[id].label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    id="escape-difficulty"
-                    value={settings.escapeDifficulty ?? "standard"}
-                    disabled={busy}
-                    onChange={(e) =>
-                      changeSettings({
-                        ...settings,
-                        escapeDifficulty: e.target
-                          .value as Settings["escapeDifficulty"],
-                      })
-                    }
-                  >
-                    {ESCAPE_DIFFICULTIES.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p>
-                    {PRIMARY_DESCRIPTIONS[primary]}
-                    <span>
-                      {
-                        ESCAPE_DIFFICULTIES.find(
-                          (d) =>
-                            d.id === (settings.escapeDifficulty ?? "standard"),
-                        )?.description
-                      }
-                    </span>
-                  </p>
-                </div>
+                <>
+                  <WeaponLoadout value={primary} onChange={id=>setPrimary(id as PrimaryWeapon)} mode="solo" disabled={busy}/>
+                  <div className="menu-difficulty-choice">
+                    <label htmlFor="escape-difficulty">难度</label>
+                    <select id="escape-difficulty" value={settings.escapeDifficulty??"standard"} disabled={busy} onChange={event=>changeSettings({...settings,escapeDifficulty:event.target.value as Settings['escapeDifficulty']})}>{ESCAPE_DIFFICULTIES.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}</select>
+                    <p>{ESCAPE_DIFFICULTIES.find(d=>d.id===(settings.escapeDifficulty??"standard"))?.description}</p>
+                  </div>
+                </>
               ) : selectedMode === "dafei" ? (
                 <>
                   <p className="mode-note">
@@ -1671,7 +1638,7 @@ export default function App() {
       {announcements.flash && playing && <div className="announcement-flash" role="status"><strong>{announcements.flash.title}</strong><span>暂停菜单可查看完整通知</span></div>}
       {modeBlocked && <MenuReadingPanel title="玩法暂时不可用" onClose={()=>setModeBlocked(null)}><p>{modeBlocked}</p></MenuReadingPanel>}
       {noticesOpen && <MenuReadingPanel title="游戏通知" onClose={()=>setNoticesOpen(false)}><AnnouncementList items={announcements.list} onRead={announcements.markRead}/></MenuReadingPanel>}
-      {pages.visited.map(page => <MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',credits:'制作与鸣谢',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={pages.backLabel} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'}>
+      {pages.visited.map(page => <MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',credits:'制作与鸣谢',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={()=>{if(!accountBusy)pages.back();}} rootLabel={onlineView.currentRoom?'房间菜单':isMenu?'开始':'对局菜单'} navigationDisabled={accountBusy} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'}>
         {page==='settings'?<SettingsPanel mode={helpMode} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
         page==='help'?<div className="help-panel">{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题 →</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
         page==='faq'?<MenuFAQ mode={helpMode} context={menuScreen==='prepare'?'prepare':'home'}/>:
@@ -1679,7 +1646,7 @@ export default function App() {
         page==='updates'?<MenuUpdates/>:page==='credits'?<MenuCredits/>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
         page==='feedback'?<FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/>:
-        <Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>}
+        pages.active==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
       {leaveConfirmation&&<MenuReadingPanel title={onlineView.currentRoom?'离开房间并返回首页？':'结束本局并返回首页？'} onClose={()=>setLeaveConfirmation(false)}><p>{onlineView.currentRoom?'你将离开当前房间，其他玩家可以继续对局。':storyMode?'故事进度会保留在本机；返回首页后可以继续上次的故事。':'本局尚未完成，返回首页会结束当前游玩。'}</p><div className="upgrade-prompt-actions"><button className="secondary" onClick={()=>setLeaveConfirmation(false)}>留在菜单</button><button className="primary" onClick={finishReturnMenu}>确认返回首页</button></div></MenuReadingPanel>}
       {briefing && (
@@ -2138,30 +2105,12 @@ export default function App() {
         !snapshot.escape?.mapOpen &&
         !photoPanelOpen &&
         !photoAlbumOpen && !pages.active && (
-          <MenuPage id="pause" title="暂停菜单" active onNavigate={openMenuPage}>
+          <MenuPage id="pause" title={snapshot.mode==='escape'?'突围菜单':'暂停菜单'} active tactical={snapshot.mode==='escape'} onRoot={returnMenu} rootLabel="主菜单" feedbackUnread={feedbackUnread} onNavigate={openMenuPage}>
           <AnnouncementBanner items={announcements.list} onOpen={openNotices}/>
           <div className="pause-shade">
             <section className="pause-panel">
-              <span className="panel-kicker">暂停片刻</span>
-              <h2>校园在等你。</h2>
-              <p>
-                {driving
-                  ? "驾驶、倒计时与音乐已暂停，准备好后继续。"
-                  : "进度与音乐已暂停，准备好后继续。"}
-              </p>
-              {snapshot.mode === "escape" && (
-                <EscapeMusicChoice
-                  settings={settings}
-                  onChange={changeSettings}
-                />
-              )}{" "}
-              {driving && (
-                <TransmissionChoice
-                  mode={settings.transmission ?? "auto"}
-                  onChange={changeTransmission}
-                  disabled={busy}
-                />
-              )}
+              <div className="pause-session-heading"><h2>{snapshot.mode==='escape'?'准备好，继续行动。':'校园在等你。'}</h2><p>{driving?'驾驶与倒计时已暂停。':'当前进度已暂停。'}</p></div>
+              {driving&&<div className="pause-session-controls"><TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/></div>}
               <button
                 className="primary wide"
                 onClick={resume}
@@ -2170,54 +2119,8 @@ export default function App() {
                 继续游玩
                 <Icon name="play" />
               </button>
-              <div className="pause-options">
-                <button
-                  className="secondary"
-                  onClick={() => openRanking("board")}
-                >
-                  排行榜
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => openRanking("identity")}
-                >
-                  账号与档案
-                </button>
-                <button className="secondary" onClick={openSettings}>
-                  设置
-                </button>
-                <button className="secondary" onClick={openFeedback}>
-                  反馈与进展
-                </button>
-                <button className="secondary" onClick={() => setShowHelp(true)}>
-                  操作说明
-                </button>
-                {storyMode && (
-                  <>
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        game.current?.storyGuidance("replay");
-                        resume();
-                      }}
-                    >
-                      重看操作引导
-                    </button>
-                    <button className="secondary" onClick={exportStory}>
-                      导出故事进度
-                    </button>
-                    <button
-                      className="text-button"
-                      onClick={() => void continueStory(true)}
-                    >
-                      恢复上一份存档
-                    </button>
-                  </>
-                )}
-                <button className="text-button" onClick={returnMenu}>
-                  返回首页
-                </button>
-              </div>
+              {storyMode&&<details className="pause-progress-controls"><summary>故事进度</summary><label><input type="checkbox" checked={replayGuidanceOnContinue} onChange={event=>setReplayGuidanceOnContinue(event.target.checked)}/>继续时重看操作引导</label><div className="pause-options"><button className="secondary" onClick={exportStory}>导出进度</button><button className="secondary" onClick={chooseImport} disabled={busy}>导入进度</button><button className="text-button" onClick={()=>void continueStory(true,true)} disabled={busy}>恢复上一份存档</button></div></details>}
+
             </section>
           </div>
           </MenuPage>
@@ -2314,24 +2217,17 @@ export default function App() {
             onlineView.currentRoom?.phase === "preparing" ||
             onlineView.status === "reconnecting"))) &&
         !onlineReadingOpen && (
-          <MultiplayerUI
+          <MenuPage id="lobby" title={onlineView.currentRoom?(onlineView.currentRoom.mode==='coop'?'合作准备':onlineView.currentRoom.variant==='tdm'?'团队对战准备':'个人混战准备'):'联机大厅'} active tactical onBack={returnMenu} backLabel="返回主菜单" onRoot={returnMenu} rootLabel="主菜单" onNavigate={openMenuPage} feedbackUnread={feedbackUnread} wide>
+          <MultiplayerUI embedded
             initialMode={escapeEntry === "pvp" ? "pvp" : "coop"}
             initialVariant={pvpVariant}
             view={onlineView}
             playerId={rankingPlayer?.id || onlineClient.current!.playerId}
             onAction={onlineAction}
             onIdentity={() => openRanking("identity")}
-            onClose={() => {
-              if (
-                onlineRoomKey &&
-                onlineView.currentRoom?.phase === "playing" &&
-                onlineTransportReady
-              )
-                resume();
-              else if (onlineRoomKey) onlineAction({ type: "leave" });
-              else setOnlineOpen(false);
-            }}
+            onClose={()=>{if(onlineRoomKey&&onlineView.currentRoom?.phase==='playing'&&onlineTransportReady){game.current?.pause();setOnlineOpen(false);}else returnMenu();}}
           />
+          </MenuPage>
         )}
       {online && snapshot.phase === "error" && !onlineReadingOpen && (
         <div className="online-shade">
@@ -2383,6 +2279,8 @@ export default function App() {
                 game.current?.action("interact", true);
                 game.current?.action("interact", false);
               }}
+              displayStamina={snapshot.stamina}
+              displayAction={snapshot.weaponAction}
               displayAmmo={snapshot.ammo}
               notice={snapshot.notice}
               spectatingId={snapshot.onlineSpectatingId}
@@ -2416,10 +2314,11 @@ export default function App() {
         !snapshot.onlineCommunication &&
         !onlineReadingOpen &&
         onlineTransportReady && (
-          <MenuPage id="pause" title="个人菜单" active onNavigate={openMenuPage}>
+          <MenuPage id="pause" title="对局菜单" active tactical onRoot={returnMenu} rootLabel="主菜单" feedbackUnread={feedbackUnread} onNavigate={openMenuPage}>
             <AnnouncementBanner items={announcements.list} onOpen={openNotices}/>
             <OnlinePause
               embedded
+              onLeave={returnMenu}
               onConnection={() => setConnectionDetails(true)}
               room={snapshot.online}
               playerId={onlineClient.current!.playerId}
@@ -2429,7 +2328,7 @@ export default function App() {
               onFeedback={openFeedback}
               onSettings={openSettings}
             />
-            <div className="menu-pause-links"><button className="secondary" onClick={()=>openRanking('identity')}>账号与档案</button><button className="secondary" onClick={()=>setShowHelp(true)}>操作说明</button><button className="secondary" onClick={returnMenu}>返回首页</button></div>
+
           </MenuPage>
         )}
       {online &&

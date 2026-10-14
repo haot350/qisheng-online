@@ -1,5 +1,6 @@
-import {mkdir,readFile,writeFile,cp} from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';import {protectOptionalRecords} from './lock-protection.mjs';
-const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),base=path.dirname(root);const npm=process.env.npm_execpath||path.resolve(path.dirname(process.execPath),'node_modules/npm/bin/npm-cli.js');
+import {mkdir,readFile,writeFile,cp} from 'node:fs/promises';import {existsSync} from 'node:fs';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawnSync} from 'node:child_process';import {protectOptionalRecords} from './lock-protection.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),base=path.dirname(root);const npm=[process.env.npm_execpath,path.resolve(path.dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js')].find(file=>file&&existsSync(file));
+if(!npm)throw Error('Node.js 24 with npm is required to synchronize the shared package.');
 function run(args,cwd){const r=spawnSync(process.execPath,args,{cwd,encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024});if(r.status!==0)throw Error(r.stdout+r.stderr);return r.stdout;}
 function cleanOptionalPlaceholders(lock){for(const [key,value]of Object.entries(lock.packages??{}))if(key!==''&&!value.version&&!value.link&&value.optional)delete lock.packages[key];return lock;}
 console.log(run([path.join(root,'scripts/build.mjs')],root));const pack=JSON.parse(run([npm,'pack','--ignore-scripts','--json'],root))[0],tar=pack.filename;

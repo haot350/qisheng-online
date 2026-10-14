@@ -80,6 +80,9 @@ export class OnlineClient {
   private snapshotAt = 0;
   private receivedBytes = 0;
   private snapshotInterval = 50;
+  private inputSent = new Map<number, number>();
+  private inputAckAgeMs = 0;
+  private inputAcknowledged = 0;
   private socketOff: (() => void) | null = null;
   view: LobbyView = { status: "idle", rooms: [], currentRoom: null };
   room: Room | null = null;
@@ -558,6 +561,8 @@ export class OnlineClient {
       }
       const snapshot = decoded.snapshot;
       if (!snapshot) return;
+      const own=snapshot.players.find(p=>p.id===this.playerId),confirmed=own?.inputReceipt?Math.max(own.inputReceipt.appliedSeq,own.inputReceipt.cancelledThrough):own?.ack??0;
+      if(confirmed>this.inputAcknowledged){const sent=this.inputSent.get(confirmed);if(sent!==undefined)this.inputAckAgeMs=now-sent;this.inputAcknowledged=confirmed;for(const seq of this.inputSent.keys())if(seq<=confirmed)this.inputSent.delete(seq);}
       if (legacy || ("kind" in message && message.kind === "full"))
         this.clearResync();
       if (this.snapshotAt)
@@ -747,6 +752,7 @@ export class OnlineClient {
       bufferMs: stats.interpolation,
       snapshotAgeMs: stats.snapshotAge,
       bufferedBytes: stats.bufferedBytes,
+      inputAckAgeMs: this.inputAckAgeMs,
     };
   }
   networkStats() {
@@ -878,8 +884,10 @@ export class OnlineClient {
     }
   }
   sendInputs(commands: InputCommand[]) {
-    if (this.room && this.view.status === "playing")
+    if (this.room && this.view.status === "playing") {
+      const now=performance.now();for(const command of commands)this.inputSent.set(command.seq,now);while(this.inputSent.size>120)this.inputSent.delete(this.inputSent.keys().next().value!);
       this.room.send("input", { commands });
+    }
   }
   private clearReconnectTimer(reset = true) {
     if (this.reconnectTimer) clearInterval(this.reconnectTimer);
@@ -887,6 +895,7 @@ export class OnlineClient {
     if (reset) this.reconnectStarted = null;
   }
   private async releaseCurrent(serial: number) {
+    this.inputSent.clear();this.inputAcknowledged=0;this.inputAckAgeMs=0;
     this.socketOff?.();
     this.socketOff = null;
     if (this.pingTimer) clearInterval(this.pingTimer);

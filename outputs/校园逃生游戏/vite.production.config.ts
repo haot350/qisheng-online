@@ -6,7 +6,7 @@ import path from 'node:path';
 import {buildStaticAssets} from './scripts/build-static-assets.mjs';
 import {buildGameMapIndex} from './scripts/build-map-cache-index.mjs';
 const publicRoot=path.resolve('public');
-const allowed=['assets/map','assets/media','branding','audio','avatars','images','map','story','characters/billboards','characters/players','weapons','vehicles','_headers','404.html','favicon.svg','robots.txt'];
+const allowed=['assets/map','assets/media','branding','audio','avatars','images','map','story','characters/billboards','characters/players','weapons','weapon-cards','vehicles','_headers','404.html','favicon.svg','robots.txt'];
 function runtimeAssets():Plugin{
   let output=path.resolve('dist');
   return {name:'runtime-assets-only',async buildStart(){await buildGameMapIndex();await buildStaticAssets(path.resolve('.'),'game');},async transformIndexHtml(html,context){

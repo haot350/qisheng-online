@@ -1,11 +1,17 @@
 import {spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {existsSync} from 'node:fs';
 const root=fileURLToPath(new URL('../',import.meta.url)),install=process.argv.includes('--install');
 if(process.argv.slice(2).some(arg=>arg!=='--install'))throw Error('Usage: node scripts/dev-demo.mjs [--install]');
 if(Number(process.versions.node.split('.')[0])!==24)throw Error('Use Node.js 24 for the account API and locked dependencies.');
 const modules=['校园共享模块','校园逃生游戏','校园排行榜服务','校园联机服务'];
-const npmCli=process.env.npm_execpath??path.resolve(path.dirname(process.execPath),'node_modules/npm/bin/npm-cli.js');
+// Node installers place npm beside node on Windows and under ../lib on Linux.
+const npmCli=[process.env.npm_execpath,
+ path.resolve(path.dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),
+ path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/bin/npm-cli.js')
+].find(candidate=>candidate&&existsSync(candidate));
+if(!npmCli)throw Error('npm was not found beside Node. Start with npm or install Node.js 24 with npm.');
 function run(directory,args){const result=spawnSync(process.execPath,[npmCli,...args],{cwd:path.join(root,'outputs',directory),stdio:'inherit',env:{...process.env,OPENQS_PROFILE:'demo'}});if(result.error)throw result.error;if(result.status!==0)process.exit(result.status??1);}
 if(install)for(const directory of modules)run(directory,['ci','--no-audit','--no-fund']);
 run('校园共享模块',['run','build']);run('校园排行榜服务',['run','build']);

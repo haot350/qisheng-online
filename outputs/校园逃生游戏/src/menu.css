@@ -60,3 +60,37 @@
 .menu-reading .menu-about{max-width:660px;margin:0 auto}.menu-about .menu-release-meta{margin:0 0 12px;font-size:14px}.menu-about .menu-about-intro{margin:0 0 22px;font-size:16px;line-height:1.8}.menu-about .menu-information-card{width:100%;margin:0;text-align:left}.menu-about .menu-about-links{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:22px}.menu-about-links button,.menu-about-links a{min-height:44px;display:inline-flex;align-items:center;padding:8px 0;font-size:14px}.menu-about-links button{border:0;background:none;color:inherit;text-align:left}.menu-credits{max-width:680px;margin:0 auto}.menu-credits section+section{border-top:1px solid #dedbd0;padding-top:20px;margin-top:20px}.menu-credits h3{font-size:18px;margin:0 0 12px}.menu-credits p{font-size:15px;line-height:1.85;margin:10px 0}.menu-credits a{color:#8b4534;text-underline-offset:3px}.menu-unavailable{display:inline-block;align-self:flex-start;font-size:14px;padding:3px 8px;margin-top:4px;border:1px solid #fff8;background:#242a23b8;border-radius:3px}.menu-choice-row button small{display:block;font-size:14px;line-height:1.5;opacity:.8}
 
 .upgrade-prompt-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}.upgrade-prompt-actions button{min-height:44px}
+
+/* One navigation rail owns every menu page; mode covers keep their campus art. */
+.campus-menu{display:block}.menu-main-content{margin-left:220px;min-height:100%;display:flex;flex-direction:column;min-width:0}
+.campus-menu .menu-home-start{min-height:48px}.campus-menu .menu-back{min-height:44px}
+.menu-landing{min-height:calc(100dvh - 86px);padding:44px clamp(28px,5vw,72px)}
+.menu-landing-copy{width:min(520px,100%)}.menu-landing h1{margin-bottom:26px}.menu-landing-subtitle{font-size:17px;max-width:30ch}
+.menu-landing-art{inset:0 0 0 8%}.menu-landing-art>div{background:linear-gradient(90deg,#f5f3ed 0%,#f5f3edaa 30%,#f5f3ed15 65%),linear-gradient(0deg,#f5f3ed,transparent 25%,transparent 85%,#f5f3ed)}
+.menu-home-content{padding:30px 30px 24px}.menu-heading h1{font-weight:650}
+.menu-preparation{width:min(1200px,100%);padding:24px 30px 28px}.menu-prep-grid{grid-template-columns:minmax(180px,.65fr) minmax(0,1.65fr);gap:28px}
+.menu-prep-intro h1{font-weight:700;font-size:clamp(30px,3vw,44px)}.menu-prep-intro>p:not(.menu-eyebrow){font-size:15px;line-height:1.8}
+.menu-prep-options{padding:22px}.menu-prep-actions{padding-top:18px;border-top:1px solid #dad8cc}
+.menu-difficulty-choice{display:flex;align-items:center;gap:14px;margin-top:20px;padding-top:18px;border-top:1px solid #d8d5c8}
+.menu-difficulty-choice label{font-size:15px;font-weight:650;flex:none}.menu-difficulty-choice select{min-height:44px;border:1px solid #cbc8bb;padding:8px 12px;background:#fffdf8;font:inherit;color:inherit;min-width:150px}.menu-difficulty-choice p{font-size:14px;line-height:1.7;margin:0;color:#687064}
+.menu-preparation .menu-back,.menu-home-content .menu-back{border:1px solid #ccc7b9;background:#faf8f0;padding:8px 14px;margin-bottom:20px;border-radius:3px}
+.menu-footer{padding-inline:30px}.menu-footer>div{gap:0}.menu-footer a{padding-left:0}
+.campus-menu .announcement-banner{margin:18px 30px 0}
+@media(max-width:1050px) and (min-width:901px){.menu-main-content{margin-left:190px}.menu-home-content,.menu-preparation{padding-inline:24px}.menu-prep-grid{gap:20px;grid-template-columns:minmax(160px,.55fr) minmax(0,1.7fr)}}
+@media(max-width:900px){
+ .menu-main-content{margin-left:0}.menu-home .menu-main-content{display:contents}.menu-home{display:flex;flex-direction:column}
+ .menu-home .menu-landing{order:0;width:100%;box-sizing:border-box;min-height:235px;padding:30px max(28px,env(safe-area-inset-left)) 12px}
+ .menu-home .menu-navigation-home{order:1;position:static;inset:auto;width:100%;padding:8px max(28px,env(safe-area-inset-left)) 24px;background:transparent;border:0;overflow:visible}
+ .menu-navigation-home .menu-navigation-name{display:none}.menu-navigation-home nav{width:min(380px,100%);margin:0 auto;gap:5px}
+ .menu-navigation-home button{font-size:17px;min-height:44px;padding:9px 14px;background:#f7f5edbb;border-color:#dfdbcf}
+ .menu-home .menu-footer{order:2}.menu-landing-copy{width:min(500px,100%);margin:0 auto;text-align:center}.menu-landing h1{margin-bottom:16px}.menu-landing-subtitle{font-size:15px;margin:0 auto 8px}
+ .menu-landing-art{inset:0;opacity:.35}.menu-landing-art>div{background:linear-gradient(90deg,#f5f3edbf,#f5f3ed70),linear-gradient(0deg,#f5f3ed,transparent 35%,#f5f3ed60)}
+ .menu-home-content{padding:18px 16px 24px}.menu-preparation{padding:18px 16px 24px}.menu-prep-grid{grid-template-columns:1fr;gap:18px}.menu-prep-intro h1{font-size:30px;margin:8px 0}.menu-prep-options{padding:18px}
+ .menu-difficulty-choice{flex-wrap:wrap;gap:10px}.menu-difficulty-choice p{width:100%}.menu-footer{padding-inline:16px}.campus-menu .announcement-banner{margin:14px 16px 0}
+}
+@media(orientation:landscape) and (max-height:500px){
+ .menu-home{flex-direction:row;flex-wrap:wrap}.menu-home .menu-landing{flex:1 1 40%;width:44%;min-height:295px;padding:14px 24px}.menu-landing-copy{display:block;min-width:0;text-align:left}.menu-landing h1{font-size:40px}.menu-landing-subtitle{margin:12px 0;max-width:27ch;font-size:14px}
+ .menu-home .menu-navigation-home{flex:1 1 44%;width:46%;padding:14px 24px 8px}.menu-navigation-home nav{gap:0}.menu-navigation-home button{font-size:15px;min-height:44px;padding:7px 12px}.menu-home .menu-footer{flex-basis:100%;margin-top:auto}
+ .menu-preparation{padding-top:12px}.menu-prep-grid{grid-template-columns:1fr;gap:10px}.menu-prep-intro{display:flex;align-items:center;gap:20px}.menu-prep-intro h1{font-size:25px;margin:0}.menu-prep-intro>p:not(.menu-eyebrow){display:none}.menu-prep-intro .menu-inline{margin-left:auto}
+ .menu-prep-options{max-height:none;padding:16px}.menu-prep-scroll{overflow:visible}.menu-prep-actions{margin-top:14px}.menu-difficulty-choice{margin-top:14px;padding-top:12px}.menu-difficulty-choice p{width:auto;flex:1}
+}

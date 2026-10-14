@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.8.2',sequence:35,date:'2026-10-14',version:'Preview 0.8.2',
+ overview:'菜单更统一，枪战信息更清楚，改善联机移动恢复。',
+ summary:['菜单入口统一排列，功能页直接返回主菜单或本局菜单。','枪战加入武器选装卡片与战术界面，小地图随朝向旋转。','修复联机输入确认与恢复链路，减少移动被反复拉回。'],
+ items:['调整：账号、排行、反馈、设置和帮助使用同一套导航。','调整：枪战选装显示当前玩法的真实武器参数。','调整：生命、低弹药与装填状态更醒目，小地图上方始终朝向观察方向。','修复：联机迟到输入和时钟重同步导致预测动作被过早裁掉。','修复：加载与菜单恢复后，输入确认和本机移动状态不同步。']
+},
+{
  id:'preview-0.8.1',sequence:34,date:'2026-10-14',version:'Preview 0.8.1',
  overview:'菜单更好找，手机开镜与准星更清楚。',
  summary:['设置、帮助、账号和社区页面统一为整屏菜单，随时返回。','手机默认点击开镜，修复关镜状态不一致与准星显示。','账号密码最低改为6个字符，保留原账号与登录状态。'],
