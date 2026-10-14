@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import './menu-pages.css';
+import {BrandLogo} from './BrandLogo';
 
 export type MenuPageId='settings'|'help'|'faq'|'about'|'updates'|'credits'|'ranking'|'feedback'|'account';
 const navigation=[['start','开始'],['account','账号与档案'],['ranking','排行榜'],['feedback','反馈与进展'],['settings','设置'],['faq','帮助'],['about','关于']] as const;
@@ -7,7 +8,7 @@ const navigation=[['start','开始'],['account','账号与档案'],['ranking','�
 export function MenuNavigation({active,onNavigate,onRoot,rootLabel='开始',feedbackUnread=false,updatesUnread=false,mobileHome=false,disabled=false}:{active:string;onNavigate:(page:MenuPageId)=>void;onRoot:()=>void;rootLabel?:string;feedbackUnread?:boolean;updatesUnread?:boolean;mobileHome?:boolean;disabled?:boolean}){
  const selected=active==='help'?'faq':active==='updates'||active==='credits'?'about':active;
  return <aside className={'menu-navigation'+(mobileHome?' menu-navigation-home':'')} aria-label="游戏菜单">
-  <div className="menu-navigation-name" aria-hidden="true">齐盛Online</div>
+  <div className="menu-navigation-name" aria-hidden="true"><BrandLogo className="menu-logo-dark"/><BrandLogo variant="light" className="menu-logo-light"/></div>
   <nav aria-label="主菜单">{navigation.map(([id,label])=><button key={id} className={id==='start'?'menu-home-start':undefined} data-menu-focus={id} aria-current={selected===id?'page':undefined} disabled={disabled} onClick={()=>id==='start'?onRoot():onNavigate(id)}><span>{id==='start'?rootLabel:label}</span>{((id==='feedback'&&feedbackUnread)||(id==='about'&&updatesUnread))&&<i className="menu-update-dot" role="img" aria-label={id==='feedback'?'有新回复':'有未读更新'}/>}<span className="menu-navigation-arrow" aria-hidden="true">›</span></button>)}</nav>
  </aside>;
 }
