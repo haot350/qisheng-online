@@ -23,6 +23,6 @@ OpenQS 制作的校园游戏。此仓库包含客户端、校园网站、账号�
 
 上传内容由 `scripts/public-source.mjs` 白名单控制。校园模型、真人及衍生贴图、正式封面和图标、生产配置、数据库、玩家截图、日志和历史发行留在本机。不要强制添加未经审查的文件。详见 [开源边界](docs/OPEN_SOURCE.md)、[第三方许可](docs/THIRD_PARTY.md)。
 
-当前正式发行 **Preview 0.8.1**，两站及后端已发布；部署身份、验证范围和接续任务由 [HANDOFF](docs/HANDOFF.md) 记录。游戏 https://game.tianhw.top，校园网站 https://zbqsgz.tianhw.top。公开协作仓库为 https://github.com/haot350/qisheng-online。
+当前正式发行 **Preview 0.8.2**，两站及后端已发布；统一菜单、枪战界面与输入确认修补，首页提供直接开始入口。部署身份、验证范围和接续任务由 [HANDOFF](docs/HANDOFF.md) 记录。游戏 https://game.tianhw.top，校园网站 https://zbqsgz.tianhw.top。公开协作仓库为 https://github.com/haot350/qisheng-online。
 
 历史建模记录、原 README 与私密运维证据保留在本机 'work/private-project-state' 及原交付目录，不属于公开仓库。
