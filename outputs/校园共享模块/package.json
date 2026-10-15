@@ -1,10 +1,14 @@
 {
   "name": "@qisheng/shared",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": true,
   "type": "module",
   "description": "Canonical game rules, protocol and opt-in browser modules",
   "exports": {
+    "./assistant": {
+      "types": "./src/assistant.ts",
+      "default": "./dist/assistant.js"
+    },
     "./operations": {
       "types": "./src/operations.ts",
       "default": "./dist/operations.js"
@@ -76,7 +80,11 @@
       "types": "./src/achievements.ts",
       "default": "./dist/achievements.js"
     },
-    "./community/account.css": "./dist/community/account.css"
+    "./community/account.css": "./dist/community/account.css",
+    "./connection-summary": {
+      "types": "./src/connection-summary.ts",
+      "default": "./dist/connection-summary.js"
+    }
   },
   "files": [
     "dist",

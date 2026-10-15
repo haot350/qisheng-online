@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {RankingError,type RankingClient} from './client';
+import type {ConnectionFeedbackSummary} from '../connection-summary.ts';
 import {isActiveAccount} from '../accounts.ts';
 import {FullAccountLink} from './full-account-link';
 import './feedback.css';
@@ -8,7 +9,7 @@ import {feedbackSubmission,type FeedbackSubmission} from './feedback-submission'
 import {isTopmostDialog,useDialogFocus} from './dialog-focus';
 import {feedbackReceiptKey,readFeedbackReceipts,markFeedbackRead,feedbackCredentialsChanged,useFeedbackUnread} from './feedback-unread';
 export type FeedbackUIProps={client:RankingClient;onClose?:()=>void;diagnostics?:FeedbackDiagnostics;onIdentity?:()=>void;onAccount?:()=>void;embedded?:boolean};
-export type FeedbackDiagnostics={version?:string;mode?:string;controls?:string;browser?:string;os?:string;viewport?:string;errorCode?:string};
+export type FeedbackDiagnostics={connection?:ConnectionFeedbackSummary;version?:string;mode?:string;controls?:string;browser?:string;os?:string;viewport?:string;errorCode?:string};
 function diagnosticText(value:FeedbackDiagnostics){
  const modes:Record<string,string>={escape:'校园突围',dafei:'大飞模式',story:'明天，照常见',roam:'自由漫游','online-coop':'合作突围','online-pvp':'玩家对战','online-tdm':'团队对战','online-ffa':'个人混战'};
  const controls:Record<string,string>={touch:'触屏操作',keyboard:'键盘与鼠标',desktop:'键盘与鼠标',mixed:'混合操作'};

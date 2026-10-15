@@ -73,7 +73,7 @@ test('actual room sender does not advance wire state/events while blocked and se
  process.env.REALTIME_SERVICE_TOKEN??='isolated-connection-test-only';delete process.env.REDIS_URL;
  const{CampusRoom}=await import('../dist/modules/校园联机服务/src/room.js');
  let snapshot=state(),events=[];const messages=[];
- const room={rewindWindows:new Map(),rewindFor:CampusRoom.prototype.rewindFor,sim:{snapshot:()=>structuredClone(snapshot),events,world:{visible:()=>true}},sendBudgets:new Map(),replication:new Map(),spectators:new Map(),instrumented:new WeakSet(),wireBytes:0,skippedSnapshots:0,projectionMetrics:[]};
+ const room={rewindWindows:new Map(),rewindFor:CampusRoom.prototype.rewindFor,captureSnapshot:CampusRoom.prototype.captureSnapshot,sim:{snapshot:()=>structuredClone(snapshot),events,world:{visible:()=>true}},sendBudgets:new Map(),replication:new Map(),spectators:new Map(),instrumented:new WeakSet(),wireBytes:0,skippedSnapshots:0,projectionMetrics:[]};
  const client={auth:{player:{id:'self'}},ref:{bufferedAmount:0},raw(){},send(type,message){messages.push(message);this.raw(getMessageBytes.raw(Protocol.ROOM_DATA,type,message));}};
  const send=(full=false)=>CampusRoom.prototype.sendSnapshot.call(room,client,full),decoder=new WireDecoder();
  send(true);decoder.accept(messages[0]);const initialSequence=messages[0].seq,initialBytes=room.wireBytes;

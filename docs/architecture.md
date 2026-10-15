@@ -12,6 +12,10 @@
 
 菜单由MenuNavigation和MenuPage统一管理，返回按当前会话回根，不使用浏览历史栈。FPSVitals／FPSAmmo供单人与联机适配，静态WeaponLoadout使用当前玩法真实参数；正式图卡由原枪模离线生成并独立保存，不随公开源码上传。
 
+0.8.3由SessionMenuActions承载局中工具入口，准备、大厅和暂停不显示公共侧栏。AssistantSession复用SessionOperations控制取消和迟到回答；独立懒加载聊天页面不引入游戏引擎。小齐后端与三个实时工作进程分离，参考[维护说明](assistant.md)。
+
+本轮保留GameAPI兼容接口和既有ModeCapabilities，不全面改造引擎调用。已修补中等长帧的固定步预算、批量动态姿态恢复、精确遮挡缓存、实体快照字段比较及阴影释放。能力接口完整拆分和全局寻路预算作为后续项目，不能把本轮定向修改写成全引擎重构完成。
+
 0.8.0 的账号与统计位于 API `accounts.ts`、`account-profile.ts`、`achievements.ts`。管理员接口分别位于 `admin.ts`、`admin-player-accounts.ts`、`admin-workbench.ts`；管理员账号与玩家账号各有权限和会话边界。账号表关联原 player_id，升级不复制身份；成就来源关联有效单人或权威多人结果，可从来源重建，状态撤回会撤销不再满足的成就。
 
 数据库、配置、截图附件及备份独立于发行。应用回滚保留持久数据，跨 schema 回滚必须验证兼容；不能把放宽数据库 guard 当作通用策略。当前工作状态及真正发布版本见 [交接快照](HANDOFF.md)，0.6.7 等历史结构说明保持原样。

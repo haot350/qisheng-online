@@ -1,5 +1,6 @@
 import {processFeedbackScreenshots,resolutionView,feedbackFollowupRoutes} from './feedback-resolution.js';
 import sharp from 'sharp';
+import {safeConnectionSummary} from '@qisheng/shared/connection-summary';
 import {body,params,hash,random,type Context} from './app.js';import {AppError} from './validation.js';
 sharp.concurrency(1);sharp.cache({memory:16,files:0,items:16});
 export const ISSUE_STATES=['evaluating','planned','developing','verification','released','wontfix'];
@@ -42,6 +43,7 @@ export function feedbackRoutes(c:Context){const {app,db,now,auth}=c;feedbackFoll
   const title=text(b.title,4,80),message=text(b.message,10,3000),images=b.screenshots??[];
   if(!Array.isArray(images)||images.length>3)throw new AppError('IMAGE','最多上传三张截图。');
   const diagnostics:Record<string,unknown>={};for(const k of ['version','mode','controls','browser','os','viewport','errorCode'])if(typeof b.diagnostics?.[k]==='string')diagnostics[k]=b.diagnostics[k].slice(0,120);
+  const connection=safeConnectionSummary(b.diagnostics?.connection);if(connection)diagnostics.connection=connection;
   const submissionToken=b.submissionToken;
   if(submissionToken!==undefined&&(typeof submissionToken!=='string'||!/^[A-Za-z0-9_-]{43,100}$/.test(submissionToken)))throw new AppError('REQUEST','请重新打开反馈页面后提交。');
   const key=submissionToken?'feedback-create:'+(p?'player:'+p.id:'guest')+':'+hash(submissionToken):null;

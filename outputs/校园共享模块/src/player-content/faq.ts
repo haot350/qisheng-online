@@ -1,13 +1,14 @@
-import {PRIMARY_WEAPONS,WEAPONS} from '../rules.ts';
-import {DRIVE_RANKING_RULES,DAFEI_RULE_VERSION} from '../ranking.ts';
+import {PRIMARY_WEAPONS,WEAPONS} from '../rules.js';
+import {DRIVE_RANKING_RULES,DAFEI_RULE_VERSION} from '../ranking.js';
 const DRIVE_RULES=DRIVE_RANKING_RULES[DAFEI_RULE_VERSION];
 
-import type {FAQGroup} from './faq-search.ts';
-export type {FAQGroupId,FAQItem,FAQGroup} from './faq-search.ts';
+import type {FAQGroup} from './faq-search.js';
+export type {FAQGroupId,FAQItem,FAQGroup} from './faq-search.js';
 
 export const FAQ_GROUPS:readonly FAQGroup[]=[
  {id:'start',title:'开始游玩',items:[
-  {q:'第一次玩，选哪个模式？',a:'点击首页“开始”选择玩法。想体验任务和枪战，选校园突围；想驾驶刷分，选大飞模式；想边拍照边听故事，选《明天，照常见》。自由漫游没有敌人和倒计时，适合先认识校园。'},
+  {q:'第一次玩，选哪个模式？',a:'点击首页“开始游玩”选择玩法。想体验任务和枪战，选校园突围；想驾驶刷分，选大飞模式；想边拍照边听故事，选《明天，照常见》。自由漫游没有敌人和倒计时，适合先认识校园。左栏“开始”可以回到首页。'},
+  {q:'小齐能帮我做什么？',a:'从菜单打开小齐，可以询问玩法、操作和账号使用方法，也可以请它整理问题反馈。提交前可以修改内容，只有确认后才会发送。问题会交由AI服务处理，请勿发送密码或恢复码。聊天记录只保留在本机，可随时清除；服务暂不可用时，可以查看帮助或直接反馈。'},
   {q:'电脑怎么观察？手机为什么要横屏？',a:'电脑步行与摄影时，直接移动鼠标观察。突围中 Tab 切换追踪任务，M 打开地图；故事、漫游和摄影中 Tab 释放鼠标操作界面，点击画面恢复观察。Esc 打开菜单。驾驶按住右键临时环顾。手机横屏后，左侧移动或转向，右侧观察与操作。'},
   {q:'为什么 NPC 采用静态贴图？',a:'教师 NPC 使用全身照片式贴图，走路、跑动、举枪、换弹和技能会切换相应姿态；联机玩家则使用三维角色。'},
   {q:'为什么地图有些地方与真实校园不一样？',a:'校园根据照片、视频和空间资料重建，部分尺寸仍靠估算，室内也尚未全部完成。预览版会继续校准这些差异。'},

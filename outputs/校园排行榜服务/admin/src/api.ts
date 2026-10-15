@@ -25,12 +25,13 @@ export async function api<T = Row>(
   path: string,
   data?: unknown,
   signal?: AbortSignal,
+  timeoutMs = 20000,
 ): Promise<T> {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) controller.abort();
   signal?.addEventListener('abort', cancel, {once: true});
-  const timer = setTimeout(cancel, 20000);
+  const timer = setTimeout(cancel, timeoutMs);
   try {
   const response = await fetch("/admin/" + path, {
     credentials: "same-origin",

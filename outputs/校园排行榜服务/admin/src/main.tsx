@@ -13,6 +13,7 @@ const Overview = lazy(() =>
   Issues = lazy(() => import("./views/Issues")),
   Releases = lazy(() => import("./views/Releases")),
   Operations = lazy(() => import("./views/Operations")),
+  Assistant = lazy(() => import("./views/Assistant")),
   Rankings = lazy(() =>
     import("./views/Moderation").then((m) => ({ default: m.Rankings })),
   ),
@@ -37,6 +38,7 @@ const sections = [
   { id: "issues", label: "议题", scope: "feedback", symbol: "03" },
   { id: "releases", label: "版本与发布", scope: "publish", symbol: "04" },
   { id: "operations", label: "玩法与通知", scope: "operations", symbol: "05" },
+  { id: "assistant", label: "小齐助手", scope: "assistant", symbol: "05A" },
   { id: "rankings", label: "成绩审核", scope: "ranking", symbol: "06" },
   { id: "players", label: "玩家", scope: "players", symbol: "07" },
   { id: "player-accounts", label: "玩家账号", scope: "player-accounts", symbol: "07A" },
@@ -182,6 +184,7 @@ function App() {
     issues: Issues,
     releases: Releases,
     operations: Operations,
+    assistant: Assistant,
     rankings: Rankings,
     players: Players,
     'player-accounts': PlayerAccounts,

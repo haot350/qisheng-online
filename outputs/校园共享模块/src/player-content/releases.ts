@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.8.3',sequence:36,date:'2026-10-15',version:'Preview 0.8.3',
+ overview:'菜单更清楚，改善联机恢复，新增小齐游玩助手。',
+ summary:['首页点击“开始游玩”选择玩法，局中使用独立菜单。','改善画面短暂卡顿后的联机移动恢复。','新增小齐助手，解答游玩问题并帮助整理反馈。'],
+ items:['调整：左栏“开始”返回首页，准备、大厅和局中菜单不再显示全局侧栏。','调整：校园突围大厅与准备页使用统一战术界面，返回大厅和主菜单的含义更明确。','修复：短暂画面卡顿后，联机角色可能反复被拉回的问题。','调整：减少联机画面与状态更新中的重复处理，补齐退出场景的资源释放。','新增：小齐助手，可从菜单进入，回答游玩问题并整理可自行修改、确认的反馈。','新增：小齐对话保存在本机，可随时清除；服务未开放时仍可使用帮助和直接反馈。']
+},
+{
  id:'preview-0.8.2',sequence:35,date:'2026-10-15',version:'Preview 0.8.2',
  overview:'菜单更统一，枪战信息更清楚，改善联机移动恢复。',
  summary:['菜单入口统一排列，功能页直接返回主菜单或本局菜单。','枪战加入武器选装卡片与战术界面，小地图随朝向旋转。','修复联机输入确认与恢复链路，减少移动被反复拉回。'],

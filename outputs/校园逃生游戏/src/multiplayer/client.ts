@@ -83,6 +83,7 @@ export class OnlineClient {
   private inputSent = new Map<number, number>();
   private inputAckAgeMs = 0;
   private inputAcknowledged = 0;
+  private sendBacklogAt = 0;
   private socketOff: (() => void) | null = null;
   view: LobbyView = { status: "idle", rooms: [], currentRoom: null };
   room: Room | null = null;
@@ -743,7 +744,7 @@ export class OnlineClient {
     } catch {}
   }
   getConnectionDiagnostics() {
-    const stats = this.networkStats();
+    const stats = this.networkStats(),receipt=this.view.currentRoom?.players.find(p=>p.id===this.playerId)?.inputReceipt;
     return {
       rttMs: stats.rtt,
       jitterMs: stats.jitter,
@@ -753,18 +754,26 @@ export class OnlineClient {
       snapshotAgeMs: stats.snapshotAge,
       bufferedBytes: stats.bufferedBytes,
       inputAckAgeMs: this.inputAckAgeMs,
+      backlogAgeMs: stats.backlogAge,
+      inputAgeTicks: receipt?.inputAgeTicks??0,
+      inputReason: receipt?.reason??'none',
+      lastInputReason: receipt?.lastReason??'none',
+      lastInputReasonTick: receipt?.lastReasonTick??0,
     };
   }
   networkStats() {
     const connection = this.room?.connection as unknown as
       | { transport?: { ws?: { bufferedAmount?: number } } }
       | undefined;
+    const now=performance.now(),bufferedBytes=connection?.transport?.ws?.bufferedAmount??0;
+    if(bufferedBytes>0){if(!this.sendBacklogAt)this.sendBacklogAt=now;}else this.sendBacklogAt=0;
     return {
       rtt: this.clock.rttMs,
       jitter: this.clock.jitterMs,
       interpolation: this.clock.interpolationMs,
       snapshotAge: this.snapshotAt ? performance.now() - this.snapshotAt : 0,
-      bufferedBytes: connection?.transport?.ws?.bufferedAmount ?? 0,
+      bufferedBytes,
+      backlogAge: this.sendBacklogAt?Math.max(0,now-this.sendBacklogAt):0,
     };
   }
   private removeResume() {

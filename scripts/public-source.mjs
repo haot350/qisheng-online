@@ -5,7 +5,7 @@ import path from 'node:path';
 export const root=fileURLToPath(new URL('../',import.meta.url));
 const fileSet=new Set();
 const rootFiles=['.gitignore','AGENTS.md','README.md','LICENSE','CONTRIBUTING.md','SECURITY.md'];
-const docs=['HANDOFF.md','architecture.md','development.md','admin.md','operations.md','roadmap.md','OPEN_SOURCE.md','DEMO.md','THIRD_PARTY.md'];
+const docs=['HANDOFF.md','architecture.md','development.md','admin.md','assistant.md','operations.md','roadmap.md','OPEN_SOURCE.md','DEMO.md','THIRD_PARTY.md'];
 const code=/\.(?:[cm]?js|ts|tsx|css|scss|json|html|sql|sh|py|md|yml|yaml)$/;
 const forbidden=/(?:^|\/)(?:node_modules|dist|build|release|releases|backups?|data|config|\.git|\.next|\.vinext|\.openai|\.sites-runtime|\.npm-cache|generated|assets|public|docs\/v[^/]*|[^/]*(?:备份|快照)[^/]*)(?:\/|$)|(?:^|\/)\.env(?:\.|$)|\.(?:sqlite(?:3)?|db|log|cookies|png|jpe?g|webp|glb|blend|bin|mp3|wav|ogg|mp4|zip|7z|pdf)$/i;
 const scriptLists={

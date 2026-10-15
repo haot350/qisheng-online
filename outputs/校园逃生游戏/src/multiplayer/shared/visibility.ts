@@ -4,6 +4,12 @@ import {distance,eyeAt,smokeOccludes} from './combat';
 export interface VisibilityWorld {visible(a:Vec3,b:Vec3):boolean;rayDistance?(origin:Vec3,direction:Vec3,max:number):number;visionRayDistance?(origin:Vec3,direction:Vec3,max:number):number;visionGeometryVisible?(a:Vec3,b:Vec3):boolean;}
 export const REPLICATION_VISIBILITY={lookAheadSeconds:.15,maxLookAhead:1,maxRange:420,cornerRange:25,cacheTicks:6} as const;
 type Subject=Pick<PlayerState,'id'|'generation'|'position'> & Partial<Pick<PlayerState,'velocity'|'crouched'>>;
+type SmokeStamp=Pick<SmokeState,'id'|'position'|'radius'>;
+type VisibilityStamp={at:number;world:VisibilityWorld;observer:Subject;subject:Subject;smokes:SmokeStamp[];visible:boolean};
+const sameVector=(a:Vec3|undefined,b:Vec3|undefined)=>a===b||!!a&&!!b&&a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2];
+const samePose=(a:Subject,b:Subject)=>a.id===b.id&&a.generation===b.generation&&a.crouched===b.crouched&&sameVector(a.position,b.position)&&sameVector(a.velocity,b.velocity);
+const copyPose=(p:Subject):Subject=>({id:p.id,generation:p.generation,crouched:p.crouched,position:[...p.position],velocity:p.velocity?[...p.velocity]:undefined});
+const sameSmoke=(a:SmokeStamp[],b:SmokeState[])=>a.length===b.length&&a.every((s,i)=>s.id===b[i].id&&s.radius===b[i].radius&&sameVector(s.position,b[i].position));
 const add=(a:Vec3,b:Vec3):Vec3=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
 export function geometryVisible(world:VisibilityWorld,a:Vec3,b:Vec3){
  if(world.visionGeometryVisible)return world.visionGeometryVisible(a,b);
@@ -29,14 +35,13 @@ export function authorizedSpectate(room:RoomSnapshot,viewerId:string,requested:s
 
 /** Server-only permissions; the client never supplies a visible-entity list. */
 export class RecipientVisibility {
- private cache=new Map<string,{at:number;key:string;visible:boolean}>();
+ private cache=new Map<string,VisibilityStamp>();
  private previousNpc=new Map<string,{tick:number;generation:number;position:Vec3}>();
  reset(){this.cache.clear();this.previousNpc.clear();}
  private clearRay(world:VisibilityWorld,a:Vec3,b:Vec3,smokes:SmokeState[]){return !smokeOccludes(a,b,smokes)&&geometryVisible(world,a,b);}
  permits(world:VisibilityWorld,observer:PlayerState,subject:Subject,smokes:SmokeState[],tick:number){
   if(distance(observer.position,subject.position)>REPLICATION_VISIBILITY.maxRange)return false;
-  const key=JSON.stringify([observer.position,observer.velocity,observer.crouched,subject.position,subject.velocity,subject.crouched,subject.generation,smokes.map(s=>[s.id,s.position,s.radius])]);
-  const cached=this.cache.get(subject.id);if(cached&&cached.key===key&&tick-cached.at<=REPLICATION_VISIBILITY.cacheTicks)return cached.visible;
+  const cached=this.cache.get(subject.id);if(cached&&cached.world===world&&tick>=cached.at&&tick-cached.at<=REPLICATION_VISIBILITY.cacheTicks&&samePose(cached.observer,observer)&&samePose(cached.subject,subject)&&sameSmoke(cached.smokes,smokes))return cached.visible;
   const eye=eyeAt(observer.position,observer.crouched),points=bodyPoints(subject);let visible=points.some(p=>this.clearRay(world,eye,p,smokes));
   if(!visible&&distance(observer.position,subject.position)<=REPLICATION_VISIBILITY.cornerRange){
    const viewerMove=ahead(observer.velocity),targetMove=ahead(subject.velocity),futureEye=add(eye,viewerMove);
@@ -50,7 +55,7 @@ export class RecipientVisibility {
    visible=futurePoints.some(p=>this.clearRay(world,eye,p,smokes));
    if(!visible&&futureEyeSafe)visible=points.some(p=>this.clearRay(world,futureEye,p,smokes))||futurePoints.some(p=>this.clearRay(world,futureEye,p,smokes));
   }
-  this.cache.set(subject.id,{at:tick,key,visible});if(this.cache.size>64)for(const [id,value]of this.cache)if(tick-value.at>60)this.cache.delete(id);return visible;
+  this.cache.set(subject.id,{at:tick,world,observer:copyPose(observer),subject:copyPose(subject),smokes:smokes.map(s=>({id:s.id,position:[...s.position],radius:s.radius})),visible});if(this.cache.size>64)for(const [id,value]of this.cache)if(tick-value.at>60)this.cache.delete(id);return visible;
  }
  npcSubject(npc:NpcState,tick:number):Subject {
   const old=this.previousNpc.get(npc.id);let velocity:Vec3=[0,0,0];

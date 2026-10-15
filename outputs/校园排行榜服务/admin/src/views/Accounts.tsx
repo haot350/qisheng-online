@@ -32,6 +32,7 @@ export const scopes: Record<string, string> = {
   rooms: "房间管理",
   stats: "访问与故障",
   operations: "玩法与通知",
+  assistant: "小齐助手运营",
 };
 export function Accounts({ administrator }: { administrator: Administrator }) {
   const r = useResource(administrator.owner ? "accounts" : null),

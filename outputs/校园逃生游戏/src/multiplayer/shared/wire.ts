@@ -27,7 +27,12 @@ function diff<T extends object>(old:T,next:T):Patch<T>|undefined {
  return Object.keys(set).length||unset.length?{set,...(unset.length?{unset}:{})}:undefined;
 }
 function apply<T extends object>(old:T,patch:Patch<T>|undefined):T {if(!patch)return old;const next={...old,...clone(patch.set)};for(const key of patch.unset??[])delete (next as Record<string,unknown>)[key];return next;}
-function entities<T extends {id:string}>(old:T[],next:T[]):EntityDelta<T>{const previous=new Map(old.map(p=>[p.id,p])),present=new Set(next.map(p=>p.id));return{upsert:next.filter(p=>!equal(previous.get(p.id),p)).map(clone),remove:old.filter(p=>!present.has(p.id)).map(p=>p.id)};}
+const sameVector=(a:Vec3,b:Vec3)=>a[0]===b[0]&&a[1]===b[1]&&a[2]===b[2];
+const playerFields=['id','yaw','pitch','grounded','crouched','life','weapon','aim','sprinting','sliding','generation','loading','loadingEpoch','carryingTask','health','protectionLeft'] as const satisfies readonly (keyof VisiblePlayer)[];
+const npcFields=['id','identity','generation','yaw','aimPitch','pose','aim','firing','reloading','weapon','active','bob','actualSpeed'] as const satisfies readonly (keyof VisibleNpc)[];
+const samePlayer=(a:VisiblePlayer,b:VisiblePlayer)=>sameVector(a.position,b.position)&&sameVector(a.velocity,b.velocity)&&playerFields.every(key=>Object.is(a[key],b[key]))&&equal(a.weaponAction,b.weaponAction);
+const sameNpc=(a:VisibleNpc,b:VisibleNpc)=>sameVector(a.position,b.position)&&npcFields.every(key=>Object.is(a[key],b[key]))&&equal(a.weaponAction,b.weaponAction);
+function entities<T extends {id:string}>(old:T[],next:T[],same:(a:T,b:T)=>boolean):EntityDelta<T>{const previous=new Map(old.map(p=>[p.id,p])),present=new Set(next.map(p=>p.id));return{upsert:next.filter(p=>{const before=previous.get(p.id);return !before||!same(before,p);}).map(clone),remove:old.filter(p=>!present.has(p.id)).map(p=>p.id)};}
 function mergeEntities<T extends {id:string}>(old:T[],delta:EntityDelta<T>){const values=new Map(old.map(p=>[p.id,p]));for(const id of delta.remove)values.delete(id);for(const value of delta.upsert)values.set(value.id,clone(value));return [...values.values()];}
 
 export function roomRoster(room:RoomSnapshot):PublicRosterEntry[]{return (room as Partial<RecipientSnapshot>).roster??room.players.map(p=>rosterEntry(p,true));}
@@ -86,7 +91,7 @@ export class RecipientReplicator {
   const seq=++this.serial,force=options.forceFull||!this.previous||snapshot.tick-this.lastFullTick>=120||this.previous.spectatingId!==next.spectatingId;
   let message:RoomWireMessage;
   if(force){message={wireVersion:ROOM_WIRE_VERSION,kind:'full',seq,roomId:snapshot.roomId,viewerId:this.viewerId,...clone(next)};this.lastFullTick=snapshot.tick;this.diagnostics.full++;}
-  else {const old=this.previous!;message={wireVersion:ROOM_WIRE_VERSION,kind:'delta',seq,baseSeq:seq-1,roomId:snapshot.roomId,viewerId:this.viewerId,room:diff(old.room,next.room),roster:equal(old.roster,next.roster)?undefined:clone(next.roster),self:diff(old.self,next.self),players:entities(old.players,next.players),npcs:entities(old.npcs,next.npcs),spectatingId:next.spectatingId,events:clone(next.events),eventSerial:next.eventSerial};this.diagnostics.deltas++;}
+  else {const old=this.previous!;message={wireVersion:ROOM_WIRE_VERSION,kind:'delta',seq,baseSeq:seq-1,roomId:snapshot.roomId,viewerId:this.viewerId,room:diff(old.room,next.room),roster:equal(old.roster,next.roster)?undefined:clone(next.roster),self:diff(old.self,next.self),players:entities(old.players,next.players,samePlayer),npcs:entities(old.npcs,next.npcs,sameNpc),spectatingId:next.spectatingId,events:clone(next.events),eventSerial:next.eventSerial};this.diagnostics.deltas++;}
   this.previous=next;this.diagnostics.messages++;return message;
  }
 }

@@ -19,7 +19,7 @@ export interface JoinOptions {ticket:string;protocolVersion:typeof PROTOCOL_VERS
 export type InputAction='reload'|'jump'|'slide'|'interact'|'smoke'|'switch'|'drop-task';
 export type InputResetReason='none'|'late-input'|'input-timeout'|'input-reset'|'future-input'|'sequence-gap'|'client-rebase'|'loading'|'reconnected';
 /** Recipient-private receipt: a simulation tick alone never acknowledges a client command. */
-export interface InputReceipt {epoch:number;appliedSeq:number;acceptedSeq:number;cancelledThrough:number;serverTick:number;appliedTargetTick:number;queueDepth:number;inputAgeTicks:number;reason:InputResetReason;}
+export interface InputReceipt {epoch:number;appliedSeq:number;acceptedSeq:number;cancelledThrough:number;serverTick:number;appliedTargetTick:number;queueDepth:number;inputAgeTicks:number;reason:InputResetReason;lastReason?:InputResetReason;lastReasonTick?:number;}
 export interface InputRebaseCommand {epoch:number;generation:number;loadingEpoch:number;seq:number;cancelActionThrough:number;yaw:number;pitch:number;}
 export interface InputCommand {seq:number;tick:number;inputEpoch?:number;clientTick?:number;targetTick?:number;resetInput?:boolean;cancelActionThrough?:number;renderTick?:number;actionIds?:{id:number;type:InputAction}[];moveX:number;moveY:number;yaw:number;pitch:number;fire:boolean;aim:boolean;sprint:boolean;crouch:boolean;interact?:boolean;actions?:InputAction[];weapon?:WeaponId;}
 export interface InputBatch {commands:InputCommand[];}
