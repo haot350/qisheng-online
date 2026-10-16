@@ -121,3 +121,8 @@ test('pickup outcome is included only for the interacting player, not an observi
  const sim=simulation(2);sim.events.push({serial:1,tick:0,type:'pickup',actorId:'p0',position:[0,0,0],data:{weapon:'mp5',action:'replace',privateDiagnostic:'must not travel'}});sim.eventSerial=1;
  const own=new RecipientReplicator('p0').build(sim.snapshot(),{visible:()=>true} as any,{forceFull:true}),other=new RecipientReplicator('p1').build(sim.snapshot(),{visible:()=>true} as any,{forceFull:true});assert.equal(own.events[0].data!.action,'replace');assert.equal(other.events[0].data!.action,undefined);assert.equal(own.events[0].data!.privateDiagnostic,undefined);assert.equal(other.events[0].data!.privateDiagnostic,undefined);
 });
+
+
+test('rejoining by invite code preserves and resumes the reserved original seat before resolving a new admission',async t=>{
+ storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom();t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let calls=0;t.mock.method((client as any).sdk,'reconnect',async()=>{calls++;return room;});t.mock.method(globalThis,'fetch',async()=>{throw Error('must not consume a fresh invite grant while the original seat is recoverable');});await client.join(undefined,undefined,'SAMECODE');assert.equal(calls,1);assert.equal(client.room,room);assert.equal(room.left,0);
+});

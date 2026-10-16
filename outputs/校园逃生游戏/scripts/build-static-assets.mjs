@@ -32,7 +32,9 @@ export async function buildStaticAssets(project,kind='game') {
  for(const root of roots)await walk(root);
  const generated=path.join(project,kind==='game'?'src/generated':'lib/generated');await mkdir(generated,{recursive:true});
  const urls=Object.fromEntries(Object.entries(resources).map(([key,value])=>[key,value.url]));
- await writeFile(path.join(generated,'static-assets.json'),JSON.stringify(urls,null,2)+'\n');
+ const indexFile=path.join(generated,'static-assets.json'),indexText=JSON.stringify(urls,null,2)+'\n';
+ const previousIndex=await readFile(indexFile,'utf8').catch(error=>{if(error.code==='ENOENT')return null;throw error;});
+ if(previousIndex!==indexText)await writeFile(indexFile,indexText);
  const release=JSON.parse(await readFile(path.join(project,'package.json'),'utf8')).version;
  const report=path.join(project,'docs','v'+release);await mkdir(report,{recursive:true});
  await writeFile(path.join(report,'static-assets.json'),JSON.stringify({schema:1,kind,files:Object.keys(resources).length,bytes,resources},null,2)+'\n');

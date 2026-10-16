@@ -630,3 +630,17 @@ test('loading retry listeners only receive valid reports from the current room',
  for(const bad of [{epoch:NaN,retryAfterMs:100},{epoch:4.5,retryAfterMs:100},{epoch:4,retryAfterMs:-1},{epoch:4,retryAfterMs:Infinity}])first.callbacks.get('loading-retry')!(bad);assert.equal(seen.length,1);
  (client as any).bind(second);first.callbacks.get('loading-retry')!({epoch:4,retryAfterMs:100});assert.equal(seen.length,1);second.callbacks.get('loading-retry')!({epoch:5,retryAfterMs:100});assert.equal(seen.length,2);off();second.callbacks.get('loading-retry')!({epoch:5,retryAfterMs:100});assert.equal(seen.length,2);
 });
+
+
+test('pending SDK room socket is retired immediately at admission timeout, before its promise resolves', async t=>{
+ t.mock.timers.enable({apis:['setTimeout','setInterval']});
+ const {client}=setup(t),sdk=(client as any).sdk,seat=deferred<any>();let pending:any,leaves=0;
+ t.mock.method(sdk,'consumeSeatReservation',()=>{pending=sdk.createRoom('campus');pending.connection={isOpen:true,close(){this.isOpen=false;}};t.mock.method(pending,'leave',async()=>{leaves++;pending.connection.close();return 0;});return seat.promise;});
+ const joining=client.join({mode:'pvp'});await until(()=>!!pending);
+ t.mock.timers.tick(12000);await joining;assert.equal(client.view.errorCode,'JOIN_TIMEOUT');assert.equal(leaves,1);assert.equal(pending.connection.isOpen,false);
+ seat.resolve(pending);await new Promise(resolve=>setImmediate(resolve));assert.equal(leaves,1,'late SDK success cannot retire the same captured room twice');assert.equal(client.room,null);
+});
+
+test('SDK duplicate identity rejection displays a player action instead of an internal error code',async t=>{
+ const {client}=setup(t);t.mock.method((client as any).sdk,'consumeSeatReservation',async()=>{throw Error('DUPLICATE_IDENTITY');});await client.join({mode:'pvp'});assert.equal(client.view.errorCode,'DUPLICATE_IDENTITY');assert.match(client.view.error!,/原游戏页面重连/);assert.doesNotMatch(client.view.error!,/DUPLICATE_IDENTITY/);assert.equal(client.room,null);
+});

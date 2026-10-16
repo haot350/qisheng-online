@@ -71,6 +71,28 @@ export async function localMapIdentity(
     ...(vision ? { visionHash: vision.sha256 } : {}),
   };
 }
+/** The SDK creates the Room synchronously, before its JOIN promise resolves.
+ * Capture that supported extension point so an abandoned handshake can close
+ * its actual socket immediately rather than retaining a server seat. */
+class AdmissionClient extends Client {
+  private captureRoom?: (room: Room) => void;
+  protected override createRoom<T>(name: string, rootSchema?: Parameters<Client["consumeSeatReservation"]>[1]) {
+    const room = super.createRoom<T>(name, rootSchema as any);
+    this.captureRoom?.(room);
+    return room;
+  }
+  consumeTrackedSeat(reservation: SeatReservation, capture: (room: Room) => void): Promise<Room> {
+    this.captureRoom = capture;
+    try { return this.consumeSeatReservation(reservation); }
+    finally { this.captureRoom = undefined; }
+  }
+}
+function playerJoinError(error: unknown): unknown {
+  const message = (error as {message?: string})?.message;
+  if (message === 'DUPLICATE_IDENTITY') return new RankingError('该账号已有房间连接。请回到原游戏页面重连；若原页面已关闭，请稍候再加入。', 'DUPLICATE_IDENTITY', false);
+  if (message === 'RECONNECT_REQUIRED') return new RankingError('原连接正在等待恢复。请使用原游戏页面重连，或稍候再加入。', 'RECONNECT_REQUIRED', true);
+  return error;
+}
 export class OnlineClient {
   readonly clock = new OnlineClock();
   private decoder = new WireDecoder();
@@ -101,7 +123,8 @@ export class OnlineClient {
   private reconnectTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectStarted: number | null = null;
   private resumeWork: Promise<boolean> | null = null;
-  private sdk = new Client(REALTIME_API);
+  private sdk = new AdmissionClient(REALTIME_API);
+  private retiredRooms = new WeakSet<Room>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private resyncPending = false;
   private resyncLastAt = -Infinity;
@@ -225,6 +248,8 @@ export class OnlineClient {
     return handle.cancelWork;
   }
   private async retireRoom(room: Room) {
+    if (this.retiredRooms.has(room)) return;
+    this.retiredRooms.add(room);
     room.reconnection.enabled = false;
     if (room.connection && !room.connection.isOpen) {
       room.connection.close();
@@ -253,30 +278,32 @@ export class OnlineClient {
     signal: AbortSignal,
   ): Promise<Room> {
     return this.waitForRoom(
-      () => this.sdk.consumeSeatReservation(reservation),
+      (capture) => this.sdk.consumeTrackedSeat(reservation, capture),
       signal,
       new RankingError("房间连接超时，请重新加入。", "JOIN_TIMEOUT", true),
     );
   }
   private waitForRoom(
-    start: () => Promise<Room>,
+    start: (capture: (room: Room) => void) => Promise<Room>,
     signal: AbortSignal,
     timeoutError: RankingError,
   ): Promise<Room> {
     return new Promise((resolve, reject) => {
-      let settled = false;
-      const finish = (action: () => void) => {
+      let settled = false, pendingRoom: Room | null = null;
+      const finish = (action: () => void, abandon = false) => {
         if (settled) return false;
         settled = true;
         clearTimeout(timer);
         signal.removeEventListener("abort", cancel);
+        if (abandon && pendingRoom) void this.retireRoom(pendingRoom);
+        pendingRoom = null;
         action();
         return true;
       };
       const cancel = () =>
-        finish(() => reject(new DOMException("Cancelled", "AbortError")));
+        finish(() => reject(new DOMException("Cancelled", "AbortError")), true);
       const timer = setTimeout(
-        () => finish(() => reject(timeoutError)),
+        () => finish(() => reject(timeoutError), true),
         JOIN_TIMEOUT_MS,
       );
       signal.addEventListener("abort", cancel, { once: true });
@@ -287,14 +314,14 @@ export class OnlineClient {
       // The SDK exposes its Room only after joining. Retire a success that arrives
       // after cancellation/timeout rather than reviving the abandoned operation.
       try {
-        start().then(
+        start((room) => { pendingRoom = room; }).then(
           (room) => {
             if (!finish(() => resolve(room))) void this.retireRoom(room);
           },
-          (error) => finish(() => reject(error)),
+          (error) => finish(() => reject(error), true),
         );
       } catch (error) {
-        finish(() => reject(error));
+        finish(() => reject(error), true);
       }
     });
   }
@@ -325,7 +352,7 @@ export class OnlineClient {
     if (
       !this.room &&
       saved &&
-      roomId === (saved.roomId || saved.token.split(":")[0])
+      (!roomId || roomId === (saved.roomId || saved.token.split(":")[0]))
     ) {
       const recovery = this.reconnect(),
         recoveryOperation = this.operation;
@@ -463,7 +490,8 @@ export class OnlineClient {
       unboundRoom = null;
       if (this.queue === admission) this.queue = null;
       admission = null;
-    } catch (e) {
+    } catch (error) {
+      const e = playerJoinError(error);
       if (admission) void this.cancelAdmission(admission);
       if (unboundRoom) await this.retireRoom(unboundRoom);
       if (this.current(serial) && !signal.aborted)
