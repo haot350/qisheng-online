@@ -29,6 +29,7 @@ export function createInput(
   isLocked: () => boolean;
   freePointerLock: () => void;
   setSuspended: (suspended: boolean) => void;
+  sampleLook: () => {lookX:number;lookY:number};
   drive: (input: Partial<DriveInput>) => void;
   holdLook: (held: boolean) => void;
   flushTransient: () => void;
@@ -606,6 +607,11 @@ export function createInput(
       } finally {
         if (pendingLock === request) pendingLock = null;
       }
+    },
+    sampleLook() {
+      const result = {lookX: enabled && !suspended ? lx : 0, lookY: enabled && !suspended ? ly : 0};
+      lx = ly = 0;
+      return result;
     },
     sample(): InputFrame {
       if (suspended) {

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import {createPortableZip} from '../../校园交互网站/site/scripts/portable-zip.mjs';
 import { fileURLToPath } from 'node:url';
 import {NPC_POSE_WEBPS,NPC_POSE_WEBP_COUNT,NPC_LOCOMOTION_POSES} from './npc-pose-release-v032.mjs';
 import {assertStaticReleasePath} from './guard-static-release.mjs';
@@ -15,13 +15,15 @@ const distRoot = path.join(gameRoot, 'dist');
 await assertProductionProfile(distRoot);
 const publicRoot = path.join(gameRoot, 'public');
 const releaseRoot = path.join(gameRoot, 'release');
-const stageRoot = path.join(releaseRoot, `Cloudflare-Pages-game-v${releaseVersion}`);
-const zipPath = path.join(gameRoot, `Cloudflare-Pages-game-v${releaseVersion}.zip`);
-const tempZip = path.join(releaseRoot, `Cloudflare-Pages-game-v${releaseVersion}.pending.zip`);
+const pagesExport=process.argv.slice(2).includes('--pages');
+const packageName=pagesExport?`Cloudflare-Pages-game-v${releaseVersion}`:`qisheng-game-v${releaseVersion}`;
+const stageRoot = path.join(releaseRoot, packageName);
+const zipPath = path.join(gameRoot, packageName+'.zip');
+const tempZip = path.join(releaseRoot, packageName+'.pending.zip');
 const reportPath = path.join(releaseRoot, `game-v${releaseVersion}-package-report.json`);
-const limit = 25 * 1024 * 1024;
+const limit = pagesExport?25 * 1024 * 1024:null;
 const validateOnly = process.argv.slice(2).includes('--validate-only');
-if (process.argv.slice(2).some(arg => arg !== '--validate-only')) throw new Error('Usage: node scripts/package-release.mjs [--validate-only]');
+if (process.argv.slice(2).some(arg => !['--validate-only','--pages'].includes(arg))) throw new Error('Usage: node scripts/package-release.mjs [--validate-only] [--pages]');
 function inside(root, candidate) {
   const relative = path.relative(root, candidate);
   return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep));
@@ -110,7 +112,8 @@ for(const anchor of discoveries){
   if(!original||anchor.sourceSha!==original.sourceSha||!anchor.validation?.walkable||!anchor.validation.geometry||anchor.landmarks?.length<6||anchor.landmarks.length>8||anchor.validation.visible<4||anchor.validation.median>.06||anchor.validation.p90>.12)throw new Error('Unvalidated reality discovery: '+anchor.id);
   for(const url of[anchor.image,anchor.thumbnail])await fileInfo(distRoot,checkedRelative(url));
 }
-const copyFiles = new Set(['index.html', 'account/index.html', 'openqs-profile.json', 'map/manifest.json', 'map/resource-index.json', ...manifestReferences, ...required, ...storyFiles]);
+const standalonePages=['account/index.html','credits/index.html','copyright/index.html'];
+const copyFiles = new Set(['index.html', ...standalonePages, 'openqs-profile.json', 'map/manifest.json', 'map/resource-index.json', ...manifestReferences, ...required, ...storyFiles]);
 for (const relative of await walk(distRoot)) {
   assertStaticReleasePath(relative);
   // Vite's complete hashed asset tree includes every asynchronous JS chunk and
@@ -119,12 +122,13 @@ for (const relative of await walk(distRoot)) {
   if (relative.startsWith('story/')) copyFiles.add(relative);
   if (relative.startsWith('avatars/')) copyFiles.add(relative);
   if (relative.startsWith('branding/')) copyFiles.add(relative);
+  if (relative.startsWith('credits/')||relative.startsWith('licenses/')) copyFiles.add(relative);
   if (relative === 'images/campus-overview.jpg') copyFiles.add(relative);
   if (['_headers', '_redirects', 'favicon.ico', 'favicon.svg', '404.html', 'robots.txt', 'manifest.webmanifest'].includes(relative)) copyFiles.add(relative);
 }
-const runtimePublic = [...copyFiles].filter(relative => !relative.startsWith('assets/') && relative !== 'index.html');
+const runtimePublic = [...copyFiles].filter(relative => !relative.startsWith('assets/') && relative !== 'index.html'&&!standalonePages.includes(relative));
 let newestInput = { path: 'index.html', time: 0 };
-for (const relative of [...await walk(path.join(gameRoot, 'src'))].map(name => 'src/' + name).concat(['index.html','vite.config.ts','tsconfig.json','package.json','package-lock.json'], runtimePublic.map(name => 'public/' + name))) {
+for (const relative of [...await walk(path.join(gameRoot, 'src'))].map(name => 'src/' + name).concat(['index.html',...standalonePages,'vite.config.ts','tsconfig.json','package.json','package-lock.json'], runtimePublic.map(name => 'public/' + name))) {
   try {
     const info = await fs.stat(path.join(gameRoot, relative));
     if (info.mtimeMs > newestInput.time) newestInput = { path: relative, time: info.mtimeMs };
@@ -151,7 +155,7 @@ const files = [];
 for (const relative of [...copyFiles].sort()) {
   if (/^(?:characters\/(?!billboards\/)|photos?\/|references\/|assets-source\/)/i.test(relative)) throw new Error('Source photo or old character asset cannot enter release: ' + relative);
   const { absolute, info } = await fileInfo(distRoot, relative);
-  if (info.size > limit) throw new Error('File exceeds the 25 MiB release limit: ' + relative + ' (' + info.size + ' bytes)');
+  if (limit!==null&&info.size > limit) throw new Error('File exceeds the optional Pages 25 MiB release limit: ' + relative + ' (' + info.size + ' bytes)');
   files.push({ path: relative, bytes: info.size, sha256: hash(await fs.readFile(absolute)) });
 }
 
@@ -163,7 +167,7 @@ const report = {
   version: `game-v${releaseVersion}`, publicVersion: releaseLabel, generatedAt: new Date().toISOString(),
   gameUrl: 'https://game.tianhw.top', mainSiteUrl: 'https://zbqsgz.tianhw.top',
   domainBoundAutomatically: false, distRoot, packageRoot: stageRoot,
-  singleFileLimitBytes: limit, totalFiles: files.length,
+  target:pagesExport?'cloudflare-pages':'server',singleFileLimitBytes: limit, totalFiles: files.length,
   totalUncompressedBytes: files.reduce((sum, file) => sum + file.bytes, 0),
   manifestReferenceCount: manifestReferences.size,
   manifestSha256: hash(manifestBuffer), newestInput, distIndexMtime: index.info.mtime.toISOString(),
@@ -191,18 +195,7 @@ if (validateOnly) {
     await fs.copyFile(path.join(distRoot, relative), target);
   }
   await fs.rm(tempZip, { force: true });
-  const powershell = process.platform === 'win32'
-    ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-    : 'pwsh';
-  const inputsPath = path.join(releaseRoot, `game-v${releaseVersion}-package-inputs.json`);
-  await fs.writeFile(inputsPath, JSON.stringify({files}, null, 2));
-  const psLiteral = value => "'" + value.replaceAll("'", "''") + "'";
-  const zipSource = await fs.readFile(path.join(gameRoot,'scripts/write-release-zip.ps1'), 'utf8');
-  const zipCommand = `& {${zipSource}\n} -Source ${psLiteral(stageRoot)} -Destination ${psLiteral(tempZip)} -Manifest ${psLiteral(inputsPath)}`;
-  const zipped = spawnSync(powershell, ['-NoProfile','-NonInteractive','-Command',zipCommand], {
-    windowsHide: true, encoding: 'utf8',
-  });
-  if (zipped.error || zipped.status !== 0) throw new Error('ZIP creation failed: ' + (zipped.error?.message ?? zipped.stderr));
+  await createPortableZip(stageRoot,tempZip,files);
   const zipInfo = await fs.stat(tempZip);
   if (!zipInfo.size) throw new Error('ZIP output is empty.');
   await fs.rm(zipPath, { force: true });

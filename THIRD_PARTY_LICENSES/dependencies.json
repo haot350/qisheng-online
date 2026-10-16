@@ -59,7 +59,10 @@
     "name": "@dimforge/rapier3d-compat",
     "version": "0.19.3",
     "license": "Apache-2.0",
-    "files": []
+    "files": [
+      "rapier-Apache-2.0.txt"
+    ],
+    "source": "https://github.com/dimforge/rapier.js/blob/master/LICENSE"
   },
   {
     "name": "@fastify/cors",

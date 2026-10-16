@@ -8,7 +8,7 @@ const here=path.dirname(fileURLToPath(import.meta.url));
 export async function buildStaticAssets(project,kind='game') {
  if(kind==='game')await (await import('./sync-fresh-helper.mjs')).syncFreshBrowser(project);
  const publicRoot=path.resolve(project,'public');
- const roots=kind==='game'?['audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players']:['images','poster.jpg'];
+ const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players']:['images','poster.jpg'];
  const extensions=new Set(['.glb','.mp3','.wav','.ogg','.m4a','.webp','.png','.jpg','.jpeg','.svg','.woff2']);
  const resources={};let bytes=0;
  const walk=async logical=>{

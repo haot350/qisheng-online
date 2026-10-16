@@ -42,7 +42,7 @@ export function MainMenu({active=true,screen,mode,entry,variant,onMode,onHome,on
  const multiplayer=mode==='escape'&&entry!=='single';
  return <section ref={menuRef} className={'campus-menu menu-'+screen+(screen==='prepare'&&mode==='escape'?' tactical-menu':'')} hidden={!active} inert={!active} aria-label="游戏菜单" onScroll={event=>{if(active)menuScroll.current=event.currentTarget.scrollTop;}}>
   {screen==='prepare'&&<><ModeCover mode={mode} preparation/><div className="menu-prep-wash"/></>}
-  {screen!=='prepare'&&<MenuNavigation active="start" onRoot={()=>navigate(onHome)} onNavigate={(page:MenuPageId)=>{({account:onIdentity,ranking:onRanking,feedback:onFeedback,assistant:onAssistant??onHelp,settings:onSettings,faq:onFAQ,about:onAbout,help:onHelp,updates:onAbout,credits:onAbout})[page]();}} feedbackUnread={feedbackUnread} updatesUnread={updatesUnread} mobileHome={screen==='home'}/>}
+  {screen!=='prepare'&&<MenuNavigation active="start" onRoot={()=>navigate(onHome)} onNavigate={(page:MenuPageId)=>{({account:onIdentity,ranking:onRanking,feedback:onFeedback,assistant:onAssistant??onHelp,settings:onSettings,faq:onFAQ,about:onAbout,help:onHelp,updates:onAbout,credits:onAbout,copyright:onAbout})[page]();}} feedbackUnread={feedbackUnread} updatesUnread={updatesUnread} mobileHome={screen==='home'}/>}
   <div className="menu-main-content">
   {announcement}
   {screen==='home'?<div className="menu-landing"><div className="menu-landing-art" aria-hidden="true"><ModeCover mode="roam"/><div/></div><div className="menu-landing-copy"><p className="menu-eyebrow">齐盛 · 数字校园</p><h1 className="menu-brand-title"><BrandLogo/></h1><p className="menu-landing-subtitle">从熟悉的校园，开始新的故事。</p><button className="menu-home-cta primary" data-menu-focus="home-play" disabled={busy} onClick={()=>navigate(onModes)}>开始游玩 <span aria-hidden="true">→</span></button></div></div>:screen==='modes'?<div className="menu-home-content"><button className="menu-back" data-menu-focus="back" onClick={()=>navigate(onHome)}>← 返回主菜单</button><div className="menu-heading"><h1>选择玩法</h1></div><div className="menu-mode-grid">{PLAY_MODES.map(m=><button className={'menu-mode-card mode-card-'+m.id} data-menu-focus={m.id} key={m.id} onClick={()=>navigate(()=>onMode(m.id))}><ModeCover mode={m.id}/><span className="menu-cover-shade"/><span className="menu-card-copy"><h2>{m.label}</h2>{unavailable[m.id]&&<span className="menu-unavailable">暂不可用</span>}<span className="menu-card-description">{m.description}</span><span className="menu-card-bottom"><span>{MODE_COVERS[m.id].entry}</span><span aria-hidden="true">↗</span></span></span></button>)}</div></div>:
@@ -51,7 +51,7 @@ export function MainMenu({active=true,screen,mode,entry,variant,onMode,onHome,on
    {multiplayer?<div className="menu-online-preview"><h2>{entry==='coop'?'和同伴一起撤离':variant==='tdm'?'两队交战':'各自为战'}</h2><p>{entry==='coop'?'2—4 人共同完成任务，可以救援倒地的队友。':variant==='tdm'?'2—8 人自动平衡分队，十分钟内争取更多击倒。':'2—8 人十分钟复活赛，按击倒数决定名次。'}</p></div>:controls}
    {status}</div><div className="menu-prep-actions">{mode==='story'&&hasSave&&<button className="primary wide" disabled={disabled||busy} onClick={onContinue}>继续上次的故事 <span aria-hidden="true">→</span></button>}<button className={mode==='story'&&hasSave?'secondary wide':'primary wide'} onClick={saveDataWaiting?onPrepare:onStart} disabled={busy||(!saveDataWaiting&&disabled)}>{saveDataWaiting?'准备资源':busy?'正在进入…':prepareState==='loading'?'正在准备 '+prepareProgress+'%':prepareState==='error'?'准备未完成':multiplayer?'进入'+(entry==='coop'?'合作':'对战')+'大厅':mode==='story'?(hasSave?'重新开始故事':'开始故事'):mode==='dafei'?'出发前见见大飞老师':'开始游玩'}<span aria-hidden="true">→</span></button></div>
   </section></div></div>}
-  {screen==='home'&&status}<footer className="menu-footer"><div><a href="https://zbqsgz.tianhw.top/game">游戏介绍 ↗</a></div><span>{version} · 预览版</span></footer>
+  {screen==='home'&&status}<footer className="menu-footer"><div><a href="https://zbqsgz.tianhw.top/game">游戏介绍 ↗</a><a href="/copyright/">© 2026 OpenQS · 齐盛Online</a></div><span>{version} · 预览版</span></footer>
   </div>
  </section>;
 }
@@ -65,7 +65,7 @@ export function MenuReadingPanel({title,onClose,children}:{title:string;onClose:
  </section></div>;
 }
 
-export function MenuAbout({onUpdates,onCredits}:{onUpdates:()=>void;onCredits?:()=>void}) {
+export function MenuAbout({onUpdates,onCredits,onCopyright}:{onUpdates:()=>void;onCredits?:()=>void;onCopyright?:()=>void}) {
  const [unread,setUnread]=useState(()=>isReleaseUnread(LATEST_RELEASE));
  useEffect(()=>subscribeReleaseRead(()=>setUnread(isReleaseUnread(LATEST_RELEASE))),[]);
  return <div className="menu-about">
@@ -73,14 +73,7 @@ export function MenuAbout({onUpdates,onCredits}:{onUpdates:()=>void;onCredits?:(
   <p className="menu-release-meta">{LATEST_RELEASE.version} · 预览版</p>
   <p className="menu-about-intro">在数字校园里同行、探索、驾驶，或与同伴完成一场突围。</p>
   <button className="menu-information-card menu-update-card" onClick={onUpdates}><span className="menu-information-copy"><strong>更新记录{unread&&<span className="menu-update-dot" role="img" aria-label="有未读更新"/>}</strong><time dateTime={LATEST_RELEASE.date}>{LATEST_RELEASE.date}</time><span>{LATEST_RELEASE.overview??LATEST_RELEASE.summary[0]}</span><span className="menu-information-link">查看本次与历史更新 →</span></span></button>
-  <div className="menu-about-links">{onCredits&&<button onClick={onCredits}>制作与鸣谢 →</button>}<a href="https://zbqsgz.tianhw.top/game" target="_blank" rel="noreferrer">游戏介绍 ↗</a><a href="https://zbqsgz.tianhw.top" target="_blank" rel="noreferrer">校园主站 ↗</a></div>
+  <div className="menu-about-links">{onCredits&&<button onClick={onCredits}>播放制作名单 →</button>}{onCopyright&&<button onClick={onCopyright}>版权与许可 →</button>}<a href="https://zbqsgz.tianhw.top/game" target="_blank" rel="noreferrer">游戏介绍 ↗</a><a href="https://zbqsgz.tianhw.top" target="_blank" rel="noreferrer">校园主站 ↗</a></div><p className="menu-release-meta">© 2026 OpenQS · 齐盛Online</p>
  </div>;
 }
 
-export function MenuCredits(){
- return <div className="menu-credits">
-  <section><h3>制作</h3><p>开发者：OpenQS。校园资料、空间校准与项目发起：项目制作者。剧情、程序与视听制作协助：OpenAI GPT-6 Astra。</p><p>这是一个个人制作的校园游戏。角色与情节用于虚构的游玩体验；校园实拍在档案中逐张标注来源。</p></section>
-  <section><h3>音乐</h3><p><a href="https://www.scottbuckley.com.au/" target="_blank" rel="noreferrer">Scott Buckley</a> 的 <a href="https://www.scottbuckley.com.au/library/childhood/" target="_blank" rel="noreferrer">Childhood</a>、<a href="https://www.scottbuckley.com.au/library/aphelion/" target="_blank" rel="noreferrer">Aphelion</a> 与 <a href="https://www.scottbuckley.com.au/library/golden-hour/" target="_blank" rel="noreferrer">Golden Hour</a>，依据 <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a> 使用。游戏播放进行了音量和片段编排。</p><a href="/story/audio/ATTRIBUTION.txt" target="_blank" rel="noreferrer">完整音乐署名 ↗</a></section>
-  <section><h3>素材与开源项目</h3><p>校园照片、人物参考与原模型由项目制作者提供。感谢帮助核对校园、试玩并提出反馈的朋友。</p><p>联机角色来自 <a href="https://quaternius.com/packs/universalbasecharacters.html" target="_blank" rel="noreferrer">Quaternius</a> 的 CC0 素材，<a href="/avatars/v0.5.0/License_Quaternius_CC0.txt" target="_blank" rel="noreferrer">查看许可</a>。三维画面、物理、导航与联机使用 Three.js、Rapier、Recast 和 Colyseus；完整来源与许可随发行包保存。</p><a href="https://zbqsgz.tianhw.top/making" target="_blank" rel="noreferrer">查看校园制作过程 ↗</a></section>
- </div>;
-}

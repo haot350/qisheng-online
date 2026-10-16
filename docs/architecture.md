@@ -19,3 +19,7 @@
 0.8.0 的账号与统计位于 API `accounts.ts`、`account-profile.ts`、`achievements.ts`。管理员接口分别位于 `admin.ts`、`admin-player-accounts.ts`、`admin-workbench.ts`；管理员账号与玩家账号各有权限和会话边界。账号表关联原 player_id，升级不复制身份；成就来源关联有效单人或权威多人结果，可从来源重建，状态撤回会撤销不再满足的成就。
 
 数据库、配置、截图附件及备份独立于发行。应用回滚保留持久数据，跨 schema 回滚必须验证兼容；不能把放宽数据库 guard 当作通用策略。当前工作状态及真正发布版本见 [交接快照](HANDOFF.md)，0.6.7 等历史结构说明保持原样。
+
+## 0.8.4渲染与表现边界
+
+共享render-profile只决定画质策略，游戏render-quality应用到各自渲染器；操作偏好不选择素材画质。联机combat-gpu-preparer负责入场GPU准备，死亡材质／掉落随有界池所有权释放。观察在RAF处理，移动和射击仍固定步与服务器裁判；建筑视点门禁不会因网络恢复而放宽。制作名单为独立无WebGL懒加载页面，音频随active和visibility停止。正式发行默认服务器ZIP，--pages为可选旧兼容导出，不取消运行时资源预算。

@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import {AdaptiveRenderQuality,resolveRenderProfile} from '@qisheng/shared/render-profile';
+import {applyRendererProfile} from './render-quality';
 import { FrameDiagnostics } from './frame-diagnostics.ts';
 import { gameOperations } from './game-operations';
 import { entryFor, ModeUnavailableError } from './game-config-store';
@@ -266,8 +268,10 @@ export async function createGame(
     progress = 0,
     message = "准备校园",
     dead = false;
-  const touch =
-    matchMedia("(pointer:coarse)").matches || navigator.maxTouchPoints > 0;
+  const touch = primaryTouchInput();
+  const qualityDevice={mobile:touch,pixelRatio:devicePixelRatio};
+  const qualityGovernor=new AdaptiveRenderQuality();
+  const renderProfile=()=>resolveRenderProfile(settings.quality,qualityDevice,qualityGovernor.scale);
   const touchControls = () =>
     resolveTouchControls(settings.controls, primaryTouchInput());
   const renderer = new THREE.WebGLRenderer({
@@ -420,7 +424,7 @@ export async function createGame(
     fps = 0,
     low = touch,
     quality = "自动",
-    adaptiveRatio = touch ? 1 : Math.min(devicePixelRatio, 1.5);
+    adaptiveRatio = renderProfile().pixelRatio;
   let releaseBillboards: (() => void) | undefined,
     releaseWeapons: (() => void) | undefined,
     enterToken = 0,
@@ -434,6 +438,7 @@ export async function createGame(
     sceneRevision = 0,
     shadowRevision = -1,
     shadowOrigin = new THREE.Vector3(Infinity, Infinity, Infinity);
+  let qualityTextureLoad:AbortController|undefined;
   let renderTimes: number[] = [];
   const frameDiagnostics = new FrameDiagnostics();
   let releaseCombat: (() => void) | undefined;
@@ -796,17 +801,9 @@ export async function createGame(
     else if (rankingClient.getPlayer()) info(recorder.snapshot().message, 3);
   }
   function applyQuality() {
-    low =
-      settings.quality === "smooth" ||
-      (settings.quality === "auto" && (touch || adaptiveRatio < 1));
-    const ratio =
-      settings.quality === "high"
-        ? Math.min(devicePixelRatio, 1.5)
-        : settings.quality === "smooth"
-          ? 0.8
-          : adaptiveRatio;
-    renderer.setPixelRatio(ratio);
-    renderer.shadowMap.enabled = !low;
+    const profile=renderProfile();
+    low=profile.low;adaptiveRatio=profile.pixelRatio;
+    applyRendererProfile(renderer,sun.shadow,profile);
     renderer.shadowMap.needsUpdate = true;
     shadowRevision = -1;
     const narrative = mode === "story" && !!story;
@@ -816,14 +813,24 @@ export async function createGame(
       ? new THREE.Fog(scene.background as THREE.Color, 100, 330)
       : new THREE.Fog(0xccdce3, low ? 35 : 50, low ? 72 : 98);
     photo?.setPreviewQuality(settings.quality, adaptiveRatio);
-    quality =
-      settings.quality === "smooth"
-        ? "流畅"
-        : settings.quality === "high"
-          ? "精细"
-          : low
-            ? "自动 · 流畅"
-            : "自动";
+    photo?.setPreviewMobile(profile.previewMobile);
+    quality = profile.label;
+  }
+  async function refreshQualityTextures(){
+    qualityTextureLoad?.abort();
+    const mobile=renderProfile().mobileTextures;
+    if(!npcs.length||mobile===roundMobile)return;
+    const controller=new AbortController(),token=enterToken;qualityTextureLoad=controller;
+    let release:(()=>void)|undefined;
+    try{
+      release=await prepareBillboards(roundRoster,()=>{},mobile,controller.signal);
+      if(dead||controller.signal.aborted||token!==enterToken){release();return;}
+      const replacements:ReturnType<typeof createCharacter>[]=[];
+      try{for(const n of npcs){const rig=createCharacter(n.identity,mobile);replacements.push(rig);rig.setWeapon(n.gun.id);rig.root.position.copy(n.rig.root.position);rig.root.quaternion.copy(n.rig.root.quaternion);rig.root.scale.copy(n.rig.root.scale);rig.root.visible=n.rig.root.visible;}}catch(error){replacements.forEach(rig=>rig.dispose());throw error;}
+      npcs.forEach((n,index)=>{n.rig.root.removeFromParent();n.rig.dispose();n.rig=replacements[index];scene.add(n.rig.root);});
+      releaseBillboards?.();releaseBillboards=release;release=undefined;roundMobile=mobile;
+    }catch{release?.();if(!dead&&!controller.signal.aborted&&token===enterToken)info('高清人物暂未载入，当前画面仍可继续游玩。',4);}
+    finally{if(qualityTextureLoad===controller)qualityTextureLoad=undefined;}
   }
   const resize = () => {
     const w = Math.max(1, host.clientWidth),
@@ -1167,6 +1174,7 @@ export async function createGame(
     selectEscapeTask(tasks[(at + 1) % tasks.length].id);
   }
   function resetTransient(preserveAudioGesture = false) {
+    qualityTextureLoad?.abort();qualityTextureLoad=undefined;
     ranked?.cancel();
     ranked = null;
     rankGeneration.clear();
@@ -2349,7 +2357,7 @@ export async function createGame(
       next === "escape"
         ? (loadout?.difficulty ?? settings.escapeDifficulty ?? "standard")
         : "",
-      touchControls() ? "touch" : "keyboard",
+      renderProfile().mobileTextures ? "mobile-textures" : "full-textures",
       settings.quality,
     ].join(":");
   }
@@ -2430,7 +2438,7 @@ export async function createGame(
       key,
       mode: next,
       roster: { ...pendingRoster, ids: [...pendingRoster.ids] },
-      mobile: touchControls(),
+      mobile: renderProfile().mobileTextures,
     };
     let committed = false;
     const work = (async () => {
@@ -3337,7 +3345,7 @@ export async function createGame(
       const m = await import("./photography/PhotoSystem");
       if (dead || serial !== photoSerial || token !== enterToken) return;
       photo = new m.PhotoSystem(renderer, scene, {
-        mobile: touchControls(),
+        mobile: touch,
         temporaryCount: () => temporaryPhotos.length,
         onChange: () => emit(),
         captureEvidence: (c) => photoEvidence(c),
@@ -3364,6 +3372,7 @@ export async function createGame(
       return;
     photo.setQuality(low);
     photo.setPreviewQuality(settings.quality, adaptiveRatio);
+    photo.setPreviewMobile(renderProfile().previewMobile);
     photo.open(camera);
     story?.guidance("raised");
     input.setPhotography(true);
@@ -6179,6 +6188,7 @@ export async function createGame(
       if (import.meta.env.DEV) cpuUpdate += performance.now() - began;
       perfClock += realDt;
       perfFrames++;
+      if(!buffering){const decision=qualityGovernor.observe(realDt,settings.quality);if(decision.changed)applyQuality();if(decision.warn)info('当前画质下帧率较低，可在设置中选择“自动调整”或“优先流畅”。',5);}
       if (perfClock > 3) {
         fps = Math.round(perfFrames / perfClock);
         if (import.meta.env.DEV) {
@@ -6189,10 +6199,6 @@ export async function createGame(
           };
           cpuUpdate = cpuNpcs = cpuRender = 0;
         }
-        if (settings.quality === "auto" && fps < 27 && adaptiveRatio > 0.7) {
-          adaptiveRatio = Math.max(0.7, adaptiveRatio - 0.15);
-          applyQuality();
-        }
         perfClock = 0;
         perfFrames = 0;
       }
@@ -6202,6 +6208,7 @@ export async function createGame(
     if (phaseActive() || (phase === "intro" && !document.hidden)) schedule();
   }
   function dispose() {
+    qualityTextureLoad?.abort();
     canvas.removeEventListener("click", clickToObserve);
     dead = true;
     enterToken++;
@@ -6341,6 +6348,7 @@ export async function createGame(
       emit();
     },
     setSettings: (s) => {
+      if(s.quality!==settings.quality)qualityGovernor.reset();
       input.setEscapeAimMode(s.escapeAimMode ?? "toggle");
       const transmission = s.transmission === "manual" ? "manual" : "auto";
       if (
@@ -6369,6 +6377,7 @@ export async function createGame(
         );
       storyAudio.setVolumes(s.music, s.sfx);
       applyQuality();
+      void refreshQualityTextures();
       photo?.setQuality(low);
       if (mode === "story") {
         camera.far = 360;

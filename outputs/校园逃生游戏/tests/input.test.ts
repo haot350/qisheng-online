@@ -588,3 +588,11 @@ test('pause, lost focus, background, reset, mode switch and photography discard 
   input.setSuspended(false);const frame=input.sample();assert.equal(frame.fire,false,reason);assert.equal(frame.aim,false,reason);assert.equal(frame.actions.size,0,reason);assert.equal(input.getAimIntent(),false,reason);
  });
 });
+
+
+test('render-frame look consumption does not consume fixed-step movement or one-shot actions',async()=>fixture(async(input)=>{
+ input.move(.6,.8);input.look(12,-5);input.action('jump');
+ assert.deepEqual(input.sampleLook(),{lookX:12,lookY:-5});assert.deepEqual(input.sampleLook(),{lookX:0,lookY:0});
+ const frame=input.sample();assert.equal(frame.moveX,.6);assert.equal(frame.moveY,.8);assert.equal(frame.lookX,0);assert.equal(frame.actions.has('jump'),true);assert.equal(input.sample().actions.has('jump'),false);
+ input.look(8,4);input.setSuspended(true);assert.deepEqual(input.sampleLook(),{lookX:0,lookY:0});input.setSuspended(false);assert.deepEqual(input.sampleLook(),{lookX:0,lookY:0});
+}));

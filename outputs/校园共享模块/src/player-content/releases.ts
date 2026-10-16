@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.8.4',sequence:37,date:'2026-10-16',version:'Preview 0.8.4',
+ overview:'改善联机交火响应，新增超清画质与电影式制作名单。',
+ summary:['改善联机击倒、掉落武器和同步恢复时的画面与视角响应。','手机可选高清与超清，画质调整同步更新阴影和人物清晰度。','新增配乐制作名单、静态全文及版权与许可页面。'],
+ items:['调整：入场时提前准备人物倒下和掉落武器表现，减少交火中的临时处理。','修复：联机恢复同步期间，单纯等待网络也会阻止转动视角。','新增：超清画质；自动画质可在运行稳定后逐步恢复。','修复：手机手选高清仍使用低分辨率人物，以及联机切换画质未更新阴影。','调整：手机长页面的返回入口、安全边距和准备按钮更易触达。','新增：电影式制作名单，可暂停、拖动、静音、重播或阅读全文。','新增：完整版权与许可说明，保留原素材署名。']
+},
+{
  id:'preview-0.8.3',sequence:36,date:'2026-10-15',version:'Preview 0.8.3',
  overview:'菜单更清楚，改善联机恢复，新增小齐游玩助手。',
  summary:['首页点击“开始游玩”选择玩法，局中使用独立菜单。','改善画面短暂卡顿后的联机移动恢复。','新增小齐助手，解答游玩问题并帮助整理反馈。'],

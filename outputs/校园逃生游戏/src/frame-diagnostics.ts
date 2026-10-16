@@ -7,9 +7,9 @@ export class FrameDiagnostics {
  private began=0;
  private longFrames=0;
  constructor(private capacity=600,private clock=()=>performance.now()){}
- begin(timestamp:number){
-  if(this.previous&&timestamp-this.previous<1000){const dt=timestamp-this.previous;this.push(this.intervals,dt);if(dt>50)this.longFrames++;}
-  this.previous=timestamp;this.began=this.clock();
+ begin(timestamp:number,active=true){
+  if(active&&this.previous){const dt=timestamp-this.previous;this.push(this.intervals,dt);if(dt>50)this.longFrames++;}
+  this.previous=active?timestamp:0;this.began=this.clock();
  }
  phase(name:string,elapsed:number){let values=this.phases.get(name);if(!values){values=[];this.phases.set(name,values);}this.push(values,elapsed);}
  end(){this.push(this.cpu,this.clock()-this.began);}

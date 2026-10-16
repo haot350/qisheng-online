@@ -2,11 +2,11 @@ import {useCallback,useEffect,useLayoutEffect,useRef,useState,type ReactNode} fr
 import './menu-pages.css';
 import {BrandLogo} from './BrandLogo';
 
-export type MenuPageId='settings'|'help'|'faq'|'about'|'updates'|'credits'|'ranking'|'feedback'|'account'|'assistant';
+export type MenuPageId='settings'|'help'|'faq'|'about'|'updates'|'credits'|'copyright'|'ranking'|'feedback'|'account'|'assistant';
 const navigation=[['start','开始'],['account','账号与档案'],['ranking','排行榜'],['feedback','反馈与进展'],['assistant','小齐助手'],['settings','设置'],['faq','帮助'],['about','关于']] as const;
 
 export function MenuNavigation({active,onNavigate,onRoot,rootLabel='开始',feedbackUnread=false,updatesUnread=false,mobileHome=false,disabled=false}:{active:string;onNavigate:(page:MenuPageId)=>void;onRoot:()=>void;rootLabel?:string;feedbackUnread?:boolean;updatesUnread?:boolean;mobileHome?:boolean;disabled?:boolean}){
- const selected=active==='help'?'faq':active==='updates'||active==='credits'?'about':active;
+ const selected=active==='help'?'faq':['updates','credits','copyright'].includes(active)?'about':active;
  return <aside className={'menu-navigation'+(mobileHome?' menu-navigation-home':'')} aria-label="游戏菜单">
   <div className="menu-navigation-name" aria-hidden="true"><BrandLogo className="menu-logo-dark"/><BrandLogo variant="light" className="menu-logo-light"/></div>
   <nav aria-label="主菜单">{navigation.map(([id,label])=><button key={id} className={id==='start'?'menu-home-start':undefined} data-menu-focus={id} aria-current={selected===id?'page':undefined} disabled={disabled} onClick={()=>id==='start'?onRoot():onNavigate(id)}><span>{id==='start'?rootLabel:label}</span>{((id==='feedback'&&feedbackUnread)||(id==='about'&&updatesUnread))&&<i className="menu-update-dot" role="img" aria-label={id==='feedback'?'有新回复':'有未读更新'}/>}<span className="menu-navigation-arrow" aria-hidden="true">›</span></button>)}</nav>
@@ -45,6 +45,6 @@ export function MenuPage({id,title,active,onBack,backLabel='返回主菜单',onN
  },[active]);
  return <section ref={ref} className={'menu-page'+(wide?' menu-page-wide':'')+(tactical?' tactical-menu':'')+(!showNavigation?' menu-page-standalone':'')+(centered?' menu-page-centered':'')} data-menu-page={id} hidden={!active} inert={!active} aria-labelledby={'menu-page-title-'+id} onScroll={event=>{if(active)lastScroll.current=event.currentTarget.scrollTop;}} onFocusCapture={event=>{if(event.target instanceof HTMLElement)lastFocus.current=event.target;}}>
   {showNavigation&&<MenuNavigation active={id==='pause'||id==='lobby'?'start':id} onNavigate={onNavigate} onRoot={onRoot??onBack??(()=>{})} rootLabel={rootLabel} feedbackUnread={feedbackUnread} updatesUnread={updatesUnread} disabled={navigationDisabled} mobileHome={id==='pause'}/>}
-  <div className="menu-page-main"><header className="menu-page-header"><h1 id={'menu-page-title-'+id} data-page-heading tabIndex={-1}>{title}</h1>{onBack&&<button className="menu-page-back" onClick={onBack} disabled={navigationDisabled}>← {backLabel}</button>}</header><div className="menu-page-content">{children}</div></div>
+  <div className="menu-page-main"><header className="menu-page-header"><h1 id={'menu-page-title-'+id} data-page-heading tabIndex={-1}>{title}</h1>{onBack&&<button className="menu-page-back" onClick={onBack} disabled={navigationDisabled}>← {backLabel}</button>}</header><div className="menu-page-content">{children}</div>{id!=='pause'&&id!=='lobby'&&<footer className="menu-legal-footer">© 2026 OpenQS · 齐盛Online · <button onClick={()=>onNavigate('copyright')}>版权与许可</button></footer>}</div>
  </section>;
 }

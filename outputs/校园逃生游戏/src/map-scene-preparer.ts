@@ -9,7 +9,7 @@ const yieldTask=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
 /** Three's compileAsync owns an uncancellable polling timer. Use the same public
  * compile entry point, but own the readiness polling so abort can safely release
  * materials without a later timer dereferencing their disposed renderer state. */
-async function compileMapShaders(renderer:THREE.WebGLRenderer,root:THREE.Group,camera:THREE.PerspectiveCamera,scene:THREE.Scene,signal:AbortSignal){
+export async function compileMapShaders(renderer:THREE.WebGLRenderer,root:THREE.Group,camera:THREE.PerspectiveCamera,scene:THREE.Scene,signal:AbortSignal){
  const timeout=new AbortController(),abort=()=>timeout.abort();signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
  const work=new Promise<void>((resolve,reject)=>{
   let timer:ReturnType<typeof setTimeout>|undefined,done=false;

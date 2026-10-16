@@ -27,3 +27,11 @@
 .game-shell .photo-ui .photo-task>strong,.game-shell .photo-ui .photo-task>small{font-size:14px}
 .game-shell .story-ui .story-objective p,.game-shell .story-ui .story-guidance p,.game-shell .story-ui .story-action-status p{font-size:16px;line-height:1.4}
 .game-shell .story-ui .story-hint,.game-shell .story-ui .story-choices>p,.game-shell .story-ui .story-choice-buttons button,.game-shell .story-ui .story-history-lines p,.game-shell .story-ui .story-stall-help,.game-shell .story-ui .story-help-popover{font-size:14px;line-height:1.45}
+
+/* Reading and session surfaces use the same measured viewport, including keyboards. */
+.menu-page-header{position:sticky;top:0;z-index:4;background:#f5f3ed}
+.tactical-menu .menu-page-header{background:#121b21}
+.menu-page.menu-page-centered{max-height:var(--usable-height,100dvh)}
+.menu-page-centered .menu-page-main{max-height:calc(var(--usable-height,100dvh) - 60px)}
+@media(max-width:900px){.menu-page-main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}.menu-preparation{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}.menu-page-header{flex-wrap:wrap}.menu-page-header .menu-page-back{margin-left:auto}.menu-prep-actions{position:sticky;bottom:0;z-index:3;background:#f5f3ed;padding-bottom:max(12px,env(safe-area-inset-bottom))}.tactical-menu .menu-prep-actions{background:#15232b}}
+@media(orientation:landscape) and (max-height:500px){.menu-page-centered .menu-page-main{max-height:calc(var(--usable-height,100dvh) - 24px)}.menu-page-main{scroll-padding-bottom:max(16px,env(safe-area-inset-bottom))}}

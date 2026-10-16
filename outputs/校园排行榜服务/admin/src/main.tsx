@@ -66,6 +66,7 @@ function Login({ onLogin }: { onLogin: (a: Administrator) => void }) {
         <h1>管理工作台</h1>
         <p>回复玩家，整理进展，照顾每一次游玩。</p>
         <a href="/">返回游戏 →</a>
+        <p>© 2026 OpenQS · 齐盛Online · <a href="/copyright/">版权与许可</a></p>
       </section>
       <form
         className="login-card"
@@ -260,7 +261,7 @@ function App() {
             )}
           </main>
           <footer className="workspace-footer">
-            齐盛 · 管理工作台 <span>所有时间均为北京时间</span>
+            <span>© 2026 OpenQS · 齐盛Online · <a href="/copyright/" target="_blank" rel="noreferrer">版权与许可</a></span><span>所有时间均为北京时间</span>
           </footer>
         </div>
         {notice && (

@@ -1,9 +1,9 @@
-export type PhotoPreviewQuality='auto'|'smooth'|'high';
+export type PhotoPreviewQuality='auto'|'smooth'|'high'|'ultra';
 export type PhotoPreviewTier='high'|'medium'|'low';
 
 /** Uses the existing renderer ratio; capture resolution has a separate policy. */
 export function previewTier(quality:PhotoPreviewQuality,adaptiveRatio=1):PhotoPreviewTier{
- if(quality==='high')return'high';
+ if(quality==='high'||quality==='ultra')return'high';
  if(quality==='smooth')return'medium';
  const ratio=Number.isFinite(adaptiveRatio)?adaptiveRatio:1;
  return ratio>=1-1e-7?'high':ratio>=.85-1e-7?'medium':'low';
