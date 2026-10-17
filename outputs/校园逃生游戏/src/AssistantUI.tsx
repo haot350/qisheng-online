@@ -9,55 +9,66 @@ import {assistantActionLabel,assistantActionNeedsConfirmation,type AssistantActi
 import {AssistantMenuExecution} from './assistant-menu';
 
 const examples=['帮我选校园突围，标准难度和M4A1','第一次玩，哪种模式适合我？','帮我整理一条游戏反馈'];
-type Props={active:boolean;onHelp:()=>void;onFeedback:()=>void;diagnostics?:FeedbackDiagnostics;connection?:unknown;menuContext?:AssistantMenuContext;onMenuAction?:(action:AssistantMenuAction,signal:AbortSignal)=>Promise<string>};
+export interface AssistantNextStep {label:string;detail?:string;disabled?:boolean;/** Actual resource preparation, from 0 to 1. */progress?:number;onClick:()=>void;}
+type PlanStep={phase:'pending'|'running'|'done'|'failed'|'stopped';message?:string};
+type PlanResult={phase:'running'|'done'|'failed'|'stopped';steps:PlanStep[];message?:string};
+type Props={active:boolean;onHelp:()=>void;onFeedback:()=>void;diagnostics?:FeedbackDiagnostics;connection?:unknown;menuContext?:AssistantMenuContext;onMenuAction?:(action:AssistantMenuAction,signal:AbortSignal)=>Promise<string>;onReturn?:()=>void;nextStep?:AssistantNextStep};
+const hasPlayArrangement=(plan:AssistantActionPlan)=>plan.actions.some(action=>['select_mode','select_difficulty','select_weapon','create_room','join_room'].includes(action.type));
 export function AssistantSpark({waiting=false}:{waiting?:boolean}){return <span className={'assistant-spark'+(waiting?' is-waiting':'')} aria-hidden="true"><span className="assistant-spark-orbit"/><span className="assistant-spark-orbit second"/><svg viewBox="0 0 64 64"><path d="M32 5C34 23 41 30 59 32C41 34 34 41 32 59C30 41 23 34 5 32C23 30 30 23 32 5Z"/></svg><i/><i/><i/></span>;}
-export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},connection,menuContext,onMenuAction}:Props){
+export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},connection,menuContext,onMenuAction,onReturn,nextStep}:Props){
  const [turns,setTurns]=useState(readAssistantHistory),[question,setQuestion]=useState(''),[pending,setPending]=useState(''),[busy,setBusy]=useState(false),[status,setStatus]=useState<AssistantStatus|null>(null),[statusBusy,setStatusBusy]=useState(false),[error,setError]=useState(''),[remaining,setRemaining]=useState<number|null>(null),[refresh,setRefresh]=useState(0),[visible,setVisible]=useState(()=>document.visibilityState!=='hidden'),[accepted,setAccepted]=useState(false),[clearConfirm,setClearConfirm]=useState(false),[draft,setDraft]=useState<AssistantDraft|null>(null);
  const session=useRef(new AssistantSession()),serial=useRef(0),body=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),identity=useRef(rankingClient.getPlayer()?.id??'guest'),alive=useRef(true);
- const executor=useRef(new AssistantMenuExecution()),runtime=useRef({menuContext,onMenuAction}),[actionBusy,setActionBusy]=useState<string|null>(null),[actionResults,setActionResults]=useState<Record<string,{message:string;failed:boolean}>>({}),[confirmPlan,setConfirmPlan]=useState<AssistantActionPlan|null>(null),[nearBottom,setNearBottom]=useState(true),[retryQuestion,setRetryQuestion]=useState('');
+ const executor=useRef(new AssistantMenuExecution()),runtime=useRef({menuContext,onMenuAction}),actionVersion=useRef(0),startedPlans=useRef(new Set<string>()),[actionBusy,setActionBusy]=useState<string|null>(null),[actionResults,setActionResults]=useState<Record<string,PlanResult>>({}),[confirmPlan,setConfirmPlan]=useState<AssistantActionPlan|null>(null),[nearBottom,setNearBottom]=useState(true),[retryQuestion,setRetryQuestion]=useState('');
  runtime.current={menuContext,onMenuAction};
- useEffect(()=>{alive.current=true;return()=>{alive.current=false;serial.current++;session.current.cancel();executor.current.cancel();};},[]);
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false;serial.current++;actionVersion.current++;session.current.cancel();executor.current.cancel();};},[]);
  useEffect(()=>{const changed=()=>setVisible(document.visibilityState!=='hidden');document.addEventListener('visibilitychange',changed);return()=>document.removeEventListener('visibilitychange',changed);},[]);
- useEffect(()=>rankingClient.subscribe(()=>{const next=rankingClient.getPlayer()?.id??'guest';if(next===identity.current)return;identity.current=next;serial.current++;session.current.cancel();executor.current.cancel();setActionBusy(null);setActionResults({});setConfirmPlan(null);setTurns([]);setQuestion('');setPending('');setDraft(null);setBusy(false);setRemaining(null);setError('');setAccepted(false);}),[]);
- useEffect(()=>{if(!active){executor.current.cancel();setActionBusy(null);setConfirmPlan(null);}},[active]);
- useEffect(()=>{executor.current.cancel();setConfirmPlan(null);setActionBusy(null);},[menuContext?.token,menuContext?.inBattle]);
+ useEffect(()=>rankingClient.subscribe(()=>{const next=rankingClient.getPlayer()?.id??'guest';if(next===identity.current)return;identity.current=next;serial.current++;session.current.cancel();stopActions();setActionResults({});setTurns([]);setQuestion('');setPending('');setDraft(null);setBusy(false);setRemaining(null);setError('');setAccepted(false);}),[]);
+ useEffect(()=>{if(!active)stopActions();},[active]);
+ useEffect(()=>{stopActions();},[menuContext?.token,menuContext?.inBattle]);
  useEffect(()=>{if(!active){serial.current++;session.current.cancel();setBusy(false);setPending('');return;}const controller=new AbortController();setStatusBusy(true);void rankingClient.request<AssistantStatus>('/assistant/status',{auth:false,signal:controller.signal}).then(value=>{if(!controller.signal.aborted){setStatus(value);setError('');}}).catch(()=>{if(!controller.signal.aborted){setStatus(null);setError('AI助手暂不可用');}}).finally(()=>{if(!controller.signal.aborted)setStatusBusy(false);});return()=>controller.abort();},[active,refresh]);
- useEffect(()=>{if(active&&nearBottom)body.current?.scrollTo({top:body.current.scrollHeight,behavior:document.documentElement.dataset.motion==='reduced'||matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},[turns.length,busy,active,nearBottom]);
+ useEffect(()=>{if(active&&nearBottom)body.current?.scrollTo({top:body.current.scrollHeight,behavior:document.documentElement.dataset.motion==='reduced'||matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},[turns.length,busy,active,nearBottom,actionResults]);
+ useEffect(()=>{const plan=turns.at(-1)?.actionPlan;if(active&&!busy&&!actionBusy&&plan&&onMenuAction&&!menuContext?.inBattle&&plan.contextToken===menuContext?.token&&!plan.actions.some(assistantActionNeedsConfirmation)&&!startedPlans.current.has(plan.id))void executePlan(plan);},[turns,busy,actionBusy,active,menuContext?.token,menuContext?.inBattle,onMenuAction]);
  useEffect(()=>{const viewport=window.visualViewport;if(!viewport)return;const adjust=()=>{body.current?.closest<HTMLElement>('.assistant-page')?.style.setProperty('--assistant-viewport-height',viewport.height+'px');if(active&&document.activeElement===composer.current)composer.current?.scrollIntoView({block:'nearest'});};adjust();viewport.addEventListener('resize',adjust);return()=>viewport.removeEventListener('resize',adjust);},[active]);
  async function send(value=question){const text=value.trim();if(busy||actionBusy||!text||text.length>1500||!status?.available||!accepted)return;const token=++serial.current;setBusy(true);setPending(text);setError('');setRetryQuestion('');setNearBottom(true);
   try{const result=await session.current.ask(text,turns,undefined,menuContext);if(!alive.current||token!==serial.current)return;const next=[...turns,{id:result.requestId,question:text,answer:result.answer,feedbackDraft:result.feedbackDraft,actionPlan:result.actionPlan,createdAt:Date.now()}].slice(-30);setTurns(next);saveAssistantHistory(next);setQuestion('');setRemaining(result.remaining);
   }catch(e){if(!alive.current||token!==serial.current)return;const code=e instanceof RankingError?e.code:'';setError(code==='ASSISTANT_LIMIT'?(e as RankingError).message+' 可以查看帮助或直接提交反馈。':code==='ASSISTANT_BUSY'?'小齐正在忙，请稍后重试。':'AI助手暂不可用');setQuestion(text);setRetryQuestion(text);
   }finally{if(alive.current&&token===serial.current){setBusy(false);setPending('');}}
  }
- function cancel(){serial.current++;session.current.cancel();executor.current.cancel();setBusy(false);setActionBusy(null);setConfirmPlan(null);setPending('');composer.current?.focus();}
- function clear(){cancel();clearAssistantHistory();setTurns([]);setQuestion('');setDraft(null);setError('');setClearConfirm(false);}
+ function stopActions(){actionVersion.current++;executor.current.cancel();setActionBusy(null);setConfirmPlan(null);setActionResults(old=>Object.fromEntries(Object.entries(old).map(([id,value])=>[id,value.phase==='running'?{...value,phase:'stopped',message:'安排已停止。',steps:value.steps.map(step=>step.phase==='running'?{...step,phase:'stopped'}:step)}:value])));}
+ function cancel(){serial.current++;session.current.cancel();stopActions();setBusy(false);setPending('');composer.current?.focus();}
+ function clear(){cancel();clearAssistantHistory();startedPlans.current.clear();setActionResults({});setTurns([]);setQuestion('');setDraft(null);setError('');setClearConfirm(false);}
  const available=!!status?.available;
  async function executePlan(plan:AssistantActionPlan,confirmed=false){
-  if(actionBusy||busy)return;
+  if(actionBusy||busy||startedPlans.current.has(plan.id))return;
   if(plan.actions.some(assistantActionNeedsConfirmation)&&!confirmed){setConfirmPlan(plan);return;}
-  setConfirmPlan(null);setActionBusy(plan.id);
-  setActionResults(old=>({...old,[plan.id]:{message:'正在为你处理…',failed:false}}));
-  const currentIdentity=identity.current;
+  startedPlans.current.add(plan.id);while(startedPlans.current.size>100)startedPlans.current.delete(startedPlans.current.values().next().value!);
+  const version=++actionVersion.current,currentIdentity=identity.current;
+  const current=()=>alive.current&&actionVersion.current===version&&identity.current===currentIdentity;
+  let result:PlanResult={phase:'running',steps:plan.actions.map(()=>({phase:'pending'}))};
+  const publish=()=>{if(current())setActionResults(old=>{const next={...old,[plan.id]:result};for(const id of Object.keys(next).slice(0,-30))delete next[id];return next;});};
+  setConfirmPlan(null);setActionBusy(plan.id);setNearBottom(true);publish();
   const finish=(message:string,failed:boolean)=>{
-   if(!alive.current||identity.current!==currentIdentity)return;
-   setActionResults(old=>({...old,[plan.id]:{message,failed}}));
-   setTurns(old=>{const next=old.map(turn=>turn.id===plan.id?{...turn,toolResult:message}:turn);saveAssistantHistory(next);return next;});
+   if(!current())return;
+   result={...result,phase:failed?'failed':'done',message};publish();
+   setTurns(old=>{const next=old.map(turn=>turn.actionPlan?.id===plan.id?{...turn,toolResult:message}:turn);saveAssistantHistory(next);return next;});
   };
   try{
-   const results=await executor.current.run(plan,{context:()=>runtime.current.menuContext,identity:()=>rankingClient.getPlayer()?.id??'guest',execute:async(action,signal)=>{
+   const results=await executor.current.run(plan,{context:()=>runtime.current.menuContext,identity:()=>rankingClient.getPlayer()?.id??'guest',onProgress:progress=>{if(!current())return;result={...result,steps:result.steps.map((step,index)=>index===progress.index?{phase:progress.phase,message:progress.message}:step)};publish();},execute:async(action,signal)=>{
     if(!runtime.current.onMenuAction)throw Error('请回到游戏菜单后重试。');
     return runtime.current.onMenuAction(action,signal);
    }},confirmed);
    finish(results.join(' · ')||'已完成',false);
-  }catch(e){finish(e instanceof Error?e.message:'暂时未能完成，请手动重试。',true);}
-  finally{if(alive.current)setActionBusy(null);}
+  }catch(e){finish(result.steps.find(step=>step.phase==='failed')?.message??(e instanceof Error?e.message:'暂时未能完成，请手动重试。'),true);}
+  finally{if(current())setActionBusy(null);}
  }
+ const latestPlayPlan=[...turns].reverse().find(turn=>turn.actionPlan&&hasPlayArrangement(turn.actionPlan))?.actionPlan?.id;
  return <div className="assistant-page" data-animations={active&&visible?'running':'paused'}>
   <header className="assistant-toolbar"><div><span className={'assistant-status-dot'+(available?' is-online':'')}/><span>{statusBusy?'正在连接…':available?'在线':'暂不可用'}</span></div>{turns.length>0&&<button onClick={()=>setClearConfirm(true)} disabled={busy||!!actionBusy}>新对话</button>}</header>
   {clearConfirm&&<div className="assistant-clear-confirm" role="alert"><span>清除本机上的这段对话？</span><button onClick={clear}>确认清除</button><button onClick={()=>setClearConfirm(false)}>保留</button></div>}
   <div className="assistant-conversation" ref={body} aria-label="与小齐的对话" onScroll={e=>{const el=e.currentTarget;setNearBottom(el.scrollHeight-el.scrollTop-el.clientHeight<120);}}>
-   {!turns.length&&!busy&&<section className="assistant-welcome"><AssistantSpark/><h2>需要什么帮助？</h2><p>问玩法、查操作，或告诉我遇到的问题。</p><div className="assistant-examples">{examples.map(text=><button key={text} disabled={!available} onClick={()=>{setQuestion(text);composer.current?.focus();}}>{text}<span aria-hidden="true">↗</span></button>)}</div>{menuContext?.inBattle&&<p className="assistant-capabilities">对局中仅提供答疑。</p>}</section>}
-   {turns.map(turn=><article className="assistant-turn" key={turn.id}><div className="assistant-question"><span className="assistant-speaker">你</span><p>{turn.question}</p></div><div className="assistant-answer"><div className="assistant-answer-mark"><AssistantSpark/><strong>小齐</strong></div><AssistantAnswer value={turn.answer}/>{turn.actionPlan&&<section className="assistant-action-card" aria-label="已审核的菜单安排"><header><strong>下一步安排</strong><span>{turn.actionPlan.actions.length} 步</span></header><ol>{turn.actionPlan.actions.map((action,i)=><li key={i}>{assistantActionLabel(action)}</li>)}</ol>{actionResults[turn.id]?<p role="status" className={actionResults[turn.id].failed?'is-error':''}>{actionResults[turn.id].message}</p>:<button disabled={busy||!!actionBusy||!onMenuAction||menuContext?.inBattle||turn.actionPlan.contextToken!==menuContext?.token} onClick={()=>void executePlan(turn.actionPlan!)}>{turn.actionPlan.actions.some(assistantActionNeedsConfirmation)?'核对并确认':'帮我完成'}</button>}</section>}{turn.feedbackDraft&&<button className="assistant-draft-entry" onClick={()=>setDraft({...turn.feedbackDraft!})}>查看并编辑反馈草稿 <span aria-hidden="true">→</span></button>}</div></article>)}
+   {!turns.length&&!busy&&<section className="assistant-welcome"><AssistantSpark/><h2>需要什么帮助？</h2><p>问玩法、查操作，或告诉我遇到的问题。</p><div className="assistant-examples">{examples.map(text=><button key={text} disabled={!available} onClick={()=>{setQuestion(text);composer.current?.focus();}}>{text}<span aria-hidden="true">↗</span></button>)}</div></section>}
+   {turns.map(turn=><article className="assistant-turn" key={turn.id}><div className="assistant-question"><span className="assistant-speaker">你</span><p>{turn.question}</p></div><div className="assistant-answer"><div className="assistant-answer-mark"><AssistantSpark/><strong>小齐</strong></div><AssistantAnswer value={turn.answer}/>{turn.actionPlan&&<AssistantPlanCard plan={turn.actionPlan} result={actionResults[turn.actionPlan.id]} canExecute={!busy&&!actionBusy&&!!onMenuAction&&!menuContext?.inBattle&&turn.actionPlan.contextToken===menuContext?.token} onExecute={()=>void executePlan(turn.actionPlan!)} onRetry={()=>{setQuestion(turn.question);composer.current?.focus();}} nextStep={latestPlayPlan===turn.actionPlan.id&&turn.actionPlan.contextToken===menuContext?.token&&!busy&&!actionBusy&&!menuContext?.inBattle?nextStep:undefined} onReturn={onReturn}/>}
+{turn.feedbackDraft&&<button className="assistant-draft-entry" onClick={()=>setDraft({...turn.feedbackDraft!})}>查看并编辑反馈草稿 <span aria-hidden="true">→</span></button>}</div></article>)}
    {busy&&<article className="assistant-turn"><div className="assistant-question"><span className="assistant-speaker">你</span><p>{pending}</p></div><div className="assistant-thinking" role="status"><AssistantSpark waiting/><div><strong>小齐正在回复</strong><span className="assistant-thinking-line"/><span className="assistant-thinking-line short"/></div><span className="assistant-sr-only">请稍候，回答准备好后会显示。</span></div></article>}
   </div>
   <footer className="assistant-composer-area">
@@ -70,6 +81,24 @@ export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},con
   {active&&draft&&<AssistantFeedbackDraft key={draft.title+draft.message} value={draft} diagnostics={diagnostics} connection={connection} onClose={()=>setDraft(null)} onFeedback={onFeedback}/>}
   {active&&confirmPlan&&<div className="assistant-plan-confirm" role="dialog" aria-modal="true" aria-label="确认菜单操作" onKeyDown={e=>{if(e.key==='Escape')setConfirmPlan(null);if(e.key==='Tab'){const items=e.currentTarget.querySelectorAll<HTMLButtonElement>('button');const first=items[0],last=items[items.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}}><section><h2>确认这次安排</h2><ol>{confirmPlan.actions.map((action,i)=><li key={i}>{assistantActionLabel(action)}</li>)}</ol><p>确认后执行上述操作；不会开始比赛。</p><footer><button autoFocus onClick={()=>setConfirmPlan(null)}>再想想</button><button onClick={()=>void executePlan(confirmPlan,true)}>确认执行</button></footer></section></div>}
  </div>;
+}
+
+export function AssistantPlanCard({plan,result,canExecute,onExecute,onRetry,nextStep,onReturn}:{plan:AssistantActionPlan;result?:PlanResult;canExecute:boolean;onExecute:()=>void;onRetry:()=>void;nextStep?:AssistantNextStep;onReturn?:()=>void}){
+ const completed=result?.steps.filter(step=>step.phase==='done').length??0;
+ const current=result?.steps.findIndex(step=>step.phase==='running')??-1;
+ const title=!result?'下一步安排':({running:'正在安排',done:'已安排',failed:'未完成',stopped:'已停止'}[result.phase]);
+ const progress=typeof nextStep?.progress==='number'&&Number.isFinite(nextStep.progress)?Math.min(1,Math.max(0,nextStep.progress)):undefined;
+ return <section className={'assistant-action-card'+(result?' is-'+result.phase:'')} aria-label="下一步安排">
+  <header><strong>{title}</strong><span>{result?`${completed} / ${plan.actions.length}`:`${plan.actions.length} 项`}</span></header>
+  <ol className="assistant-action-steps">{plan.actions.map((action,index)=>{const step=result?.steps[index],phase=step?.phase??'pending';return <li key={index} className={'is-'+phase} aria-current={phase==='running'?'step':undefined}><span className="assistant-step-mark" aria-hidden="true">{phase==='done'?'✓':phase==='failed'?'!':index+1}</span><div><strong>{assistantActionLabel(action)}</strong>{step?.message&&<small>{step.message}</small>}</div>{phase==='running'?<span className="assistant-step-state">当前</span>:phase==='pending'&&index===current+1&&current>=0?<span className="assistant-step-state">下一步</span>:null}</li>;})}</ol>
+  {!result&&<button disabled={!canExecute} onClick={onExecute}>{plan.actions.some(assistantActionNeedsConfirmation)?'确认房间安排':'按此设置'}</button>}
+  {(result?.phase==='failed'||result?.phase==='stopped')&&<div className="assistant-action-recovery">{!result.steps.some(step=>step.phase==='failed'&&step.message===result.message)&&<p role="status">{result.message||'安排未完成。'}</p>}<button onClick={onRetry}>重新提问</button></div>}
+  {result?.phase==='done'&&nextStep&&<footer className="assistant-action-next">
+   {nextStep.detail&&<p role="status">{nextStep.detail}</p>}
+   {progress!==undefined&&<div className="assistant-entry-progress"><progress max={1} value={progress} aria-label="入场准备"/><span>{Math.floor(progress*100)}%</span></div>}
+   <div className="assistant-entry-actions"><button className="assistant-entry-primary" disabled={nextStep.disabled} onClick={nextStep.onClick}>{nextStep.label}<span aria-hidden="true">→</span></button>{onReturn&&nextStep.label!=='进入房间'&&<button className="assistant-entry-adjust" onClick={onReturn}>调整选装</button>}</div>
+  </footer>}
+ </section>;
 }
 
 /** Tiny safe text renderer: no raw HTML, external links, scripts or injected attributes. */

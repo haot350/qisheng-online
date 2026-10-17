@@ -1,6 +1,7 @@
 import {validateAssistantActions,assistantActionNeedsConfirmation,type AssistantActionPlan,type AssistantMenuAction,type AssistantMenuContext} from '@qisheng/shared/assistant';
 
-export interface AssistantMenuRuntime { context:()=>AssistantMenuContext|undefined; identity:()=>string; execute:(action:AssistantMenuAction,signal:AbortSignal)=>Promise<string>; }
+export interface AssistantMenuProgress {index:number;total:number;phase:'running'|'done'|'failed';message?:string;}
+export interface AssistantMenuRuntime { context:()=>AssistantMenuContext|undefined; identity:()=>string; execute:(action:AssistantMenuAction,signal:AbortSignal)=>Promise<string>;onProgress?:(progress:AssistantMenuProgress)=>void; }
 /** One approved plan, one execution. Confirmation is provided by the player UI, never by the model. */
 export class AssistantMenuExecution {
  private controller:AbortController|null=null;
@@ -17,9 +18,9 @@ export class AssistantMenuExecution {
   const check=()=>{const current=runtime.context();if(controller.signal.aborted||runtime.identity()!==identity||!current||current.inBattle||current.token!==plan.contextToken)throw Error('页面或账号已变化，请重新提出需求。');};
   if(!initial||initial.inBattle||initial.token!==plan.contextToken)throw Error('页面已变化，请重新提出需求。');
   this.cancel();const controller=new AbortController();this.controller=controller;this.running.add(plan.id);
-  const results:string[]=[];
-  try{check();for(const action of actions){check();const result=await runtime.execute(action,controller.signal);if(controller.signal.aborted||runtime.identity()!==identity)throw Error('操作已取消。');results.push(result);}return results;}
-  catch(error){const message=error instanceof Error?error.message:'暂时未能完成，请手动重试。';throw Error(results.length?'已完成：'+results.join('；')+'。后续未执行：'+message:message);}
+  const results:string[]=[];let current=-1;
+  try{check();for(let index=0;index<actions.length;index++){current=index;check();runtime.onProgress?.({index,total:actions.length,phase:'running'});const result=await runtime.execute(actions[index],controller.signal);if(controller.signal.aborted||runtime.identity()!==identity)throw Error('操作已取消。');results.push(result);runtime.onProgress?.({index,total:actions.length,phase:'done',message:result});}return results;}
+  catch(error){const message=error instanceof Error?error.message:'暂时未能完成，请手动重试。';if(current>=0)runtime.onProgress?.({index:current,total:actions.length,phase:'failed',message});throw Error(results.length?'已完成：'+results.join('；')+'。后续未执行：'+message:message);}
   finally{this.running.delete(plan.id);this.done.add(plan.id);while(this.done.size>100)this.done.delete(this.done.values().next().value!);if(this.controller===controller)this.controller=null;}
  }
 }

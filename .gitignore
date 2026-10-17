@@ -381,7 +381,7 @@
 !/outputs/校园交互网站/site/scripts/telemetry.test.mjs
 !/outputs/校园交互网站/site/scripts/validate-static-styles.mjs
 !/outputs/校园交互网站/site/tsconfig.json
-!/outputs/校园交互网站/site/vendor/qisheng-shared-0.9.0.tgz
+!/outputs/校园交互网站/site/vendor/qisheng-shared-0.9.1.tgz
 !/outputs/校园交互网站/site/vite.config.ts
 !/outputs/校园交互网站/site/vite.production.config.ts
 !/outputs/校园共享模块/README.md
@@ -499,6 +499,7 @@
 !/outputs/校园排行榜服务/tests/accounts-v080.test.ts
 !/outputs/校园排行榜服务/tests/admin-edit-v069.test.ts
 !/outputs/校园排行榜服务/tests/admin-player-accounts-080.test.ts
+!/outputs/校园排行榜服务/tests/assistant-prompts.test.ts
 !/outputs/校园排行榜服务/tests/assistant-v083.test.ts
 !/outputs/校园排行榜服务/tests/assistant-v090.test.ts
 !/outputs/校园排行榜服务/tests/feedback-v061.test.ts
@@ -515,7 +516,7 @@
 !/outputs/校园排行榜服务/tests/security-efficiency-v070.test.ts
 !/outputs/校园排行榜服务/tests/upgrade.test.ts
 !/outputs/校园排行榜服务/tsconfig.json
-!/outputs/校园排行榜服务/vendor/qisheng-shared-0.9.0.tgz
+!/outputs/校园排行榜服务/vendor/qisheng-shared-0.9.1.tgz
 !/outputs/校园服务器部署/README.md
 !/outputs/校园服务器部署/scripts/admin-csp-policy.mjs
 !/outputs/校园服务器部署/scripts/deployment-target.mjs
@@ -586,7 +587,7 @@
 !/outputs/校园联机服务/tests/simulation.test.mjs
 !/outputs/校园联机服务/tests/snapshot-query-cache-v070.test.mjs
 !/outputs/校园联机服务/tests/support/rejected-snapshot-cache.mjs
-!/outputs/校园联机服务/vendor/qisheng-shared-0.9.0.tgz
+!/outputs/校园联机服务/vendor/qisheng-shared-0.9.1.tgz
 !/outputs/校园逃生游戏/README.md
 !/outputs/校园逃生游戏/account/index.html
 !/outputs/校园逃生游戏/copyright/index.html
@@ -1021,7 +1022,7 @@
 !/outputs/校园逃生游戏/tests/weapons.test.ts
 !/outputs/校园逃生游戏/tests/world-ray.test.ts
 !/outputs/校园逃生游戏/tsconfig.json
-!/outputs/校园逃生游戏/vendor/qisheng-shared-0.9.0.tgz
+!/outputs/校园逃生游戏/vendor/qisheng-shared-0.9.1.tgz
 !/outputs/校园逃生游戏/vite.config.ts
 !/outputs/校园逃生游戏/vite.production.config.ts
 !/outputs/齐盛原生客户端/AGENTS.md

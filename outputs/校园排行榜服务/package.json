@@ -1,6 +1,6 @@
 {
   "name": "qisheng-ranking",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,7 +15,7 @@
   "dependencies": {
     "@fastify/cors": "11.1.0",
     "@fastify/rate-limit": "10.3.0",
-    "@qisheng/shared": "file:vendor/qisheng-shared-0.9.0.tgz",
+    "@qisheng/shared": "file:vendor/qisheng-shared-0.9.1.tgz",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
     "sharp": "0.35.5"

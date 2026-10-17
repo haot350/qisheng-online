@@ -1281,7 +1281,8 @@ export default function App() {
           else await client.join(undefined,undefined,action.code);
           valid();const joinedRoom=(client.view as LobbyView).currentRoom;if(!joinedRoom)throw Error(client.view.error||'暂时未能加入房间，请重试。');
           setSelectedMode('escape');setEscapeEntry(joinedRoom.mode==='coop'?'coop':'pvp');setPvpVariant(joinedRoom.variant);setMenuScreen('prepare');
-          later(()=>{pages.clear();setOnlineOpen(true);});return '已进入房间，请亲自选择准备并开始。';
+          setAssistantReturnScreen('prepare');
+          return '房间已就绪。';
         }catch(error){if(assistantAdmission.current===token){assistantAdmission.current=null;await client.leave();}throw error;}finally{signal.removeEventListener('abort',cancel);if(assistantAdmission.current===token)assistantAdmission.current=null;}
       }
     }
@@ -1296,6 +1297,37 @@ export default function App() {
     previousMenuPage.current=pages.active;
   },[pages.active,isMenu,onlineView.currentRoom?.phase,assistantReturnScreen]);
   const menuRootLabel=onlineView.currentRoom?.phase==='lobby'?'返回房间':pages.active==='assistant'&&assistantReturnScreen==='prepare'?'查看战前准备':isMenu?'返回主菜单':'返回对局菜单';
+  const returnFromAssistant = () => {
+    if (accountBusy || assistantInBattle) return;
+    pages.clear();
+    if (onlineClient.current?.view.currentRoom?.phase === 'lobby') setOnlineOpen(true);
+  };
+  const assistantNextStep = assistantInBattle ? undefined
+    : onlineView.currentRoom?.phase === 'lobby' ? {
+        label: '进入房间',
+        detail: '查看队友与装备，准备后一起出发。',
+        onClick: returnFromAssistant,
+      }
+    : assistantReturnScreen === 'prepare' ? {
+        label: preparation.state === 'ready' ? '进入游戏'
+          : preparation.state === 'error' ? '重试准备'
+          : saveData && !prepareRequested ? '准备游戏资源' : '正在准备…',
+        detail: preparation.state === 'ready' ? '玩法与装备已选好，随时出发。'
+          : preparation.state === 'loading' || preparation.state === 'error' ? preparation.message : undefined,
+        progress: preparation.state === 'loading' ? preparation.progress / 100 : undefined,
+        disabled: accountBusy || busy || !operational.ready || !selectedAvailable
+          || preparation.state === 'loading' || preparation.state === 'idle' && !(saveData && !prepareRequested),
+        onClick: () => {
+          if (!guardEntry(selectedEntry) || accountBusy || busy || assistantInBattle) return;
+          if (preparation.state !== 'ready') {
+            setPrepareRequested(true);
+            setPrepRevision(n => n + 1);
+            return;
+          }
+          pages.clear();
+          chooseStart();
+        },
+      } : undefined;
   const { unread: feedbackUnread } = useFeedbackUnread(isMenu || feedbackOpen);
   const announcementEntry = isMenu && menuScreen !== 'prepare' ? undefined : onlineView.currentRoom ? entryFor('escape', onlineView.currentRoom.mode==='coop'?'coop':'pvp', onlineView.currentRoom.variant==='ffa'?'ffa':'tdm') : isMenu ? selectedEntry : entryFor(snapshot.mode);
   const announcements = useAnnouncements(announcementEntry, operational.config.revision, playing);
@@ -1521,7 +1553,7 @@ export default function App() {
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
         page==='feedback'?<FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/>:
-        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
+        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
       {leaveConfirmation&&<MenuReadingPanel title={leaveDestination==='lobby'?'离开本局并返回联机大厅？':onlineView.currentRoom?'离开房间并返回主菜单？':'结束本局并返回主菜单？'} onClose={()=>setLeaveConfirmation(false)}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位，其他玩家可以继续对局。':storyMode?'故事进度会保留在本机；返回后可以继续上次的故事。':'本局尚未完成，返回会结束当前游玩。'}</p><div className="upgrade-prompt-actions"><button className="secondary" onClick={()=>setLeaveConfirmation(false)}>留在菜单</button><button className="primary" onClick={leaveDestination==='lobby'?finishReturnLobby:finishReturnMenu}>{leaveDestination==='lobby'?'确认返回联机大厅':'确认返回主菜单'}</button></div></MenuReadingPanel>}

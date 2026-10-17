@@ -2,6 +2,22 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+  "id": "preview-0.9.1",
+  "sequence": 39,
+  "date": "2026-10-17",
+  "version": "Preview 0.9.1",
+  "overview": "小齐答疑更自然，选好玩法后可直接出发。",
+  "summary": [
+    "小齐更直接地回答游玩问题，需要时帮助安排玩法与装备。",
+    "菜单安排显示当前进度，完成后可在卡片里进入游戏或房间。"
+  ],
+  "items": [
+    "调整：小齐的回答更自然，重点回应当前问题，减少重复说明。",
+    "调整：普通选装自动完成，房间操作确认后处理；每一步显示实际进度。",
+    "新增：安排结果卡片提供进入游戏、进入房间与调整选装入口。"
+  ]
+},
+{
   "id": "preview-0.9.0",
   "sequence": 38,
   "date": "2026-10-17",
