@@ -1,10 +1,15 @@
 # 本地开源演示
 
-要求 Node.js 24、npm，以及账号服务 SQLite 原生扩展的编译工具。Windows 需要 Python 与 Visual Studio 的“使用 C++ 的桌面开发”；Linux 需要 Python 与 C/C++ 编译工具。只构建游戏／校园演示静态页时不需要 SQLite 编译工具。六个中文目录保持在仓库 `outputs` 下相邻。首次从干净 clone 启动，在仓库根目录运行：
+要求 Node.js 24 和 npm。六个中文目录保持在仓库 `outputs` 下相邻。先运行环境检查，再从干净 clone 启动：
 
 ```sh
+node scripts/check-environment.mjs
 node scripts/dev-demo.mjs --install
 ```
+
+账号 API 使用 SQLite 与 Sharp 附带的64位原生二进制。API目录的 `.npmrc` 禁用依赖安装脚本，防止 npm 对 `better-sqlite3@13.0.3` 无谓触发本地编译；每次 API 构建会真实执行内存 SQLite 和图片编解码检查。其余模块仍执行自身正常安装脚本。不要删除这份配置或跨系统复制 `node_modules`。[上游问题](https://github.com/WiseLibs/better-sqlite3/issues/1516)
+
+若使用不在二进制支持范围内的平台，需要自行准备原生编译环境；Windows为Python与Visual Studio C++构建工具，Linux为Python及C/C++工具链。项目默认支持Node.js 24与64位Windows／Linux。单独构建游戏和校园演示静态页不需要SQLite。
 
 后续已安装依赖时运行 `node scripts/dev-demo.mjs`。在两个浏览器窗口打开 `http://127.0.0.1:5180/`，分别点击“进入本机场地”。WASD／方向键移动，Shift 加速，鼠标瞄准，按住鼠标／空格开火，R 换弹。`/account/` 使用实际共享 `AccountPage` 和账号 API，可注册与登录测试账号。API 数据库仅存于内存，重启会清空；请勿输入正式账号的密码。
 
@@ -21,3 +26,5 @@ node scripts/dev-demo.mjs --install
 校园站的默认构建是无需正式素材的入口页。在 `outputs/校园交互网站/site` 安装依赖后运行 `npm run build` 或 `npm run dev`。它链接上述游戏与账号演示，正式网站源码保留在原有 `app`、`components` 等目录。
 
 定向演示检查：先启动演示，再在仓库根目录运行 `node scripts/check-demo.mjs`。检查使用临时合成账号，不打印会话、密码或恢复码，并核对真实 demo 身份、两个客户端移动／射击及 API 的正式竞技准入拒绝。
+
+也可在依赖安装完成后执行 `node scripts/verify-demo.mjs`，由它临时启动并检查演示，再关闭它创建的进程。5180、8792、2577端口必须空闲；它不会停止其他已有服务。GitHub CI分别检查Linux与Windows的干净安装、构建和该演示流程。

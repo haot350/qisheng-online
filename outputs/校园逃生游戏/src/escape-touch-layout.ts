@@ -5,7 +5,7 @@ export type EscapeTouchButton = {x:number;y:number;scale:number;opacity:number};
 export type EscapeTouchLayout = {version:1;buttons:Record<EscapeTouchId,EscapeTouchButton>};
 export type EscapeTouchPreferences = {escapeAimMode?:EscapeAimMode;escapeTouchLayout?:EscapeTouchLayout};
 export type EscapeSafeInsets = {top:number;right:number;bottom:number;left:number};
-export const ESCAPE_TOUCH_LABELS:Record<EscapeTouchId,string> = {move:'移动',sprint:'冲刺',crouch:'蹲伏',slide:'滑铲',aim:'瞄准',fire:'射击',reload:'换弹',switch:'切枪',smoke:'烟雾',jump:'跳跃',interact:'互动'};
+export const ESCAPE_TOUCH_LABELS:Record<EscapeTouchId,string> = {move:'移动',sprint:'冲刺',crouch:'蹲伏',slide:'滑铲',aim:'瞄准',fire:'射击',reload:'换弹',switch:'切枪',smoke:'使用道具',jump:'跳跃',interact:'互动'};
 export const ESCAPE_TOUCH_SIZE:Record<EscapeTouchId,number> = {move:108,sprint:44,crouch:44,slide:44,aim:48,fire:64,reload:44,switch:44,smoke:44,jump:44,interact:44};
 const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 const finite=(v:unknown):v is number=>typeof v==='number'&&Number.isFinite(v);

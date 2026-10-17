@@ -3,8 +3,8 @@ import type {NearbyInteraction,NearbyInteractionAction} from './nearby-interacti
 import {usePointerSession} from './use-pointer-session';
 import {INPUT_RESET_EVENT} from './pointer-owner';
 import './nearby-interaction.css';
-export const INTERACTION_ACTION_LABELS:Record<NearbyInteractionAction,string>={revive:'救援',take:'取走物资',activate:'启动设备',hold:'开始守点',carry:'领取物资',deliver:'送达物资',extract:'开始撤离',ammo:'补充弹药',replace:'替换主枪',supply:'领取补给'};
-export function interactionActionLabel(interaction:NearbyInteraction){return !interaction.available?(interaction.kind==='supply'?'补给已满':'弹药已满'):INTERACTION_ACTION_LABELS[interaction.action];}
+export const INTERACTION_ACTION_LABELS:Record<NearbyInteractionAction,string>={revive:'救援',take:'取走物资',activate:'启动设备',hold:'开始守点',carry:'领取物资',deliver:'送达物资',extract:'开始撤离',ammo:'补充弹药',replace:'替换主枪',supply:'领取补给',helmet:'装备头盔',grenade:'拾取手榴弹',cards:'拾取扑克牌'};
+export function interactionActionLabel(interaction:NearbyInteraction){return !interaction.available?(interaction.kind==='supply'?'补给已满':interaction.kind==='gadget'?'已携带上限':'弹药已满'):INTERACTION_ACTION_LABELS[interaction.action];}
 export function NearbyInteractionUI({interaction,label,touch=false,onPress,loading=false,error=false,screen}:{interaction:NearbyInteraction;label:string;touch?:boolean;onPress:(pressed:boolean)=>void;loading?:boolean;error?:boolean;screen?:{x:number;y:number}|null}){
  const callback=useRef(onPress),keyboard=useRef(false);callback.current=onPress;
  const enabled=interaction.available&&!loading,held=interaction.action==='revive',pointers=usePointerSession(enabled),action=loading?'准备装备…':error?'重试':interactionActionLabel(interaction);

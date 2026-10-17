@@ -1,0 +1,15 @@
+import {spawn} from 'node:child_process';
+import {createReadStream} from 'node:fs';
+import {mkdir,stat,writeFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url)),demo=process.argv.includes('--demo'),dist=path.join(root,'dist');
+const name=demo?'windows-demo':'windows-internal',archive=path.join(dist,`qisheng-native-m1-${name}.zip`);
+await stat(path.join(dist,name,demo?'QishengOnline-Native-Demo.exe':'QishengOnline-Native-M1.exe'));
+await mkdir(dist,{recursive:true});
+const code=await new Promise((resolve,reject)=>{const p=spawn('tar.exe',['-a','-cf',archive,'-C',dist,name],{windowsHide:true,stdio:'inherit'});p.on('error',reject);p.on('exit',resolve);});
+if(code!==0)throw Error('Native archive failed '+code);
+const hash=createHash('sha256');for await(const bytes of createReadStream(archive))hash.update(bytes);
+const report={file:path.basename(archive),bytes:(await stat(archive)).size,sha256:hash.digest('hex'),formalAssets:!demo,stage:'internal',published:false};
+await writeFile(archive+'.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));

@@ -1,10 +1,14 @@
 {
   "name": "@qisheng/shared",
-  "version": "0.8.4",
+  "version": "0.9.0",
   "private": true,
   "type": "module",
   "description": "Canonical game rules, protocol and opt-in browser modules",
   "exports": {
+    "./gadgets": {
+      "types": "./src/gadgets.ts",
+      "default": "./dist/gadgets.js"
+    },
     "./credits": {
       "types": "./src/credits.ts",
       "default": "./dist/credits.js"

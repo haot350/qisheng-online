@@ -12,5 +12,6 @@ export function onlineGunPickup(room:RoomSnapshot,player:PlayerState,position:Ve
 export function onlinePickupFeedback(event:GameEvent,playerId:string,weaponName:(weapon:WeaponId)=>string):string|null {
  if(event.type!=='pickup'||event.actorId!==playerId)return null;
  const data=event.data??{};if(typeof data.supply==='string')return '补给已领取';
+ if(data.gadget==='helmet')return '已装备头盔';if(data.gadget==='grenade')return '手榴弹已拾取';if(data.gadget==='cards')return '扑克牌已拾取';
  const weapon=data.weapon as WeaponId;if(!weapon)return null;const label=weaponName(weapon);return data.action==='ammo'?label+'弹药已补充':data.action==='replace'?'已换上'+label:label+'已拾取';
 }

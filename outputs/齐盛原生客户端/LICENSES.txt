@@ -1,0 +1,14 @@
+齐盛Online · 原生技术预览
+© 2026 OpenQS
+
+OpenQS自有源码沿用项目MIT许可。正式校园、人物、照片、音乐和品牌素材单独管理，不因源码开放而重新授予素材使用权。
+
+本原生预览包含Godot Engine与Colyseus Native SDK，以及它们各自的第三方组件。
+完整原文见 third_party_licenses/：
+- Godot-MIT.txt 与 Godot-COPYRIGHT.txt：Godot 4.7.2及其第三方版权。
+- Colyseus-MIT.txt：Colyseus Godot SDK 0.18.7。
+- cJSON-MIT.txt、sds-BSD.txt、uthash-BSD.txt、wslay-MIT.txt：SDK固定版本依赖。
+- mbedTLS-LICENSE.txt：Mbed TLS许可；本项目选择Apache License 2.0授权。
+
+来源固定版本、原文SHA-256记录在 third_party_licenses/sources.json。
+原生预览目前属于内部兼容样板，不构成品牌合作或对第三方项目的官方认可。

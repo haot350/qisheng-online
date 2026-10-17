@@ -5,6 +5,7 @@ export const HTML_CACHE_CAPABILITY='public-60s-fresh-v1';
 export function hasHtmlCache(manifest){return manifest?.capabilities?.htmlCache===HTML_CACHE_CAPABILITY;}
 export const CAMPUS_ROUTES=Object.freeze(['school','making','astra','game','explore','feedback']);
 export function requiresHtmlCache(version){if(typeof version!=='string'||!/^\d+\.\d+\.\d+$/.test(version))throw Error('Invalid release version');const[a,b,c]=version.split('.').map(Number);return a>0||b>6||b===6&&c>=3;}
+export function requiresCreditsPages(version){if(typeof version!=='string'||!/^\d+\.\d+\.\d+$/.test(version))throw Error('Invalid release version');const[a,b,c]=version.split('.').map(Number);return a>0||b>8||b===8&&c>=4;}
 export function canonicalHtmlPath(site,value){if(site!=='game'&&site!=='campus')return null;if(typeof value!=='string'||/[?#%\\]/.test(value))return null;if(value==='/'||value==='/index.html')return '/';if(site==='campus')for(const route of CAMPUS_ROUTES)if([ '/'+route,'/'+route+'/','/'+route+'.html'].includes(value))return '/'+route;return null;}
 export function freshHtmlPath(site,value='/'){const route=canonicalHtmlPath(site,value);return route===null?null:'/__fresh/'+(route==='/'?'':route.slice(1));}
 export function canonicalFreshPath(site,value){if(value==='/__fresh')return canonicalHtmlPath(site,'/');if(typeof value!=='string'||!value.startsWith('/__fresh/'))return null;const route=value.slice('/__fresh'.length);return canonicalHtmlPath(site,route);}

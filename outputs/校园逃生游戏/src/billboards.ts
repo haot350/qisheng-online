@@ -19,16 +19,19 @@ const poseKey=(id:NpcIdentityId,pose:NpcPose,mobile:boolean)=>`${id}:${pose}:${m
 const cancelled=()=>new Error('人物图片载入已中止。');
 
 export function npcPortraitLayout(id:NpcIdentityId,pose:NpcPose):{shape:BodyLayout;hand:readonly [number,number,number]}{
+ const rows=NPC_LAYOUT_COMBAT as unknown as Record<string,Record<string,BodyLayout&{hand:readonly [number,number,number]}>>;
+ const calibrated=rows[id]?.[pose];
+ if(calibrated)return{shape:calibrated,hand:calibrated.hand};
  if(pose==='attack'||pose==='reload'||pose.startsWith('combat-')){
-  const rows=NPC_LAYOUT_COMBAT as unknown as Record<string,Record<string,BodyLayout&{hand:readonly [number,number,number]}>>;
   const row=rows[id]?.[pose];
   if(!row)throw new Error('新版人物动作尚未校准：'+id+' / '+pose);
   return{shape:row,hand:row.hand};
  }
- if(pose.startsWith('walk-')||pose.startsWith('run-')){const row=NPC_LAYOUT_MOTION[id][pose as NpcMotionPose];return{shape:row as unknown as BodyLayout,hand:row.hand};}
+ if(pose.startsWith('walk-')||pose.startsWith('run-')){const rows=NPC_LAYOUT_MOTION as unknown as Partial<Record<NpcIdentityId,Partial<Record<NpcMotionPose,BodyLayout&{hand:readonly [number,number,number]}>>>>;const row=rows[id]?.[pose as NpcMotionPose];if(!row)throw Error('人物行走动作尚未准备好。');return{shape:row,hand:row.hand};}
  const def=NPC_IDENTITY[id];
  if(def.legacyLayout!==undefined)return{shape:NPC_LAYOUT[def.legacyLayout][0] as unknown as BodyLayout,hand:[-.08,.74,.18]};
  const row=NPC_LAYOUT_V13[id as 'xutao'|'chengguotao'][pose as 'idle'|'attack'|'skill'];
+ if(!row)throw Error('人物姿态尚未准备好。');
  return{shape:row as unknown as BodyLayout,hand:row.hand};
 }
 function releaseEntry(entry:Entry){
@@ -111,7 +114,7 @@ export function createBillboardCharacter(identityId:NpcIdentityId,mobile=false){
   gun.update(dt,{aimTarget:state.aimTarget,gripWorld:gripWorld.copy(desiredGrip).applyMatrix4(root.matrixWorld),reloadProgress:state.reloadProgress??0,shotSerial:state.shotSerial??0,lowered:!isNpcArmedPose(variant)||state.suppressed>0||state.reloading||!!state.skill,action:state.action});
   gun.root.position.copy(desiredGrip).sub(gun.getAnchorLocal('grip',gripOffset).applyQuaternion(gun.root.quaternion));root.updateWorldMatrix(true,true);
  };
- return{root,update,resetPresentation(){gait.reset();suppressed=0;variant='idle';plane.geometry=geometries.idle;material.map=poses.idle.texture;material.color.setHex(0xffffff);plane.position.set(0,0,0);plane.rotation.set(0,0,0);plane.scale.set(1,1,1);for(const value of [cameraPosition,desiredGrip,gripOffset,gripWorld])value.set(0,0,0);gun.update(0,{reloadProgress:0,shotSerial:0,resetShot:true,lowered:true});},setWeapon(id:WeaponKind){gun.setWeapon(id);},getMuzzleWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleWorld();},getMuzzleDirectionWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleDirectionWorld();},getEjectionWorld(){root.updateWorldMatrix(true,true);return gun.getEjectionWorld();},getAimReady(toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.getAimReady(toleranceRadians);},isAimReady(target:THREE.Vector3,toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.isAimReady(target,toleranceRadians);},hitTest(origin:THREE.Vector3,direction:THREE.Vector3){return portraitHit(origin,direction,plane,poses[variant].shape,poses[variant].alpha);},dispose(){if(disposed)return;disposed=true;gun.dispose();Object.values(geometries).forEach(g=>g.dispose());material.dispose();shade.geometry.dispose();(shade.material as THREE.Material).dispose();root.clear();retained.forEach(releaseEntry);}};
+ return{root,update,preparationTextures:Object.values(poses).map(pose=>pose.texture),resetPresentation(){gait.reset();suppressed=0;variant='idle';plane.geometry=geometries.idle;material.map=poses.idle.texture;material.color.setHex(0xffffff);plane.position.set(0,0,0);plane.rotation.set(0,0,0);plane.scale.set(1,1,1);for(const value of [cameraPosition,desiredGrip,gripOffset,gripWorld])value.set(0,0,0);gun.update(0,{reloadProgress:0,shotSerial:0,resetShot:true,lowered:true});},setWeapon(id:WeaponKind){gun.setWeapon(id);},getMuzzleWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleWorld();},getMuzzleDirectionWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleDirectionWorld();},getEjectionWorld(){root.updateWorldMatrix(true,true);return gun.getEjectionWorld();},getAimReady(toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.getAimReady(toleranceRadians);},isAimReady(target:THREE.Vector3,toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.isAimReady(target,toleranceRadians);},hitTest(origin:THREE.Vector3,direction:THREE.Vector3){return portraitHit(origin,direction,plane,poses[variant].shape,poses[variant].alpha);},dispose(){if(disposed)return;disposed=true;gun.dispose();Object.values(geometries).forEach(g=>g.dispose());material.dispose();shade.geometry.dispose();(shade.material as THREE.Material).dispose();root.clear();retained.forEach(releaseEntry);}};
 }
 
 

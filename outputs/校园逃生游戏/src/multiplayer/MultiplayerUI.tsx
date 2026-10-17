@@ -57,9 +57,11 @@ export function onlineTaskGuidance(room:RoomSnapshot,me:PlayerState|undefined,_t
  else action=task.drop?'取回掉落的任务物资':'到领取点取得物资';
  return {task,action,reason:task.blocked==='contested'?'清除区域内的追兵':task.blocked==='outside'?'回到任务区域继续':undefined};
 }
+const gadgetLabels={helmet:'头盔',grenade:'手榴弹',cards:'扑克牌'};
 export function onlineInteractionLabel(room:RoomSnapshot,interaction:NearbyInteraction){
  if(interaction.kind==='revive')return roomRoster(room).find(p=>p.id===interaction.id)?.nickname??'倒下的同伴';
  if(interaction.kind==='task')return room.tasks.find(t=>t.id===interaction.taskId)?.label??'校门撤离';
+ if(interaction.kind==='gadget')return gadgetLabels[interaction.action as keyof typeof gadgetLabels]??'道具';
  if(interaction.kind==='weapon')return weapons[interaction.weapon??'glock'];
  return '补给箱';
 }

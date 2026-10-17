@@ -2,8 +2,8 @@ export type Vec3=[number,number,number];
 export type WeaponId='glock'|'mp5'|'m4a1'|'ak47'|'r870'|'awm'|'m249';
 export type PrimaryWeaponId=Exclude<WeaponId,'glock'>;
 export interface MovementCheckpoint {stamina:number;recoveryWait:number;exhausted:boolean;slideLeft:number;cooldown:number;direction:[number,number]|null;}
-export type NearbyInteractionKind='revive'|'task'|'weapon'|'supply';
-export type NearbyInteractionAction='revive'|'take'|'activate'|'hold'|'carry'|'deliver'|'extract'|'ammo'|'replace'|'supply';
+export type NearbyInteractionKind='revive'|'task'|'weapon'|'gadget'|'supply';
+export type NearbyInteractionAction='revive'|'take'|'activate'|'hold'|'carry'|'deliver'|'extract'|'ammo'|'replace'|'supply'|'helmet'|'grenade'|'cards';
 export interface NearbyInteraction {
  kind:NearbyInteractionKind;id:string;action:NearbyInteractionAction;
  taskId?:string;siteId?:string;weapon?:WeaponId;available:boolean;reason?:'full';

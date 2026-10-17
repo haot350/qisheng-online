@@ -1,3 +1,5 @@
+import type {AssistantMenuAction, AssistantMenuContext} from '@qisheng/shared/assistant';
+import {GadgetHUD} from './GadgetHUD';
 import {WeaponLoadout} from './WeaponLoadout';
 import {Crosshair} from './Crosshair';
 import {
@@ -9,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import CacheSettingsUI from "./CacheSettingsUI";
+import {SettingsPanel} from "./SettingsPanel";
 import { CombatBriefing, type CombatBriefingMode } from "./CombatBriefing";
 import {
   DafeiIntro,
@@ -24,11 +26,9 @@ import {
   EscapeHelp,
   EscapeHUD,
   EscapeMap,
-  EscapeMusicChoice,
   EscapeResult,
   EscapeTouchControls,
   EscapeTouchEditor,
-  EscapeTouchSettings,
 } from "./EscapeUI";
 import FeedbackUI from "./FeedbackUI";
 import {
@@ -50,7 +50,7 @@ import { useFeedbackUnread } from "./feedback-unread";
 import { setGameMapDownloadContext } from "./game-map";
 import { primaryTouchInput, resolveTouchControls } from "./input-layout.ts";
 import "./mobile-refinement.css";
-import { modeCapabilities, pausePolicy } from "./mode-policy";
+import { pausePolicy } from "./mode-policy";
 import { ConnectionDetails, ConnectionHUD } from "./multiplayer/ConnectionUI";
 import MultiplayerUI, {
   OnlineHelp,
@@ -299,206 +299,6 @@ function DamageDirections({ incoming }: { incoming: Snapshot["incoming"] }) {
     </div>
   );
 }
-function SettingsPanel({
-  settings,
-  onChange,
-  onClose,
-  mode,
-  canChangeTransmission,
-  onEditTouch,
-}: {
-  onEditTouch: () => void;
-  mode: Mode;
-  settings: Settings;
-  onChange: (s: Settings) => void;
-  onClose: () => void;
-  canChangeTransmission: boolean;
-}) {
-  const range = (
-    key: "sensitivity" | "fov" | "music" | "sfx",
-    label: string,
-    min: number,
-    max: number,
-    step: number,
-    display: string,
-  ) => (
-    <label className="range-setting">
-      <span>
-        {label}
-        <output>{display}</output>
-      </span>
-      <input
-        aria-label={label}
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={settings[key]}
-        onChange={(e) =>
-          onChange({ ...settings, [key]: Number(e.target.value) })
-        }
-      />
-    </label>
-  );
-  return (
-    <div className="settings-panel">
-        <div className="panel-heading">
-          <h2 id="settings-title">按你的习惯游玩</h2>
-          <button
-            className="icon-button"
-            aria-label="关闭设置"
-            onClick={onClose}
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <div className="settings-grid">
-          {mode === "escape" && (
-            <>
-              <EscapeMusicChoice settings={settings} onChange={onChange} />
-              <EscapeTouchSettings
-                settings={settings}
-                onChange={onChange}
-                onEdit={onEditTouch}
-              />
-            </>
-          )}{" "}
-          {mode === "dafei" && (
-            <TransmissionChoice
-              mode={settings.transmission ?? "auto"}
-              onChange={(transmission) =>
-                onChange({ ...settings, transmission })
-              }
-              disabled={!canChangeTransmission}
-            />
-          )}{" "}
-          {range(
-            "sensitivity",
-            "观察灵敏度",
-            0.35,
-            2,
-            0.05,
-            `${settings.sensitivity.toFixed(2)} 倍`,
-          )}
-          {range("fov", "视野范围", 50, 80, 1, `${settings.fov}°`)}
-          {range(
-            "music",
-            "音乐",
-            0,
-            1,
-            0.01,
-            `${Math.round(settings.music * 100)}%`,
-          )}
-          {range(
-            "sfx",
-            "环境与动作音效",
-            0,
-            1,
-            0.01,
-            `${Math.round(settings.sfx * 100)}%`,
-          )}
-          <label className="select-setting">
-            <span>操作方式</span>
-            <select
-              aria-label="操作方式"
-              value={settings.controls}
-              onChange={(e) =>
-                onChange({
-                  ...settings,
-                  controls: e.target.value as Settings["controls"],
-                })
-              }
-            >
-              <option value="auto">自动识别</option>
-              <option value="touch">触屏操作</option>
-              <option value="desktop">键盘与鼠标</option>
-            </select>
-          </label>
-          <label className="select-setting">
-            <span>画面质量</span>
-            <select
-              aria-label="画面质量"
-              value={settings.quality}
-              onChange={(e) =>
-                onChange({
-                  ...settings,
-                  quality: e.target.value as Settings["quality"],
-                })
-              }
-            >
-              <option value="auto">自动调整</option>
-              <option value="smooth">优先流畅</option>
-              <option value="high">高清画面</option>
-              <option value="ultra">超清画面</option>
-            </select>
-          </label>
-          {mode !== "dafei" && (
-            <label className="check-setting">
-              <span>轻微行走晃动</span>
-              <input
-                type="checkbox"
-                checked={settings.headBob}
-                onChange={(e) =>
-                  onChange({ ...settings, headBob: e.target.checked })
-                }
-              />
-            </label>
-          )}
-          {modeCapabilities(mode).enemies && (
-            <label className="check-setting">
-              <span>{mode === "dafei" ? "碰撞镜头震动" : "射击镜头震动"}</span>
-              <input
-                type="checkbox"
-                checked={settings.recoilShake}
-                onChange={(e) =>
-                  onChange({ ...settings, recoilShake: e.target.checked })
-                }
-              />
-            </label>
-          )}
-          {mode === "escape" && (
-            <label className="check-setting">
-              <span>触屏瞄准减速</span>
-              <input
-                type="checkbox"
-                checked={settings.aimAssist}
-                onChange={(e) =>
-                  onChange({ ...settings, aimAssist: e.target.checked })
-                }
-              />
-            </label>
-          )}
-          {modeCapabilities(mode).photography && (
-            <label className="check-setting">
-              <span>实拍机位提示</span>
-              <input
-                type="checkbox"
-                checked={!!settings.realityHints}
-                onChange={(e) =>
-                  onChange({ ...settings, realityHints: e.target.checked })
-                }
-              />
-            </label>
-          )}
-        </div>
-        <label className="check-setting">
-          <span>联机显示 Ping</span>
-          <input
-            type="checkbox"
-            checked={!!settings.onlinePing}
-            onChange={(e) =>
-              onChange({ ...settings, onlinePing: e.target.checked })
-            }
-          />
-        </label>
-        <CacheSettingsUI />
-        <button className="primary wide" onClick={onClose}>
-          完成
-          <Icon name="arrow" />
-        </button>
-    </div>
-  );
-}
 function HelpContent({
   mode,
   touchLayout,
@@ -588,6 +388,7 @@ export default function App() {
     [attempt, setAttempt] = useState(0),
     [busy, setBusy] = useState(false),
     [uiError, setUiError] = useState("");
+  useEffect(()=>{document.documentElement.dataset.motion=settings.reducedMotion?"reduced":"system";},[settings.reducedMotion]);
   const [primary, setPrimary] = useState<PrimaryWeapon>(loadPrimary),
     [selectedMode, setSelectedMode] = useState<Mode>(() => {
       const m = new URLSearchParams(location.search).get("mode");
@@ -637,7 +438,7 @@ export default function App() {
     [onlineRoomKey, setOnlineRoomKey] = useState<string | null>(null);
   useEffect(() => {
     const client = onlineClient.current!;
-    const off = client.subscribe(() => {
+    const off = client.subscribeMenu(() => {
       setOnlineView({ ...client.view });
       if (client.view.status === "error") {
         setOnlineRoomKey(null);
@@ -1429,15 +1230,72 @@ export default function App() {
     setConnectionDetails(false);
   }, [onlineRoomKey, onlineTransportReady]);
   const helpMode = isMenu ? selectedMode : snapshot.mode;
+
+  const [assistantReturnScreen,setAssistantReturnScreen]=useState<'home'|'modes'|'prepare'|null>(null);
+  const assistantScope=useRef({key:'',token:crypto.randomUUID()});
+  const assistantInBattle=['playing','paused','won','lost'].includes(snapshot.phase)||!!(onlineView.currentRoom&&onlineView.currentRoom.phase!=='lobby');
+  const assistantKey=(rankingPlayer?.id??'guest')+':'+(pages.active==='assistant')+':'+assistantInBattle;
+  if(assistantScope.current.key!==assistantKey)assistantScope.current={key:assistantKey,token:crypto.randomUUID()};
+  const assistantContext:AssistantMenuContext={token:assistantScope.current.token,inBattle:assistantInBattle,page:'assistant'};
+  const assistantAdmission=useRef<symbol|null>(null);
+  const assistantAction=async(action:AssistantMenuAction,signal:AbortSignal):Promise<string>=>{
+    if(signal.aborted||assistantInBattle||pages.active!=='assistant'||accountBusy)throw Error('当前页面不适合代办，请返回菜单后重试。');
+    const contextToken=assistantScope.current.token,identity=rankingClient.getPlayer()?.id;
+    const valid=()=>{if(signal.aborted||assistantScope.current.token!==contextToken||rankingClient.getPlayer()?.id!==identity)throw Error('操作已取消，请重新提出需求。');};
+    const later=(next:()=>void)=>setTimeout(()=>{if(!signal.aborted&&assistantScope.current.token===contextToken&&rankingClient.getPlayer()?.id===identity)next();},0);
+    const difficulty=(value:'easy'|'normal'|'hard')=>value==='normal'?'standard' as const:value;
+    valid();
+    switch(action.type){
+      case'navigate':
+        later(()=>{if(action.page==='home'||action.page==='modes'){if(onlineClient.current?.view.currentRoom){returnMenu();return;}setAssistantReturnScreen(action.page==='home'?'home':'modes');pages.clear();setOnlineOpen(false);}else openMenuPage(action.page==='help'?'faq':action.page);});
+        return onlineClient.current?.view.currentRoom?'请确认是否离开房间。':'已打开对应菜单。';
+      case'select_mode':{
+        if(onlineClient.current?.view.currentRoom)throw Error('请先离开房间，再选择其他玩法。');
+        const mode=action.mode==='drive'?'dafei':action.mode;
+        if(!guardEntry(entryFor(mode,mode==='escape'?'single':undefined)))throw Error('该玩法暂时不可用。');
+        setSelectedMode(mode);setEscapeEntry('single');setMenuScreen('prepare');setAssistantReturnScreen('prepare');return '玩法已选好。';
+      }
+      case'select_difficulty':if(onlineClient.current?.view.currentRoom)throw Error('房间难度已经确定，请在创建房间时选择。');changeSettings({...settingsRef.current,escapeDifficulty:difficulty(action.difficulty)});return '难度已选好。';
+      case'select_weapon':{
+        const client=onlineClient.current!,room=client.view.currentRoom;
+        if(room){const me=room.players.find(p=>p.id===client.playerId);if(!me)throw Error('房间状态已变化，请重试。');client.send('loadout',{weapon:action.weapon,avatar:me.avatar,team:me.team});return '已提交房间装备选择。';}
+        setPrimary(action.weapon);return '主武器已选好。';
+      }
+      case'setting':{
+        const next={...settingsRef.current};
+        if(action.setting==='music')next.music=Number(action.value);
+        else if(action.setting==='quality')next.quality=action.value as Settings['quality'];
+        else next.reducedMotion=Boolean(action.value);
+        changeSettings(next);return '设置已生效。';
+      }
+      case'create_room':case'join_room':{
+        if(!identity||rankingClient.getPlayer()?.accountStatus!=='active')throw Error('请先在账号页登录，再加入联机。');
+        const client=onlineClient.current!;if(client.view.currentRoom||client.hasResumeSession())throw Error('请先返回原房间或明确离开，再进行此操作。');
+        if(action.type==='create_room'&&!guardEntry(entryFor('escape',action.mode==='coop'?'coop':'pvp',action.mode==='ffa'?'ffa':'tdm')))throw Error('该玩法暂时不可用。');
+        const token=Symbol('assistant-admission');assistantAdmission.current=token;
+        const cancel=()=>{if(assistantAdmission.current===token){assistantAdmission.current=null;void client.leave();}};
+        signal.addEventListener('abort',cancel,{once:true});
+        try{
+          client.playerId=identity;
+          if(action.type==='create_room')await client.join({mode:action.mode==='coop'?'coop':'pvp',variant:action.mode==='ffa'?'ffa':'tdm',difficulty:difficulty(action.difficulty),private:action.private,maxPlayers:action.maxPlayers});
+          else await client.join(undefined,undefined,action.code);
+          valid();const joinedRoom=(client.view as LobbyView).currentRoom;if(!joinedRoom)throw Error(client.view.error||'暂时未能加入房间，请重试。');
+          setSelectedMode('escape');setEscapeEntry(joinedRoom.mode==='coop'?'coop':'pvp');setPvpVariant(joinedRoom.variant);setMenuScreen('prepare');
+          later(()=>{pages.clear();setOnlineOpen(true);});return '已进入房间，请亲自选择准备并开始。';
+        }catch(error){if(assistantAdmission.current===token){assistantAdmission.current=null;await client.leave();}throw error;}finally{signal.removeEventListener('abort',cancel);if(assistantAdmission.current===token)assistantAdmission.current=null;}
+      }
+    }
+  };
+
   const previousMenuPage=useRef(pages.active);
   useEffect(()=>{
     if(previousMenuPage.current&&!pages.active){
       if(onlineView.currentRoom?.phase==='lobby')setOnlineOpen(true);
-      else if(isMenu&&!onlineView.currentRoom){game.current?.cancelModePreparation?.();setPrepareRequested(false);setOnlineOpen(false);setMenuScreen('home');}
+      else if(isMenu&&!onlineView.currentRoom){const destination=previousMenuPage.current==='assistant'?assistantReturnScreen:null;if(destination!=='prepare'){game.current?.cancelModePreparation?.();setPrepareRequested(false);}setOnlineOpen(false);setMenuScreen(destination??'home');setAssistantReturnScreen(null);}
     }
     previousMenuPage.current=pages.active;
-  },[pages.active,isMenu,onlineView.currentRoom?.phase]);
-  const menuRootLabel=onlineView.currentRoom?.phase==='lobby'?'返回房间':isMenu?'返回主菜单':'返回对局菜单';
+  },[pages.active,isMenu,onlineView.currentRoom?.phase,assistantReturnScreen]);
+  const menuRootLabel=onlineView.currentRoom?.phase==='lobby'?'返回房间':pages.active==='assistant'&&assistantReturnScreen==='prepare'?'查看战前准备':isMenu?'返回主菜单':'返回对局菜单';
   const { unread: feedbackUnread } = useFeedbackUnread(isMenu || feedbackOpen);
   const announcementEntry = isMenu && menuScreen !== 'prepare' ? undefined : onlineView.currentRoom ? entryFor('escape', onlineView.currentRoom.mode==='coop'?'coop':'pvp', onlineView.currentRoom.variant==='ffa'?'ffa':'tdm') : isMenu ? selectedEntry : entryFor(snapshot.mode);
   const announcements = useAnnouncements(announcementEntry, operational.config.revision, playing);
@@ -1566,6 +1424,7 @@ export default function App() {
           feedbackUnread={feedbackUnread}
           onFeedback={openFeedback}
           onAssistant={()=>openMenuPage('assistant')}
+          onCredits={()=>openMenuPage('credits')}
           onHelp={() => setShowHelp(true)}
           onFAQ={() => setMenuReading("faq")}
           onUpdates={() => setMenuReading("updates")}
@@ -1654,15 +1513,15 @@ export default function App() {
       {announcements.flash && playing && <div className="announcement-flash" role="status"><strong>{announcements.flash.title}</strong><span>暂停菜单可查看完整通知</span></div>}
       {modeBlocked && <MenuReadingPanel title="玩法暂时不可用" onClose={()=>setModeBlocked(null)}><p>{modeBlocked}</p></MenuReadingPanel>}
       {noticesOpen && <MenuReadingPanel title="游戏通知" onClose={()=>setNoticesOpen(false)}><AnnouncementList items={announcements.list} onRead={announcements.markRead}/></MenuReadingPanel>}
-      {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
+      {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
         {page==='settings'?<SettingsPanel mode={helpMode} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
         page==='help'?<div className="help-panel">{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题 →</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
         page==='faq'?<MenuFAQ mode={helpMode} context={menuScreen==='prepare'?'prepare':'home'}/>:
-        page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCredits={()=>setMenuReading('credits')} onCopyright={()=>openMenuPage('copyright')}/>:
+        page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
         page==='feedback'?<FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/>:
-        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
+        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
       {leaveConfirmation&&<MenuReadingPanel title={leaveDestination==='lobby'?'离开本局并返回联机大厅？':onlineView.currentRoom?'离开房间并返回主菜单？':'结束本局并返回主菜单？'} onClose={()=>setLeaveConfirmation(false)}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位，其他玩家可以继续对局。':storyMode?'故事进度会保留在本机；返回后可以继续上次的故事。':'本局尚未完成，返回会结束当前游玩。'}</p><div className="upgrade-prompt-actions"><button className="secondary" onClick={()=>setLeaveConfirmation(false)}>留在菜单</button><button className="primary" onClick={leaveDestination==='lobby'?finishReturnLobby:finishReturnMenu}>{leaveDestination==='lobby'?'确认返回联机大厅':'确认返回主菜单'}</button></div></MenuReadingPanel>}
@@ -2285,7 +2144,8 @@ export default function App() {
                 setConnectionDetails(true);
               }}
             />
-            <OnlineHUD
+            {snapshot.gadgets&&<GadgetHUD view={snapshot.gadgets} smokes={snapshot.smokes} touch={touchLayout} api={game.current}/>}
+          <OnlineHUD
               interactionScreen={snapshot.interactionScreen}
               selectedTaskId={snapshot.onlineTrackingTaskId}
               interaction={snapshot.interaction}

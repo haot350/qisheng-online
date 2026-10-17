@@ -20,7 +20,7 @@ export function assistantRoutes(c: Context) {
     c.app.post('/v1/assistant/chat', { bodyLimit: 40 * 1024, config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req, reply) => {
         origin(req);
         const b = body(req);
-        allowedKeys(b, ['requestId', 'question', 'history', 'visitorToken']);
+        allowedKeys(b, ['requestId', 'question', 'history', 'visitorToken','menuContext']);
         const admitted = principal(req), turn = s.chat(admitted, req.ip, b as any);
         // Bind disconnect cleanup to the admitted identity, not a later account/session.
         // IncomingMessage close also fires after a normal request body; only response close is cancellation.
@@ -36,11 +36,12 @@ export function assistantRoutes(c: Context) {
 export async function closeAssistant(c: Context) { await services.get(c)?.close(); }
 export function assistantAdminRoutes(c: Context, admin: (req: FastifyRequest, write?: boolean, scope?: string) => any, log: (a: any, action: string, target: string, detail?: any) => void) {
     const s = services.get(c)!;
-    c.app.get('/admin/assistant/config', req => { const a = admin(req, false, 'assistant'), config = safeAssistantConfig(s.store.read()); return a.owner ? config : { ...config, endpoint: '', model: '' }; });
+    const readable=(a:any)=>{const config=safeAssistantConfig(s.store.read());return a.owner?config:{...config,endpoint:'',model:'',generationPrompt:undefined,reviewPrompt:undefined,promptHistory:undefined};};
+    c.app.get('/admin/assistant/config', req => { const a = admin(req, false, 'assistant');return readable(a); });
     c.app.get('/admin/assistant/usage', req => { admin(req, false, 'assistant'); return s.usage(); });
-    c.app.post('/admin/assistant/config', { bodyLimit: 4096 }, req => { const a = admin(req, true, 'assistant'), b = body(req); allowedKeys(b, ['expectedRevision', 'enabled', 'endpoint', 'model', 'apiKey', 'guestDaily', 'accountDaily', 'globalDailyTokens']); const old = s.store.read(), next = s.store.update(b, !!a.owner); if (b.enabled === false)
-        s.disable(); log(a, 'assistant-config-update', 'assistant', { revision: next.revision, enabled: next.enabled, providerChanged: old.endpoint !== next.endpoint || old.model !== next.model, keyChanged: b.apiKey !== undefined, limitsChanged: old.guestDaily !== next.guestDaily || old.accountDaily !== next.accountDaily || old.globalDailyTokens !== next.globalDailyTokens }); const safe = safeAssistantConfig(next); return a.owner ? safe : { ...safe, endpoint: '', model: '' }; });
+    c.app.post('/admin/assistant/config', { bodyLimit: 64*1024 }, req => { const a = admin(req, true, 'assistant'), b = body(req); allowedKeys(b, ['expectedRevision', 'enabled', 'endpoint', 'model', 'apiKey', 'guestDaily', 'accountDaily', 'globalDailyTokens','generationPrompt','reviewPrompt','restoreDefaultPrompts']); const old = s.store.read(), next = s.store.update(b, !!a.owner); if (b.enabled === false)
+        s.disable(); log(a, 'assistant-config-update', 'assistant', { revision: next.revision, enabled: next.enabled, providerChanged: old.endpoint !== next.endpoint || old.model !== next.model, keyChanged: b.apiKey !== undefined,promptsChanged:old.generationPrompt!==next.generationPrompt||old.reviewPrompt!==next.reviewPrompt,restoredDefaults:b.restoreDefaultPrompts===true, limitsChanged: old.guestDaily !== next.guestDaily || old.accountDaily !== next.accountDaily || old.globalDailyTokens !== next.globalDailyTokens }); return readable(a); });
     c.app.post('/admin/assistant/test', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => { const a = admin(req, true, 'assistant'); if (!a.owner)
         throw new AppError('PERMISSION', '只有负责人可以测试模型。', 403); if (body(req).expectedRevision !== s.store.read().revision)
-        throw new AppError('CONFLICT', '设置已改变，请刷新后重试。', 409); const result = await s.test(); log(a, 'assistant-provider-test', 'assistant', { revision: result.revision, ok: true }); return result; });
+        throw new AppError('CONFLICT', '设置已改变，请刷新后重试。', 409); allowedKeys(body(req),['expectedRevision','question']);const result = await s.test(body(req).question as string|undefined); log(a, body(req).question===undefined?'assistant-provider-test':'assistant-prompt-preview', 'assistant', { revision: result.revision, ok: true }); return result; });
 }

@@ -12,6 +12,7 @@ export function onlineInteractionPosition(room:RoomSnapshot,interaction:NearbyIn
  if(!interaction)return null;
  if(interaction.kind==='revive')return room.players.find(p=>p.id===interaction.id)?.position??null;
  if(interaction.kind==='weapon')return room.drops.find(d=>d.id===interaction.id)?.position??null;
+ if(interaction.kind==='gadget')return room.gadgets?.find(g=>g.id===interaction.id)?.position??null;
  if(interaction.kind==='supply')return room.supplies.find(s=>s.id===interaction.id)?.position??null;
  if(interaction.action==='extract')return room.extraction.available?room.extraction.position:null;
  const task=room.tasks.find(t=>t.id===interaction.taskId);if(!task)return null;

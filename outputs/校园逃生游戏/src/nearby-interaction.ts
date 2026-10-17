@@ -4,7 +4,7 @@ export type {NearbyInteraction,NearbyInteractionKind,NearbyInteractionAction} fr
 export interface NearbyInteractionCandidate extends NearbyInteraction {
  position:[number,number,number];range:number;distance:number;
 }
-const priority:Record<NearbyInteractionKind,number>={revive:0,task:1,weapon:2,supply:3};
+const priority:Record<NearbyInteractionKind,number>={revive:0,task:1,weapon:2,gadget:3,supply:4};
 export function resolveNearbyInteraction<T extends NearbyInteractionCandidate>(candidates:readonly T[]):T|null {
  const eligible=candidates.filter(c=>Number.isFinite(c.distance)&&c.distance>=0);
  const actionable=eligible.filter(c=>c.available);

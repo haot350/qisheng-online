@@ -53,7 +53,7 @@ export class RecipientReplicator {
   const players=snapshot.players.filter(p=>p.id!==self.id&&!p.departed&&(sameSide(snapshot,self,p)||!p.loading&&p.life!=='respawning'&&p.life!=='eliminated'&&this.visibility.permits(world,observer,p,snapshot.smokes,snapshot.tick))).map(p=>{allowed.add(p.id);return playerEntity(p,sameSide(snapshot,self,p));});
   const npcs:VisibleNpc[]=snapshot.npcs.filter(n=>n.active&&n.health>0&&this.visibility.permits(world,observer,this.visibility.npcSubject(n,snapshot.tick),snapshot.smokes,snapshot.tick)).map(n=>{allowed.add(n.id);const {health,targetId,...visible}=n;return clone(visible);});
   const {players:_players,npcs:_npcs,events:_events,eventSerial:_eventSerial,...globals}=snapshot;
-  const room:WireRoom={...globals,drops:snapshot.drops.filter(d=>this.visibility.point(world,observer,[d.position[0],d.position[1]+.2,d.position[2]],snapshot.smokes,.3)).map(clone),supplies:snapshot.supplies.map(s=>({...s,position:[...s.position],usedBy:s.usedBy.includes(self.id)?[self.id]:[]})),smokes:snapshot.smokes.filter(s=>distance(observer.position,s.position)<s.radius+1||this.visibility.point(world,observer,s.position,[],s.radius)).map(clone)};
+  const room:WireRoom={...globals,drops:snapshot.drops.filter(d=>this.visibility.point(world,observer,[d.position[0],d.position[1]+.2,d.position[2]],snapshot.smokes,.3)).map(clone),gadgets:(snapshot.gadgets??[]).map(g=>({...g,position:[...g.position],usedBy:g.usedBy.includes(self.id)?[self.id]:[]})),projectiles:(snapshot.projectiles??[]).filter(g=>this.visibility.point(world,observer,g.position,snapshot.smokes,.15)).map(g=>({...clone(g),ownerId:allowed.has(g.ownerId)?g.ownerId:''})),supplies:snapshot.supplies.map(s=>({...s,position:[...s.position],usedBy:s.usedBy.includes(self.id)?[self.id]:[]})),smokes:snapshot.smokes.filter(s=>distance(observer.position,s.position)<s.radius+1||this.visibility.point(world,observer,s.position,[],s.radius)).map(clone)};
   const events:GameEvent[]=[];
   for(const event of snapshot.events){if(event.serial<=this.sourceEvent||this.sourceEvent<0&&event.tick<snapshot.tick-3)continue;const filtered=this.event(event,snapshot,world,self,observer,allowed);if(!filtered)continue;events.push({...filtered,serial:++this.deliveredEvent});}
   this.sourceEvent=snapshot.eventSerial;
@@ -74,6 +74,8 @@ export class RecipientReplicator {
   }
   if(event.type==='death'||event.type==='down')return{...base,data:{headshot:data.headshot,generation:data.generation}};
   if(event.type==='ping'||event.type==='preset'){if(!own&&!ally)return null;return{...base,position:event.position?[...event.position]:undefined,data:event.type==='preset'?{id:data.id}:undefined};}
+  if(event.type==='gadget'){if(!own)return null;return{...base,data:{gadget:data.gadget,action:data.action,left:data.left,damage:data.damage}};}
+  if(event.type==='explosion'){if(!event.position)return null;if(!this.visibility.point(world,observer,event.position,snapshot.smokes,.4)){if(distance(observer.position,event.position)>65)return null;return{serial:event.serial,tick:event.tick,type:'sound',data:{kind:'explosion',bearing:bearing(observer,event.position),distanceBand:distance(observer.position,event.position)<15?'near':distance(observer.position,event.position)<35?'mid':'far'}};}return{...base,actorId:visible||own?event.actorId:undefined,position:[...event.position],data:{radius:data.radius}};}
   if(event.type==='notice'){if(event.actorId&&!own&&!ally&&!visible)return null;return{...base,data:{text:data.text,message:data.message}};}
   if(event.type==='result')return{...base,data:{result:clone(snapshot.result)}};
   if(event.type==='pause')return base;
@@ -82,7 +84,7 @@ export class RecipientReplicator {
   if(event.type==='revive'||event.type==='respawn'){if(!own&&!ally&&!visible)return null;return{...base,...(event.position&&(!event.actorId||allowed.has(event.actorId))?{position:[...event.position] as Vec3}:{})};}
   if(event.type==='pickup'||event.type==='drop'||event.type==='smoke'){
    if(!own&&(!event.position||!this.visibility.point(world,observer,event.position,snapshot.smokes,event.type==='smoke'?5:.3)))return null;
-   return{...base,actorId:visible||own?event.actorId:undefined,position:event.position?[...event.position]:undefined,data:{weapon:data.weapon,...(own?{supply:data.supply,action:data.action}:{})}};
+   return{...base,actorId:visible||own?event.actorId:undefined,position:event.position?[...event.position]:undefined,data:{weapon:data.weapon,...(own?{supply:data.supply,action:data.action,gadget:data.gadget}:{})}};
   }
   return null;
  }

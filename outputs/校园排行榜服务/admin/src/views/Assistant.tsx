@@ -8,22 +8,23 @@ export default function Assistant({administrator}:{administrator:Administrator})
  const usage=useResource<AssistantUsage>('assistant/usage');
  const [draft,setDraft]=useState<AssistantAdminConfig|null>(null);
  const [key,setKey]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [previewQuestion,setPreviewQuestion]=useState('第一次玩校园突围，应该先做什么？'),[previewAnswer,setPreviewAnswer]=useState(''),[restoreConfirm,setRestoreConfirm]=useState(false);
  const notify=useNotify(),mounted=useRef(true),action=useRef<AbortController|null>(null);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;action.current?.abort();};},[]);
  useEffect(()=>{if(resource.data)setDraft({...resource.data});},[resource.data]);
  const dirty=!!draft&&(JSON.stringify(draft)!==JSON.stringify(resource.data)||!!key);
  useEffect(()=>{if(!dirty)return;const leave=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',leave);return()=>window.removeEventListener('beforeunload',leave);},[dirty]);
  const patch=<K extends keyof AssistantAdminConfig>(name:K,value:AssistantAdminConfig[K])=>setDraft(old=>old?{...old,[name]:value}:old);
- async function act(kind:'save'|'test') {
+ async function act(kind:'save'|'test'|'preview'|'restore') {
   if(!draft||busy)return;setBusy(true);setError('');const controller=new AbortController();action.current=controller;
   try {
-   if(kind==='save') {
-    const body={expectedRevision:resource.data!.revision,enabled:draft.enabled,guestDaily:draft.guestDaily,accountDaily:draft.accountDaily,globalDailyTokens:draft.globalDailyTokens,...(administrator.owner?{endpoint:draft.endpoint,model:draft.model,...(key?{apiKey:key}:{})}:{})};
+   if(kind==='save'||kind==='restore') {
+    const body=kind==='restore'?{expectedRevision:resource.data!.revision,restoreDefaultPrompts:true}:{expectedRevision:resource.data!.revision,enabled:draft.enabled,guestDaily:draft.guestDaily,accountDaily:draft.accountDaily,globalDailyTokens:draft.globalDailyTokens,...(administrator.owner?{endpoint:draft.endpoint,model:draft.model,generationPrompt:draft.generationPrompt,reviewPrompt:draft.reviewPrompt,...(key?{apiKey:key}:{})}:{})};
     const result=await api<AssistantAdminConfig>('assistant/config',body,controller.signal);
-    if(mounted.current){resource.setData(result);setDraft({...result});setKey('');notify('小齐设置已保存');}
+    if(mounted.current){resource.setData(result);setDraft({...result});setKey('');setPreviewAnswer('');setRestoreConfirm(false);notify(kind==='restore'?'默认提示词已恢复，请重新测试后启用':'小齐设置已保存');}
    } else {
-    await api('assistant/test',{expectedRevision:resource.data!.revision},controller.signal,65000);
-    if(mounted.current){resource.reload();usage.reload();notify('生成与审核均已通过，可以启用小齐');}
+    const result=await api<{answer?:string}>('assistant/test',{expectedRevision:resource.data!.revision,...(kind==='preview'?{question:previewQuestion}:{})},controller.signal,65000);
+    if(mounted.current){if(kind==='test')resource.reload();else setPreviewAnswer(result.answer??'');usage.reload();notify(kind==='preview'?'预览已通过独立审核':'生成与审核均已通过，可以启用小齐');}
    }
   } catch(e) {if(!controller.signal.aborted&&mounted.current){setError((e as Error).message);if(kind==='test'){resource.reload();usage.reload();}}}
   finally {if(mounted.current)setBusy(false);if(action.current===controller)action.current=null;}
@@ -53,6 +54,17 @@ export default function Assistant({administrator}:{administrator:Administrator})
     </Panel>
    </form>}
   </Load>
+  {administrator.owner&&draft&&<Panel title="回答与审核提示词">
+   <p className="muted">可调整小齐的语气、回答方式与审核偏好。权限边界、密钥隔离和独立审核始终由服务端执行，不能通过提示词取消。修改后先保存，再测试并启用。</p>
+   <Field label="回答风格与补充要求"><textarea rows={8} maxLength={8000} value={draft.generationPrompt??''} disabled={busy} onChange={e=>patch('generationPrompt',e.target.value)}/></Field>
+   <Field label="独立审核补充要求"><textarea rows={7} maxLength={8000} value={draft.reviewPrompt??''} disabled={busy} onChange={e=>patch('reviewPrompt',e.target.value)}/></Field>
+   <div className="form-actions"><button className="primary" disabled={busy||!dirty} onClick={()=>void act('save')}>保存提示词与设置</button><button disabled={busy||dirty} onClick={()=>setRestoreConfirm(true)}>恢复默认提示词</button></div>
+   {restoreConfirm&&<div role="alert"><p>恢复默认提示词并暂时关闭小齐？模型、密钥和额度将保留，重新测试后可启用。</p><button disabled={busy} onClick={()=>void act('restore')}>确认恢复</button><button disabled={busy} onClick={()=>setRestoreConfirm(false)}>取消</button></div>}
+   {!!draft.promptHistory?.length&&<details><summary>历史修订（{draft.promptHistory.length}）</summary>{draft.promptHistory.map(row=><article key={row.revision}><p>修订 {row.revision} · {new Date(row.changedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</p><details><summary>查看内容</summary><p style={{whiteSpace:'pre-wrap'}}>{row.generationPrompt}</p><p style={{whiteSpace:'pre-wrap'}}>{row.reviewPrompt}</p></details><button disabled={busy} onClick={()=>setDraft(old=>old?{...old,generationPrompt:row.generationPrompt,reviewPrompt:row.reviewPrompt}:old)}>载入为草稿</button></article>)}</details>}
+   <Field label="预览问题"><textarea rows={3} maxLength={1500} value={previewQuestion} disabled={busy} onChange={e=>setPreviewQuestion(e.target.value)}/></Field>
+   <button disabled={busy||dirty||!draft.keyConfigured||!previewQuestion.trim()} onClick={()=>void act('preview')}>{busy?'正在生成并审核…':'预览已保存的提示词'}</button>
+   {previewAnswer&&<article aria-label="已审核预览" style={{whiteSpace:'pre-wrap'}}><h3>已审核回答</h3><p>{previewAnswer}</p></article>}
+  </Panel>}
   <Panel title="今日使用"><Load loading={usage.loading} error={usage.error} retry={usage.reload}>{stats&&<>
    <div className="assistant-usage"><article><small>{stats.day} · Token</small><strong>{stats.tokens.toLocaleString()} / {stats.dailyBudget.toLocaleString()}</strong></article><article><small>处理轮数</small><strong>{stats.turns}</strong></article><article><small>正在处理</small><strong>{stats.active} / 3</strong></article><article><small>平均耗时</small><strong>{(stats.averageMs/1000).toFixed(1)}秒</strong></article></div>
    <p className="muted">通过 {stats.approved} · 未通过审核 {stats.rejected} · 请求失败 {stats.failed}。只统计用量和结果，不保留聊天正文。</p>

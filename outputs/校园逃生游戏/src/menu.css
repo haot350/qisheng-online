@@ -96,3 +96,20 @@
 }
 
 .menu-home-cta{display:flex;align-items:center;justify-content:space-between;gap:48px;min-width:220px;min-height:56px;padding:14px 24px;margin:28px 0 0;background:#8c4738;color:#fff;border:1px solid #8c4738;font:700 20px/1.3 inherit;box-shadow:0 5px 18px #46362922;cursor:pointer}.menu-home-cta:hover{background:#783b2f}.menu-home-cta:focus-visible{outline:3px solid #934e3d;outline-offset:4px}@media(max-width:900px) and (orientation:portrait){.menu-home-cta{width:min(300px,100%);margin:20px auto 0}}@media(orientation:landscape) and (max-height:500px){.menu-home-cta{min-width:190px;min-height:48px;margin-top:18px;padding:10px 18px;font-size:17px}}
+
+/* Short wide phones must use one layout policy; the desktop absolute rail
+   cannot inherit the mobile forty-six-percent width. */
+@media (min-width:901px) and (max-width:1050px) and (orientation:landscape) and (max-height:500px){
+ .menu-home{display:flex;flex-direction:row;flex-wrap:wrap}
+ .menu-home .menu-main-content{display:contents;margin-left:0}
+ .menu-home .menu-landing{order:0;flex:1 1 40%;width:44%;min-height:295px;box-sizing:border-box}
+ .menu-home .menu-navigation-home{order:1;position:static;inset:auto;flex:1 1 44%;width:46%;background:transparent;border:0;overflow:visible;box-sizing:border-box}
+ .menu-home .menu-navigation-name{display:none}
+ .menu-home .menu-footer{order:2;flex-basis:100%;margin-top:auto}
+}
+
+/* Grid children must shrink within a narrow phone instead of clipping the
+   right-hand mode button and weapon cards behind the page overflow. */
+.menu-prep-grid>*,.menu-prep-options,.menu-prep-scroll{min-width:0}
+.menu-choice-row button{min-width:0;overflow-wrap:anywhere}
+@media(max-width:900px){.menu-prep-grid{grid-template-columns:minmax(0,1fr)}.menu-difficulty-choice select{max-width:100%}}

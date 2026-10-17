@@ -6,6 +6,31 @@ on:
 permissions:
   contents: read
 jobs:
+  clean-windows-demo:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check source environment
+        run: node scripts/check-environment.mjs --native
+      - name: Install locked source modules
+        shell: bash
+        run: |
+          for module in 校园共享模块 校园逃生游戏 校园排行榜服务 校园联机服务 校园交互网站/site; do
+            (cd "outputs/$module" && npm ci --no-audit --no-fund)
+          done
+      - name: Build default demo and backend source
+        shell: bash
+        run: |
+          for module in 校园共享模块 校园逃生游戏 校园排行榜服务 校园联机服务 校园交互网站/site; do
+            (cd "outputs/$module" && npm run build)
+          done
+          node scripts/public-source.mjs --check
+      - name: Verify isolated account API and two demo clients
+        run: node scripts/verify-demo.mjs
   clean-linux-demo:
     runs-on: ubuntu-latest
     timeout-minutes: 15

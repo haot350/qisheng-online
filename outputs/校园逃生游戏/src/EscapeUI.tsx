@@ -5,6 +5,8 @@ import type { EscapeTaskSnapshot } from './escape';
 import './escape-hud.css';
 import { useModalFocus } from './modal-focus';
 import { WEAPONS } from './rules';
+import {GadgetHUD} from './GadgetHUD';
+import {GADGET_LABELS} from '@qisheng/shared/gadgets';
 import { FPSVitals,FPSAmmo } from './FPSCombatHUD';
 import type { GameAPI,Settings,Snapshot } from './types';
 export { EscapeTouchControls,EscapeTouchEditor,EscapeTouchSettings } from './EscapeTouchUI';
@@ -21,7 +23,7 @@ export function EscapeHUD({snapshot,api,onPause,onFullscreen,touch,children}:{sn
  const block=round.extractionAvailable?round.extractionBlockReason:selected?.blockReason;
  const waiting=block==='contested'?'追兵进入范围，击倒或引开他们':block==='outside'?'回到标记范围继续':null;
  const progress=round.extractionAvailable?round.extractionProgress:selected?.kind==='hold'&&selected.state==='active'?selected.progress:0,duration=round.extractionAvailable?round.extractionDuration:selected?.task.duration??1;
- const interaction=snapshot.interaction,interactionTask=interaction?.taskId?round.tasks.find(t=>t.id===interaction.taskId):undefined,interactionLabel=interaction?.kind==='task'?(interaction.action==='extract'?'校门撤离':interactionTask?.name??'任务目标'):interaction?.kind==='weapon'?WEAPONS[interaction.weapon as keyof typeof WEAPONS]?.label??'掉落武器':interaction?.kind==='supply'?(round.supplies?.find(s=>s.id===interaction.id)?.name??'补给箱'):'';
+ const interaction=snapshot.interaction,interactionTask=interaction?.taskId?round.tasks.find(t=>t.id===interaction.taskId):undefined,interactionLabel=interaction?.kind==='task'?(interaction.action==='extract'?'校门撤离':interactionTask?.name??'任务目标'):interaction?.kind==='weapon'?WEAPONS[interaction.weapon as keyof typeof WEAPONS]?.label??'掉落武器':interaction?.kind==='gadget'?GADGET_LABELS[interaction.action]:interaction?.kind==='supply'?(round.supplies?.find(s=>s.id===interaction.id)?.name??'补给箱'):'';
  const action=round.graceLeft>0?'准备出发 · '+Math.ceil(round.graceLeft)+' 秒':round.extractionAvailable?(round.phase==='extraction'?'守住撤离范围':'前往校门，互动开始撤离'):selected?.currentAction??'选择任务，准备出发';
  const destinationFloor=round.extractionAvailable?0:site?.floor??0;
  return <div className={'hud escape-hud fps-hud'+(touch?' fps-hud-touch':'')}>
@@ -31,6 +33,7 @@ export function EscapeHUD({snapshot,api,onPause,onFullscreen,touch,children}:{sn
   {children}
   <FPSVitals health={snapshot.health} stamina={snapshot.stamina} touch={touch}/>
   <FPSAmmo weapon={snapshot.weapon} ammo={snapshot.ammo} reserve={snapshot.reserve} action={snapshot.weaponAction} reloading={snapshot.reloading} touch={touch}/>
+  {snapshot.gadgets&&<GadgetHUD view={snapshot.gadgets} smokes={snapshot.smokes} touch={touch} api={api}/>}
   {interaction&&<NearbyInteractionUI interaction={interaction} screen={snapshot.interactionScreen} label={interactionLabel} touch={touch} onPress={pressed=>api?.action('interact',pressed)} loading={interaction.kind==='weapon'&&snapshot.pickup?.loading} error={interaction.kind==='weapon'&&snapshot.pickup?.error}/>}
   {snapshot.notice&&<p className="fps-notice" role="status">{snapshot.notice}</p>}{snapshot.musicError&&<button type="button" className="fps-music-retry" onClick={()=>api?.retryMusic()}>音乐未载入 · 重试</button>}
  </div>;

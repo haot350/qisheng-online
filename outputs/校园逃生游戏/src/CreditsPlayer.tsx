@@ -4,7 +4,7 @@ import {BrandLogo} from './BrandLogo';
 import {staticAssetUrl} from './static-assets';
 import './credits.css';
 
-export type CreditsPlayerProps={active?:boolean;volume?:number;onClose:()=>void;onCopyright?:()=>void};
+export type CreditsPlayerProps={active?:boolean;volume?:number;reducedMotion?:boolean;onClose:()=>void;onCopyright?:()=>void};
 const clock=(seconds:number)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
 const icon=(brand:string)=>staticAssetUrl(`/credits/icons/${brand}.svg`);
 
@@ -21,8 +21,11 @@ export function CreditsContent(){return <>
 </>;}
 
 /** No simulation, account or network state is owned by this presentation. */
-export function CreditsPlayer({active=true,volume=.6,onClose,onCopyright}:CreditsPlayerProps){
- const [playing,setPlaying]=useState(false),[time,setTime]=useState(0),[muted,setMuted]=useState(false),[staticMode,setStaticMode]=useState(()=>typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches),[audioError,setAudioError]=useState(false);
+export function CreditsPlayer({active=true,volume=.6,reducedMotion=false,onClose,onCopyright}:CreditsPlayerProps){
+ const [playing,setPlaying]=useState(false),[time,setTime]=useState(0),[muted,setMuted]=useState(false),[staticMode,setStaticMode]=useState(()=>reducedMotion||typeof document!=='undefined'&&document.documentElement.dataset.motion==='reduced'||typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches),[audioError,setAudioError]=useState(false),[controlsVisible,setControlsVisible]=useState(true);
+ const idleTimer=useRef<ReturnType<typeof setTimeout>|null>(null),keyboardFocus=useRef(false);
+ const revealControls=useCallback(()=>{if(idleTimer.current!==null)clearTimeout(idleTimer.current);idleTimer.current=null;setControlsVisible(true);if(active&&playing&&!staticMode&&!audioError&&!keyboardFocus.current)idleTimer.current=setTimeout(()=>{idleTimer.current=null;setControlsVisible(false);},2500);},[active,playing,staticMode,audioError]);
+ useEffect(()=>{revealControls();return()=>{if(idleTimer.current!==null)clearTimeout(idleTimer.current);idleTimer.current=null;};},[revealControls]);
  const viewport=useRef<HTMLDivElement>(null),track=useRef<HTMLDivElement>(null),audio=useRef<HTMLAudioElement|null>(null),position=useRef(0),distance=useRef(0),visible=useRef(typeof document==='undefined'||!document.hidden),running=useRef(false),volumeRef=useRef(volume);volumeRef.current=volume;
  const paint=useCallback(()=>{if(track.current)track.current.style.transform=staticMode?'none':`translate3d(0,${-distance.current*position.current/CREDITS_DURATION_SECONDS}px,0)`;},[staticMode]);
  useEffect(()=>{if(!active)return;const element=new Audio();element.preload='none';element.src=staticAssetUrl('/credits/wildflowers.mp3');element.volume=Math.max(0,Math.min(1,volume));element.muted=muted;const error=()=>setAudioError(true);element.addEventListener('error',error);audio.current=element;return()=>{element.pause();element.removeAttribute('src');element.load();element.removeEventListener('error',error);audio.current=null;};},[active]);
@@ -36,7 +39,11 @@ export function CreditsPlayer({active=true,volume=.6,onClose,onCopyright}:Credit
  const replay=()=>{seek(0);if(!staticMode)start();viewport.current?.scrollTo({top:0});};
  const changeMode=()=>{setPlaying(false);audio.current?.pause();setStaticMode(value=>!value);};
  useEffect(()=>{if(!active)return;const key=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();onClose();}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[active,onClose]);
- return <section className={'film-credits'+(staticMode?' film-credits-static':'')} aria-label="齐盛Online制作名单" hidden={!active}>
+ return <section className={'film-credits'+(staticMode?' film-credits-static':'')+(!controlsVisible?' film-credits-controls-hidden':'')} aria-label="齐盛Online制作名单" hidden={!active}
+  onPointerMove={revealControls} onPointerDown={()=>{keyboardFocus.current=false;revealControls();}}
+  onKeyDownCapture={()=>{keyboardFocus.current=true;revealControls();}}
+  onFocusCapture={event=>{if(event.target.matches(':focus-visible')){keyboardFocus.current=true;revealControls();}}}
+  onBlurCapture={event=>{if(!event.currentTarget.contains(event.relatedTarget)){keyboardFocus.current=false;revealControls();}}}>
   <header className="film-credits-top"><span>齐盛Online · 制作名单</span><button onClick={onClose} aria-label="退出制作名单">退出 <span aria-hidden="true">×</span></button></header>
   <div className="film-credits-viewport" ref={viewport} tabIndex={0} aria-label={staticMode?'制作名单全文':'滚动制作名单'}><div className="film-credits-track" ref={track}><CreditsContent/></div></div>
   {!staticMode&&!playing&&time===0&&<div className="film-credits-start"><button onClick={start}>播放制作名单 <span aria-hidden="true">▶</span></button></div>}

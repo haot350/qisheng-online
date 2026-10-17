@@ -4,6 +4,7 @@ import { gameMapSession } from "../game-map";
 import { gameOperations } from '../game-operations';
 import { entryFor, ModeUnavailableError } from '../game-config-store';
 import { OnlineClock } from "./netcode";
+import { sameMenuView } from './menu-view';
 import { WireDecoder, type RoomWireMessage } from "./shared/wire";
 import {
   PROTOCOL_VERSION,
@@ -134,6 +135,10 @@ export class OnlineClient {
     return () => {
       this.listeners.delete(fn);
     };
+  }
+  subscribeMenu(fn: () => void) {
+    let previous=this.view;
+    return this.subscribe(()=>{const next=this.view;if(sameMenuView(previous,next))return;previous=next;fn();});
   }
   onSnapshot(fn: (s: RoomSnapshot) => void) {
     this.snapshots.add(fn);

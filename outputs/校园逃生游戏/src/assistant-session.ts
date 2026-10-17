@@ -1,9 +1,9 @@
 import {rankingClient} from './ranking/client';
 import {SessionOperations} from './session-flow';
-import type {AssistantFeedbackDraft,AssistantStatus as PublicAssistantStatus,AssistantChatReply} from '@qisheng/shared/assistant';
+import type {AssistantFeedbackDraft,AssistantStatus as PublicAssistantStatus,AssistantChatReply,AssistantActionPlan,AssistantMenuContext} from '@qisheng/shared/assistant';
 
 export type AssistantDraft=AssistantFeedbackDraft;
-export type AssistantTurn={id:string;question:string;answer:string;feedbackDraft?:AssistantDraft;createdAt:number};
+export type AssistantTurn={id:string;question:string;answer:string;feedbackDraft?:AssistantDraft;actionPlan?:AssistantActionPlan;toolResult?:string;createdAt:number};
 export type AssistantStatus=PublicAssistantStatus;
 export type AssistantResult=AssistantChatReply;
 const HISTORY_KEY='qisheng-assistant-history-v1',VISITOR_KEY='qisheng-assistant-visitor-v1';
@@ -16,10 +16,10 @@ rankingClient.subscribe(()=>{const next=owner();if(next===historyOwner)return;hi
 export function clearAssistantHistory(){try{localStorage.removeItem(HISTORY_KEY);}catch{}}
 export function readAssistantHistory():AssistantTurn[]{
  try{const value=JSON.parse(localStorage.getItem(HISTORY_KEY)||'null');if(value?.owner!==owner()||!Array.isArray(value.turns)){clearAssistantHistory();return [];}
-  return value.turns.filter((v:AssistantTurn)=>v&&typeof v.question==='string'&&typeof v.answer==='string'&&v.question.length<=1500&&v.answer.length<=12000).slice(-30);
+  return value.turns.filter((v:AssistantTurn)=>v&&typeof v.question==='string'&&typeof v.answer==='string'&&v.question.length<=1500&&v.answer.length<=12000).slice(-30).map(({actionPlan:_,...turn}:AssistantTurn)=>turn);
  }catch{return [];}
 }
-export function saveAssistantHistory(turns:AssistantTurn[]){try{localStorage.setItem(HISTORY_KEY,JSON.stringify({owner:owner(),turns:turns.slice(-30)}));}catch{}}
+export function saveAssistantHistory(turns:AssistantTurn[]){try{localStorage.setItem(HISTORY_KEY,JSON.stringify({owner:owner(),turns:turns.slice(-30).map(({actionPlan:_,...turn})=>turn)}));}catch{}}
 export class AssistantSession{
  private operations=new SessionOperations<string>();
  private pending:{id:string;controller:AbortController;visitorToken?:string}|null=null;
@@ -30,11 +30,11 @@ export class AssistantSession{
   try{localStorage.setItem(VISITOR_KEY,JSON.stringify(value));}catch{}
   return value.visitorToken;
  }
- async ask(question:string,turns:AssistantTurn[],onReady?:(id:string)=>void){
+ async ask(question:string,turns:AssistantTurn[],onReady?:(id:string)=>void,menuContext?:AssistantMenuContext){
   this.cancel();const operation=this.operations.begin('assistant')!,controller=new AbortController(),id=crypto.randomUUID();
   this.pending={id,controller};activeCancel=()=>this.cancel();onReady?.(id);
   try{const visitorToken=await this.visitor(controller.signal);if(!this.operations.current(operation,'assistant')||controller.signal.aborted)throw new DOMException('Cancelled','AbortError');this.pending!.visitorToken=visitorToken;
-   const value=await rankingClient.request<AssistantResult>('/assistant/chat',{method:'POST',signal:controller.signal,timeout:65000,body:{requestId:id,question,history:turns.slice(-6).map(({question,answer})=>({question,answer})),...(visitorToken?{visitorToken}:{})}});
+   const value=await rankingClient.request<AssistantResult>('/assistant/chat',{method:'POST',signal:controller.signal,timeout:65000,body:{requestId:id,question,history:turns.slice(-6).map(({question,answer,toolResult})=>({question,answer:(answer+(toolResult?'\n本机菜单实际结果：'+toolResult:'')).slice(0,2000)})),...(visitorToken?{visitorToken}:{}),...(menuContext?{menuContext}:{})}});
    if(!this.operations.current(operation,'assistant')||controller.signal.aborted||value.requestId!==id)throw new DOMException('Cancelled','AbortError');
    if(typeof value.answer!=='string'||!value.answer.trim())throw new Error('ASSISTANT_UNAVAILABLE');
    return value;

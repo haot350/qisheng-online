@@ -1,14 +1,14 @@
 /** Pure, browser/server shared ranking rules. Canonical @qisheng/shared module. */
-export const RANKING_RULE_VERSION='campus-2026-0.7.0';
-export const COOP_RULE_VERSION='coop-2026-0.7.0';
-export const DAFEI_RULE_VERSION='dafei-2026-0.7.0';
-export const ESCAPE_RULE_VERSIONS=Object.freeze(['campus-2026-0.4.0',RANKING_RULE_VERSION]);
-export const DAFEI_OLD_BEST_KEYS=Object.freeze(['qisheng-game-dafei-best:dafei-2026-0.6.5','qisheng-game-dafei-best']);
+export const RANKING_RULE_VERSION='campus-2026-0.9.0';
+export const COOP_RULE_VERSION='coop-2026-0.9.0';
+export const DAFEI_RULE_VERSION='dafei-2026-0.9.0';
+export const ESCAPE_RULE_VERSIONS=Object.freeze(['campus-2026-0.4.0','campus-2026-0.7.0',RANKING_RULE_VERSION]);
+export const DAFEI_OLD_BEST_KEYS=Object.freeze(['qisheng-game-dafei-best:dafei-2026-0.7.0','qisheng-game-dafei-best:dafei-2026-0.6.5','qisheng-game-dafei-best']);
 export type RankingMode='escape'|'dafei';
 export function rankingRuleVersion(mode:RankingMode){return mode==='dafei'?DAFEI_RULE_VERSION:RANKING_RULE_VERSION;}
 export interface DriveRankingRules {round:number;durability:number;repairAmount:number;stun:number;minimumImpactSpeed:number;baseScore:number;comboWindow:number;maxCombo:number;resetPenalty:number;}
 const driveRules=():Readonly<DriveRankingRules>=>Object.freeze({round:300,durability:400,repairAmount:200,stun:10,minimumImpactSpeed:3,baseScore:100,comboWindow:20,maxCombo:4,resetPenalty:50});
-export const DRIVE_RANKING_RULES:Readonly<Record<string,Readonly<DriveRankingRules>>>=Object.freeze({'campus-2026-0.4.0':driveRules(),'dafei-2026-0.6.5':driveRules(),[DAFEI_RULE_VERSION]:driveRules()});
+export const DRIVE_RANKING_RULES:Readonly<Record<string,Readonly<DriveRankingRules>>>=Object.freeze({'campus-2026-0.4.0':driveRules(),'dafei-2026-0.6.5':driveRules(),'dafei-2026-0.7.0':driveRules(),[DAFEI_RULE_VERSION]:driveRules()});
 export function rankingRuleSupported(mode:RankingMode,version:string){return mode==='escape'?ESCAPE_RULE_VERSIONS.includes(version):mode==='dafei'&&Object.hasOwn(DRIVE_RANKING_RULES,version);}
 export const DAFEI_BEST_KEY='qisheng-game-dafei-best:'+DAFEI_RULE_VERSION;
 export const LEGACY_DAFEI_BEST_KEY='qisheng-game-dafei-best';
@@ -20,7 +20,7 @@ export interface RankingPlayer{id:string;nickname:string;shortId:string;renameAt
 export interface RankingAuth{player:RankingPlayer;token:string;expiresAt:number;recoveryCode?:string;}
 export interface RankingTask{id:string;kind:'take'|'activate'|'hold'|'deliver';label:string;duration:number;radius:number;sites:Array<{id:string;label:string;region:string;position:[number,number,number];floor?:number}>;}
 export interface RankingRunConfig{mode:RankingMode;difficulty?:RankingDifficulty;ruleVersion:string;seed:number;weapon:string;roster:string[];tasks:RankingTask[];controls:RankingControls;transmission?:RankingTransmission;}
-export interface RankingEvent{seq:number;t:number;order:number;type:'task-interact'|'task-start'|'task-progress'|'task-complete'|'extract-start'|'extract-progress'|'shot'|'down'|'damage'|'hit'|'recover'|'repair'|'reset'|'controls'|'transmission'|'npc-spawn';data:Record<string,unknown>;}
+export interface RankingEvent{seq:number;t:number;order:number;type:'task-interact'|'task-start'|'task-progress'|'task-complete'|'extract-start'|'extract-progress'|'shot'|'down'|'damage'|'hit'|'recover'|'repair'|'reset'|'controls'|'transmission'|'npc-spawn'|'gadget';data:Record<string,unknown>;}
 export interface RankingSummary{won:boolean;elapsed:number;score:number;hits?:number;bestCombo?:number;damage?:number;headshots?:number;downs?:number;uniqueDowns?:number;completed?:number;repairCount?:number;resetCount?:number;controls:RankingControls;transmission?:RankingTransmission;reason?:string;}
 export interface RankingTicket{runId:string;credential:string;expiresAt:number;recordStats?:boolean;publishBoard?:boolean;}
 export interface RankingSubmission{mode?:RankingMode;difficulty?:RankingDifficulty;submittedAt?:number;runId:string;status:'ranked'|'review'|'rejected'|'unranked';reason?:string;summary:RankingSummary;newAchievements?:string[];published?:boolean;recordStats?:boolean;recorded?:boolean;}

@@ -15,7 +15,7 @@ export type EscapeEvent=
  |{type:'ammo-reward';taskId:string;magazines:number;shotgunShells:number}
  |{type:'investigation';position:EscapeVec3;taskId:string}
  |{type:'task-started';taskId:string;kind:EscapeTaskKind}
- |{type:'reinforcements';count:2}
+ |{type:'reinforcements';count:3}
  |{type:'extraction-available'}
  |{type:'extraction-started'}
  |{type:'extraction-interrupted';reason:'outside'|'contested'}
@@ -24,7 +24,7 @@ export type EscapeEvent=
 export interface EscapeRoundFrame {position:EscapeVec3;interactPressed?:boolean;canInteract?:(site:EscapeSite)=>boolean;contested?:boolean|((task:EscapeTask)=>boolean);extractionClear?:boolean;paused?:boolean;blocked?:boolean;}
 export interface EscapeStats {damage:number;headshots:number;downs:number;uniqueDowns:number;completed:number;elapsed:number;}
 export interface EscapeResult {won:boolean;score:number;rating:'S'|'A'|'B'|'C'|null;grade:'S'|'A'|'B'|'C'|null;remaining:number;stats:EscapeStats;advice:string;breakdown:{tasks:number;extraction:number;time:number;downs:number;headshots:number;health:number};}
-export interface EscapeSnapshot {interactionAvailable?:boolean;phase:EscapePhase;difficulty:EscapeDifficulty;elapsed:number;remaining:number;graceLeft:number;completed:number;activeNPCs:4|6;time:number;missionComplete:number;reinforcement:boolean;tasks:EscapeTaskSnapshot[];extractionPosition:EscapeVec3|null;extractionAvailable:boolean;extractionProgress:number;extractionBlockReason:'outside'|'contested'|null;extractionDuration:number;result:EscapeResult|null;}
-export interface EscapeMovementInput {sprintHeld:boolean;slidePressed?:boolean;moving:boolean;speed:number;grounded:boolean;routeSafe:boolean;onStairs?:boolean;aiming?:boolean;direction?:[number,number];paused?:boolean;blocked?:boolean;}
+export interface EscapeSnapshot {interactionAvailable?:boolean;phase:EscapePhase;difficulty:EscapeDifficulty;elapsed:number;remaining:number;graceLeft:number;completed:number;activeNPCs:6|9;time:number;missionComplete:number;reinforcement:boolean;tasks:EscapeTaskSnapshot[];extractionPosition:EscapeVec3|null;extractionAvailable:boolean;extractionProgress:number;extractionBlockReason:'outside'|'contested'|null;extractionDuration:number;result:EscapeResult|null;}
+export interface EscapeMovementInput {staminaFree?:boolean;sprintHeld:boolean;slidePressed?:boolean;moving:boolean;speed:number;grounded:boolean;routeSafe:boolean;onStairs?:boolean;aiming?:boolean;direction?:[number,number];paused?:boolean;blocked?:boolean;}
 export interface EscapeMovementOutput {speed:number;stamina:number;sprinting:boolean;sliding:boolean;slideLeft:number;slideCooldown:number;slideDirection:[number,number]|null;canAim:boolean;hipSpread:number;forcedLow:boolean;slideStarted:boolean;slideEnded:boolean;}
 export interface EscapeTaskSnapshot extends EscapeTaskState {id:string;type:EscapeTaskKind;kind:EscapeTaskKind;name:string;state:EscapeTaskStatus;positions:EscapeVec3[];floors:number[];selected:boolean;blockReason:'outside'|'contested'|null;currentAction:string;}

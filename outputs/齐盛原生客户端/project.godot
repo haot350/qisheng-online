@@ -1,0 +1,38 @@
+; Godot 4.7.2 native project. Formal campus data is generated locally, never committed.
+config_version=5
+
+[application]
+config/name="齐盛Online · 原生技术预览"
+config/icon="res://icon.svg"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/version="native-m1"
+
+[display]
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/size/window_width_override=1440
+window/size/window_height_override=900
+window/stretch/mode="canvas_items"
+window/handheld/orientation=1
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=1
+environment/defaults/default_clear_color=Color(0.055, 0.069, 0.078, 1)
+
+[physics]
+common/physics_ticks_per_second=60
+
+[network]
+limits/debugger/max_queued_messages=256
+
+[debug]
+gdscript/warnings/untyped_declaration=0
+gdscript/warnings/unsafe_method_access=0
+gdscript/warnings/unsafe_property_access=0
+gdscript/warnings/unsafe_call_argument=0
+gdscript/warnings/unsafe_cast=0

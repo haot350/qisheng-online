@@ -51,7 +51,7 @@ test('a late map-close result cannot schedule a replacement escape session',asyn
 });
 function movementScope(blockMotion=false){
  const position=new THREE.Vector3(),camera=new THREE.PerspectiveCamera(68,1,.1,500),steps=[],motionSamples=[];
- const scope={ranked:null,THREE,UP:new THREE.Vector3(0,1,0),phaseActive:()=>true,buffering:false,escapeMapOpen:false,safetyChecks:0,refreshStreaming(full){assert.equal(full,false,'substeps only run the lightweight safety query');scope.safetyChecks++;},directions:{update(){}},kick:{update(){},yaw:0,pitch:0},effects:{update(){}},
+ const scope={gadgetInventory:{cardsUntil:0},updateGadgets(){},ranked:null,THREE,UP:new THREE.Vector3(0,1,0),phaseActive:()=>true,buffering:false,escapeMapOpen:false,safetyChecks:0,refreshStreaming(full){assert.equal(full,false,'substeps only run the lightweight safety query');scope.safetyChecks++;},directions:{update(){}},kick:{update(){},yaw:0,pitch:0},effects:{update(){}},
  WEAPONS,RULES,adsFieldOfView,equipLeft:0,adsBlend:0,updateNearWall(){},syncScopedView(){},updateDrops(){},weapon:'glock',mode:'escape',elapsed:0,emitClock:0,input:{sample:()=>({moveX:0,moveY:1,lookX:0,lookY:0,fire:false,aim:false,crouch:false,actions:new Set()})},
  photo:null,story:null,storyWorld:null,storyOverlayOpen:false,storyFastWalk:false,noticeLeft:0,notice:'',hurt:0,hit:0,recoil:0,smokeReady:0,
  settings:{sensitivity:1,aimAssist:false,headBob:false,recoilShake:false,fov:68},touchControls:()=>false,yaw:0,pitch:0,crouched:false,aiming:false,
@@ -80,19 +80,19 @@ test('wall pushing produces no footstep, while actual horizontal travel does',()
  moving.buffering=false;moving.escapeMapOpen=true;for(let i=0;i<60;i++)updateMoving(1/60);assert.equal(moving.elapsed,elapsed);assert.ok(moving.position.equals(position));
 });
 const site=(id,x)=>({id,label:id,region:'teaching',position:[x,0,0],floor:0});
-test('the real round enables all six stable slots after task two without changing identities',()=>{
+test('the real round enables all nine stable slots after task two without changing identities',()=>{
  const sites=[site('one',0),site('two',20),site('three',40)],plan={seed:17,difficulty:'standard',spawn:[0,0,0],extraction:site('gate',-20),tasks:sites.map((s,i)=>({id:'take-'+i,kind:'take',label:s.label,sites:[s],duration:0,radius:2.4}))};
  const round=new EscapeRound({difficulty:'standard',plan});
- assert.equal(round.snapshot().activeNPCs,4);
+ assert.equal(round.snapshot().activeNPCs,6);
  round.update(1/60,{position:sites[0].position,interactPressed:true});
  const events=round.update(1/60,{position:sites[1].position,interactPressed:true});
- assert.equal(events.filter(e=>e.type==='reinforcements').length,1);assert.equal(round.snapshot().activeNPCs,6);
+ assert.equal(events.filter(e=>e.type==='reinforcements').length,1);assert.equal(round.snapshot().activeNPCs,9);
  const before=round.elapsed;round.update(99,{position:sites[2].position,blocked:true});assert.equal(round.elapsed,before);
  const slots=Object.keys(NPC_IDENTITY).map((identity,id)=>({id,identity,reenterAt:Infinity,respawnProbe:1})),identities=slots.map(n=>n.identity);
  const scope={WEAPONS,taskInteractionSites,escapeRound:{snapshot:()=>round.snapshot(),update:()=>events,elapsed:round.elapsed,extractionProgress:0,extractionAvailable:false},escapePlan:plan,position:new THREE.Vector3(20,0,0),camera:{position:new THREE.Vector3(20,1.7,0)},npcs:slots,world:{manifest:{supplies:[],extraction:[-20,0,0]},rayDistance:()=>Infinity},ESCAPE_RULES,pickupReachable:()=>true,escapeThreat:()=>false,v:p=>new THREE.Vector3(...p),clues:[],inventory:{pistol:new Magazine('glock'),primary:null},audio:{cue(){},setEscapeMusic(){}},info(){},investigateEscape(){},elapsed:0,extraction:0,updateGoal(){},escapeCombatMusicLeft:0,settings:{escapeMusic:'battle'},health:100,escapeRecovery:{update:(_dt,h)=>h},finish(){},interact(){}};
  scope.escapeInteraction=()=>null;
  engineFunction('updateEscapeTasks',scope)(1/60,false);
- assert.deepEqual(slots.map(n=>n.identity),identities);assert.equal(slots[4].reenterAt,round.elapsed);assert.equal(slots[5].reenterAt,round.elapsed);
+ assert.deepEqual(slots.map(n=>n.identity),identities);for(const slot of slots.slice(0,6))assert.equal(slot.reenterAt,Infinity);for(const slot of slots.slice(6))assert.equal(slot.reenterAt,round.elapsed);
 });
 test('re-entry retains identity and clears every old combat and motion transient',()=>{
  const oldGun=new Magazine('mp5'),attack=new EscapeAttack();attack.phase='fire';

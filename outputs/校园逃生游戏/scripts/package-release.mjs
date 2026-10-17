@@ -3,7 +3,10 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import {createPortableZip} from '../../校园交互网站/site/scripts/portable-zip.mjs';
 import { fileURLToPath } from 'node:url';
-import {NPC_POSE_WEBPS,NPC_POSE_WEBP_COUNT,NPC_LOCOMOTION_POSES} from './npc-pose-release-v032.mjs';
+import {NPC_IDS,NPC_IDENTITY,NPC_COMBAT_POSES,npcPoseFilename,ESCAPE_INITIAL_NPCS,ESCAPE_TOTAL_NPCS} from '../src/npc-roster.ts';
+const NPC_POSE_WEBPS=NPC_IDS.flatMap(id=>NPC_IDENTITY[id].poses.flatMap(pose=>[false,true].map(mobile=>npcPoseFilename(id,pose,mobile).slice(1))));
+const NPC_POSE_WEBP_COUNT=NPC_POSE_WEBPS.length;
+const NPC_LOCOMOTION_POSES=NPC_COMBAT_POSES.filter(pose=>pose!=='reload');
 import {assertStaticReleasePath} from './guard-static-release.mjs';
 import {assertProductionProfile} from './assert-production-profile.mjs';
 
@@ -92,7 +95,7 @@ const required = [
 const storyFiles = (await walk(path.join(publicRoot, 'story'))).map(name => 'story/' + name);
 if (!storyFiles.length) throw new Error(`The ${releaseLabel} story resource tree is empty.`);
 const characterPoseWebps = required.filter(name => name.startsWith('characters/billboards/') && name.endsWith('.webp'));
-if (characterPoseWebps.length !== NPC_POSE_WEBP_COUNT || new Set(characterPoseWebps).size !== NPC_POSE_WEBP_COUNT) throw new Error(`The six-character release must include exactly ${NPC_POSE_WEBP_COUNT} distinct pose WebPs, including desktop and mobile locomotion frames.`);
+if (characterPoseWebps.length !== NPC_POSE_WEBP_COUNT || new Set(characterPoseWebps).size !== NPC_POSE_WEBP_COUNT) throw new Error(`The current-character release must include exactly ${NPC_POSE_WEBP_COUNT} distinct pose WebPs, including desktop and mobile locomotion frames.`);
 const drivingManifest=JSON.parse(await fs.readFile((await fileInfo(distRoot,'map/drive-v122.json')).absolute,'utf8'));
 // Public preview numbering does not change the accepted v1.2.2 driving geometry.
 if(drivingManifest.sourceSha256!==manifest.sourceSha256||!Array.isArray(drivingManifest.npcSpawns)||drivingManifest.npcSpawns.length!==4||drivingManifest.releaseVersion!=='1.2.2'||!Array.isArray(drivingManifest.npcRegions)||drivingManifest.npcRegions.length!==4)throw new Error('Driving manifest must match the campus source and contain four runtime slots.');
@@ -171,8 +174,8 @@ const report = {
   totalUncompressedBytes: files.reduce((sum, file) => sum + file.bytes, 0),
   manifestReferenceCount: manifestReferences.size,
   manifestSha256: hash(manifestBuffer), newestInput, distIndexMtime: index.info.mtime.toISOString(),
-  requiredPlayerAvatarsPresent: true,playerAvatarCount:4,requiredBillboardsAndAudioPresent: true, characterCount: 6, runtimeNpcSlots: 6, escapeStartingNpcCount: 4, escapeReinforcementCount: 2, dafeiNpcSlots: 4, escapeMusicTrackCount: 3,
-  characterPoseWebpCount: characterPoseWebps.length, locomotionPoseCount:6*NPC_LOCOMOTION_POSES.length,
+  requiredPlayerAvatarsPresent: true,playerAvatarCount:4,requiredBillboardsAndAudioPresent: true, characterCount: NPC_IDS.length, runtimeNpcSlots: ESCAPE_TOTAL_NPCS, escapeStartingNpcCount: ESCAPE_INITIAL_NPCS, escapeReinforcementCount: ESCAPE_TOTAL_NPCS-ESCAPE_INITIAL_NPCS, dafeiNpcSlots: 4, escapeMusicTrackCount: 3,
+  characterPoseWebpCount: characterPoseWebps.length, locomotionPoseCount:NPC_IDS.length*NPC_LOCOMOTION_POSES.length,
   drivingMapVersion: drivingManifest.releaseVersion, drivingMapVehicleAndGuidePresent:true, sourcePhotosAndOldCharacterModelsExcluded: true, files,
   storyFileCount:storyFiles.length,storyUncompressedBytes:files.filter(f=>f.path.startsWith('story/')).reduce((sum,f)=>sum+f.bytes,0),archivePhotoCount:archiveManifest.photos.length,cameraLodCount:cameraManifest.assets.length,discoveryCount:discoveries.length,
   zipPaths: 'POSIX forward slashes',

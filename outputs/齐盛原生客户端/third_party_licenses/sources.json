@@ -1,0 +1,42 @@
+[
+  {
+    "url": "https://raw.githubusercontent.com/colyseus/native-sdk/dfb020586aff4c91c70518be33e3207af1bb18e4/LICENSE",
+    "name": "Colyseus-MIT.txt",
+    "sha256": "9903b09ffc54f4f10cbbfb3ac563bdfc0e62356f6dee06fe431c56d39f1b1cb6"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/DaveGamble/cJSON/c859b25da02955fef659d658b8f324b5cde87be3/LICENSE",
+    "name": "cJSON-MIT.txt",
+    "sha256": "a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/Mbed-TLS/mbedtls/c765c831e5c2a0971410692f92f7a81d6ec65ec2/LICENSE",
+    "name": "mbedTLS-LICENSE.txt",
+    "sha256": "9b405ef4c89342f5eae1dd828882f931747f71001cfba7d114801039b52ad09b"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/antirez/sds/5347739b1581fcba74fd5cab1fc21d2aef317d71/LICENSE",
+    "name": "sds-BSD.txt",
+    "sha256": "bb0d0d505009fdf584b0f44dbb62562eebada497d53d726cd2e940ada512dc16"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/troydhanson/uthash/af6e637f19c102167fb914b9ebcc171389270b48/LICENSE",
+    "name": "uthash-BSD.txt",
+    "sha256": "3fbbead84dff6db076bdd60eee3c98dadc35a4a415c72b0a35f95d723931c18a"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/tatsuhiro-t/wslay/0e7d106ff89ad6638090fd811a9b2e4c5dda8d40/COPYING",
+    "name": "wslay-MIT.txt",
+    "sha256": "0e602a00db6ce15c1311a180b13563aa638918a77f813b24cd78c9fe5cab63d0"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/LICENSE.txt",
+    "name": "Godot-MIT.txt",
+    "sha256": "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80"
+  },
+  {
+    "url": "https://raw.githubusercontent.com/godotengine/godot/4.7.2-stable/COPYRIGHT.txt",
+    "name": "Godot-COPYRIGHT.txt",
+    "sha256": "cb1980c88089573bcacd7221d777c689bb8bbd778799f24c27fca0fe5f774d6d"
+  }
+]

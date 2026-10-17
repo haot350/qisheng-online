@@ -1,3 +1,6 @@
+import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGadget,cycleGadget,helmetDamage,grenadeDamage,useCards,confiscatedHealth,type GadgetId,type GadgetLoot,type GrenadeState} from '@qisheng/shared/gadgets';
+import {GadgetScene} from './gadget-scene';
+import {selectEscapeRoster as orderedEscapeRoster} from './npc-roster';
 import * as THREE from "three";
 import {AdaptiveRenderQuality,resolveRenderProfile} from '@qisheng/shared/render-profile';
 import {applyRendererProfile} from './render-quality';
@@ -151,6 +154,7 @@ import {
   type WeaponDrop,
 } from "./weapon-pickups.ts";
 import { roundWeaponResources } from "./weapon-resources";
+import {CombatGpuPreparer} from './multiplayer/combat-gpu-preparer';
 import {
   createWorldWeapon,
   prepareWeapons,
@@ -441,6 +445,10 @@ export async function createGame(
   let qualityTextureLoad:AbortController|undefined;
   let renderTimes: number[] = [];
   const frameDiagnostics = new FrameDiagnostics();
+  let gadgetInventory=newGadgetInventory(),gadgetLoot:GadgetLoot[]=[],grenades:GrenadeState[]=[],gadgetSerial=0;
+  const cardsPursuit=new CardsPursuit(),gadgetScene=new GadgetScene(scene);
+  const selectGadget=(id:GadgetId)=>{if(mode==='escape'&&['smoke','grenade','cards'].includes(id)){gadgetInventory.selectedGadget=id;emit();}};
+
   let releaseCombat: (() => void) | undefined;
   let cpuUpdate = 0,
     cpuNpcs = 0,
@@ -670,6 +678,7 @@ export async function createGame(
   const snapshot = (): Snapshot => {
     const nearInteraction = escapeInteraction();
     return {
+      gadgets:mode==='escape'?{...gadgetInventory,cardsLeft:Math.max(0,gadgetInventory.cardsUntil-elapsed),confiscating:cardsPursuit.windup>0,canUseCards:true,loot:gadgetLoot,projectiles:grenades}:undefined,
       ranking: ranked?.snapshot(),
       phase,
       mode,
@@ -967,6 +976,7 @@ export async function createGame(
         })),
       health,
       smokes,
+      gadgets:gadgetLoot.filter(g=>!g.usedBy.includes("local")).map(g=>({...g,available:canCollectGadget(gadgetInventory,g.kind)})),
       canReach: (point, range) =>
         pickupReachable(
           position,
@@ -1244,6 +1254,7 @@ export async function createGame(
     driveChallenge = null;
     guidePlayed = "";
     effects.reset();
+    gadgetScene.clear();gadgetLoot=[];grenades=[];cardsPursuit.clear();
     directions.reset();
     for (const p of [...clues, ...supplies]) {
       p.mesh.userData.labelTexture?.dispose();
@@ -1309,12 +1320,7 @@ export async function createGame(
     return g;
   }
   function shuffleEscapeRoster(seed: number) {
-    const ids = [...NPC_IDS],
-      rng = seeded(seed ^ 0x51a743);
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [ids[i], ids[j]] = [ids[j], ids[i]];
-    }
+    const ids = orderedEscapeRoster(seeded(seed ^ 0x51a743));
     return ids;
   }
   let escapeEntries: EscapeSite[] = [];
@@ -1325,7 +1331,7 @@ export async function createGame(
         (site) =>
           v(site.position).distanceTo(position) >= 35 && escapeSiteSafe(site),
       );
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < NPC_IDS.length; i++) {
         const chosen = candidates
           .filter((p) => !escapeEntries.includes(p))
           .sort((a, b) => {
@@ -1452,7 +1458,7 @@ export async function createGame(
       n.repath = 0;
     }
   }
-  function downEscape(n: NPC, headshot: boolean) {
+  function downEscape(n: NPC, headshot: boolean, grenade=false) {
     if (!n.escapeActive) return;
     escapeTactics.release(n.id);
     escapeContacts.remove(n.id);
@@ -1464,6 +1470,7 @@ export async function createGame(
       generation: rankGeneration.get(n.id) ?? 0,
       identity: n.identity,
       headshot,
+      ...(grenade?{source:"grenade"}:{}),
     });
     escapeRound?.recordDown(n.identity, headshot);
     n.escapeActive = false;
@@ -1581,12 +1588,14 @@ export async function createGame(
     if (interactPressed && interaction) {
       if (!interaction.available)
         info(
-          interaction.kind === "supply" ? "补给已满。" : "备用弹药已满。",
+          interaction.kind === 'gadget'?'已携带上限。':interaction.kind === "supply" ? "补给已满。" : "备用弹药已满。",
           1.8,
         );
       else if (interaction.kind === "weapon") {
         const drop = drops.get(interaction.id);
         if (drop) void takeWeapon(drop);
+      } else if (interaction.kind==='gadget') {
+        const item=gadgetLoot.find(g=>g.id===interaction.id);if(item&&collectGadget(gadgetInventory,item.kind)){item.usedBy.push('local');rankEvent('gadget',{action:'pickup',kind:item.kind,id:item.id});audio.cue('pickup');info(({helmet:'已装备头盔。',grenade:'手榴弹已拾取。',cards:'扑克牌已拾取。'})[item.kind],2);}
       } else if (interaction.kind === "supply") interact(interaction.id);
     }
     const events = escapeRound.update(dt, {
@@ -1627,11 +1636,11 @@ export async function createGame(
         investigateEscape(v(event.position), 28, 4);
         audio.cue("pickup");
       } else if (event.type === "reinforcements") {
-        for (const n of npcs.slice(4)) {
+        for (const n of npcs.slice(6)) {
           n.reenterAt = elapsed;
           n.respawnProbe = 0;
         }
-        info("两名增援加入追逐。", 2.5);
+        info("三名增援加入追逐。", 2.5);
       } else if (event.type === "extraction-available") {
         if (gate) gate.visible = true;
         for (const n of npcs)
@@ -1707,9 +1716,10 @@ export async function createGame(
             ? "search"
             : attack.phase;
     return {
-      skill: n.skill?.busy ? n.skill.kind : undefined,
+      skill: n.identity === "meng" && cardsPursuit.windup > 0 ? "callout" : n.skill?.busy ? n.skill.kind : undefined,
       speed,
       aim:
+        !(n.identity === "meng" && cardsPursuit.windup > 0) &&
         !n.skill?.busy &&
         n.gun.ammo > 0 &&
         n.gun.reloadLeft === 0 &&
@@ -1823,7 +1833,7 @@ export async function createGame(
           : [];
       }
     }
-    let speed = n.skill?.busy
+    let speed = n.identity==='meng'&&cardsPursuit.windup>0?0:n.skill?.busy
       ? n.skill.kind === "sprint" && n.skill.phase === "active"
         ? 7.2
         : 0
@@ -1892,6 +1902,7 @@ export async function createGame(
             !!n.tacticalDecision?.moving &&
             ["cover", "reload"].includes(n.tacticalDecision.state),
           eligible =
+            !(n.identity==='meng'&&cardsPursuit.windup>0)&&
             !seekingCover &&
             !!n.escapeActive &&
             elapsed >= 10 &&
@@ -1977,10 +1988,7 @@ export async function createGame(
                 dir,
                 hitPlayer ? hit! : Math.min(wall, spec.range),
               );
-          if (hitPlayer)
-            damage +=
-              spec.damage *
-              ESCAPE_DIFFICULTIES[escapeSelectedDifficulty].damageScale;
+          if (hitPlayer){const base=spec.damage*ESCAPE_DIFFICULTIES[escapeSelectedDifficulty].damageScale,armor=helmetDamage(base,end.y-position.y>(crouched ? .92 : 1.25),gadgetInventory.helmetDurability);damage+=armor.damage;gadgetInventory.helmetDurability=armor.durability;}
           else if (wall < spec.range - 0.1) {
             const surface = classifyImpactSurface({ normal: fixedHit?.normal });
             effects.hit(end, false, surface);
@@ -2063,6 +2071,7 @@ export async function createGame(
     elapsed = 0;
     health = 100;
     smokes = 2;
+    gadgetInventory=newGadgetInventory();cardsPursuit.clear();grenades=[];gadgetLoot=[];gadgetSerial=0;gadgetScene.clear();
     extraction = 0;
     hurt = 0;
     hit = 0;
@@ -2217,6 +2226,10 @@ export async function createGame(
     else if (mode === "story") notice = "";
     else info("大课间到了：五分钟驾驶挑战，留意车况与维修点。", 5);
     if (mode === "escape" || mode === "dafei") {
+      if(mode==='escape')for(const supply of world.manifest.supplies)for(const [index,kind] of (['helmet','grenade','cards'] as const).entries()){
+        const point=v(supply.position).add(new THREE.Vector3((index-1)*1.15,0,1.2)),support=world.supportAt(point,1.75);
+        if(support?.clear&&Math.abs(support.height-point.y)<1&&visible(v(supply.position).add(new THREE.Vector3(0,1,0)),point.clone().add(new THREE.Vector3(0,1,0)))){point.y=support.height;gadgetLoot.push({id:'item-'+supply.id+'-'+kind,kind,position:point.toArray() as Vec3,usedBy:[],availableAt:0});}
+      }
       const offset = Math.floor(random() * 4);
       npcs = [];
       for (const [i, identity] of roundRoster.entries()) {
@@ -2277,7 +2290,7 @@ export async function createGame(
           shotSerial: 0,
           reloadSerial: 0,
           reloadStage: 0,
-          escapeActive: mode === "escape" ? i < 4 : undefined,
+          escapeActive: mode === "escape" ? i < 6 : undefined,
           escapeAttack: mode === "escape" ? new EscapeAttack() : undefined,
           reenterAt: Infinity,
           respawnProbe: 0,
@@ -2286,7 +2299,7 @@ export async function createGame(
           actualSpeed: 0,
           movingAccuracy: new NpcMovingAccuracy(),
         });
-        if (mode === "escape" && i >= 4) rig.root.visible = false;
+        if (mode === "escape" && i >= 6) rig.root.visible = false;
       }
     }
     for (const n of npcs)
@@ -2779,6 +2792,13 @@ export async function createGame(
       }
       if (car) car.root.visible = true;
       setupRound();
+      if(next==='escape'){
+        const gpu=new CombatGpuPreparer(renderer,scene,camera);
+        try{await gpu.prepare(effects.root,controller.signal);const restoreShell=effects.prepareGeometryVariants();try{await gpu.prepare(effects.root,controller.signal);}finally{restoreShell();}for(const root of gadgetScene.prepareRoots)await gpu.prepare(root,controller.signal);for(const npc of npcs){await gpu.prepareTextures(npc.rig.preparationTextures,controller.signal);await gpu.prepare(npc.rig.root,controller.signal);}}
+        finally{gpu.dispose();}
+        if(viewWeapon){const firstPerson=new CombatGpuPreparer(renderer,viewScene,viewCamera);try{await firstPerson.prepare(viewWeapon.root,controller.signal);}finally{firstPerson.dispose();}}
+        if(dead||token!==enterToken||controller.signal.aborted)return;
+      }
       pendingRoster = null;
       if (driving) {
         car?.update(driving.read(), 0);
@@ -3888,6 +3908,7 @@ export async function createGame(
         }
         victim.suppression += hitDamage(def.damage, regionHit.region);
         victim.hit = 0.3;
+        if(victim.identity==='meng')cardsPursuit.interrupt();
         victim.lastKnown = position.clone();
         victim.memory = 7;
         victim.alert = true;
@@ -3955,6 +3976,39 @@ export async function createGame(
           n.memory = 6;
           n.alert = true;
         }
+  }
+
+  function useGadget(){
+    if(gadgetInventory.selectedGadget==='smoke'){throwSmoke();return;}
+    if(gadgetInventory.selectedGadget==='cards'){
+      if(!useCards(gadgetInventory,elapsed)){info(gadgetInventory.cardsUntil>elapsed?'扑克牌仍在生效。':'没有可用扑克牌。',2);return;}
+      cardsPursuit.begin('local',gadgetInventory.cardsUse,0,position.toArray() as Vec3,gadgetInventory.cardsUntil);
+      const meng=npcs.find(n=>n.identity==='meng');if(meng?.escapeActive){meng.lastKnown=position.clone();meng.memory=GADGET_RULES.cardsDuration;meng.repath=0;}
+      rankEvent('gadget',{action:'use',kind:'cards',use:gadgetInventory.cardsUse});info('30秒内体力不消耗，孟庆升开始追缴。',3);audio.cue('pickup');return;
+    }
+    if(gadgetInventory.grenades<1){info('没有可用手榴弹。',2);return;}
+    gadgetInventory.grenades--;const dir=camera.getWorldDirection(new THREE.Vector3()),length=Math.min(.6,world.rayDistance(camera.position,dir,.6)),point=camera.position.clone().addScaledVector(dir,Math.max(0,length-.08));
+    const id='grenade-'+(++gadgetSerial);grenades.push({id,ownerId:'local',position:point.toArray() as Vec3,velocity:dir.multiplyScalar(11).add(new THREE.Vector3(0,3,0)).toArray() as Vec3,left:GADGET_RULES.grenadeFuse});
+    rankEvent('gadget',{action:'use',kind:'grenade',id});audio.cue('smoke');
+  }
+  function updateGadgets(dt:number){
+    for(let i=grenades.length-1;i>=0;i--){const grenade=grenades[i];grenade.left-=dt;grenade.velocity[1]-=9.8*dt;const point=v(grenade.position),delta=v(grenade.velocity).multiplyScalar(dt),length=delta.length();
+      if(length>.00001){const dir=delta.divideScalar(length),wall=world.rayDistance(point,dir,length+.08);if(wall<length+.06){point.addScaledVector(dir,Math.max(0,wall-.08));grenade.velocity=grenade.velocity.map(value=>value*-.28) as Vec3;}else point.addScaledVector(dir,length);}
+      const support=world.supportAt(point,.16);if(support?.clear&&point.y<support.height+.12){point.y=support.height+.12;grenade.velocity=[grenade.velocity[0]*.6,Math.abs(grenade.velocity[1])*.3,grenade.velocity[2]*.6];}grenade.position=point.toArray() as Vec3;
+      if(grenade.left>0)continue;grenades.splice(i,1);gadgetScene.explosion(grenade.position);rankEvent('gadget',{action:'explode',kind:'grenade',id:grenade.id});audio.impact('ground',point);
+      const chest=position.clone().add(new THREE.Vector3(0,.8,0)),selfDamage=grenadeDamage(chest.distanceTo(point),tacticalGeometryVisible(grenade.position,chest.toArray() as Vec3));
+      if(selfDamage>0){const applied=Math.min(health,selfDamage);health=Math.max(0,health-selfDamage);escapeRound?.recordDamage(applied);escapeRecovery.noteDamage();rankEvent('damage',{amount:applied,source:'grenade',id:grenade.id,health});hurt=.5;if(health<=0){escapeRound?.fail('health');finish(false,'生命耗尽，行动失败。');return;}}
+      for(const n of npcs){if(!n.escapeActive||n.disabled>0)continue;const center=n.position.clone().add(new THREE.Vector3(0,.85,0)),amount=grenadeDamage(center.distanceTo(point),tacticalGeometryVisible(grenade.position,center.toArray() as Vec3));if(amount<=0)continue;n.suppression+=amount;n.hit=.3;if(n.identity==='meng')cardsPursuit.interrupt();rankEvent('gadget',{action:'hit',kind:'grenade',id:grenade.id,npcId:n.id,generation:rankGeneration.get(n.id)??0,damage:amount});if(n.suppression>=100){rankEvent('gadget',{action:'down',kind:'grenade',id:grenade.id,npcId:n.id,generation:rankGeneration.get(n.id)??0});downEscape(n,false,true);}}
+    }
+    if(!cardsPursuit.targetId){gadgetScene.update(gadgetLoot,grenades,'local',true,elapsed,dt);return;}
+    const meng=npcs.find(n=>n.identity==='meng'),distance=meng?.position.distanceTo(position)??Infinity;
+    const path=meng?.escapeActive&&distance<=2?world.actorPath(meng.id,meng.position,position):[];
+    const reachable=!!meng&&visible(meng.position.clone().add(new THREE.Vector3(0,1.3,0)),camera.position)&&path.length>0&&path.reduce((sum,p,index)=>sum+(index?p.distanceTo(path[index-1]):p.distanceTo(meng.position)),0)<=2.8;
+    if(cardsPursuit.update(dt,{now:elapsed,targetId:'local',use:gadgetInventory.cardsUse,generation:0,alive:health>0,npcActive:!!meng?.escapeActive,distance,reachable})){
+      const after=confiscatedHealth(health),amount=health-after;health=after;gadgetInventory.cardsUntil=0;escapeRound?.recordDamage(amount);escapeRecovery.noteDamage();rankEvent('gadget',{action:'confiscated',kind:'cards',use:gadgetInventory.cardsUse});if(amount>0)rankEvent('damage',{amount,source:'cards',health});hurt=.5;info('扑克牌被没收，损失一半当前生命。',3);
+    }
+    if(meng?.escapeActive&&cardsPursuit.targetId){if(!meng.sees&&cardsPursuit.clue){meng.lastKnown=v(cardsPursuit.clue);meng.memory=Math.max(meng.memory,.5);}if(cardsPursuit.windup>0){meng.path=[];meng.repath=0;cancelNpcFire(meng);}}
+    gadgetScene.update(gadgetLoot,grenades,'local',true,elapsed,dt);
   }
   function throwSmoke() {
     if (smokes <= 0 || smokeReady > 0) {
@@ -5463,7 +5517,9 @@ export async function createGame(
     if (mode === "escape") {
       if (frame.actions.has("switch")) switchWeapon();
       if (frame.actions.has("reload") && equipLeft === 0) beginReload();
-      if (frame.actions.has("smoke")) throwSmoke();
+      if (frame.actions.has("cycleGadget")) {gadgetInventory.selectedGadget=cycleGadget(gadgetInventory.selectedGadget,true);info("已选择"+({smoke:"烟雾",grenade:"手榴弹",cards:"扑克牌"})[gadgetInventory.selectedGadget],1.5);}
+      if(frame.actions.has("useGadget"))useGadget();else if (frame.actions.has("smoke")) throwSmoke();
+      updateGadgets(dt);
     }
     const motion = new THREE.Vector3(frame.moveX, 0, -frame.moveY);
     if (motion.lengthSq() > 1) motion.normalize();
@@ -5498,6 +5554,7 @@ export async function createGame(
               ) > 0.18
             : false,
         aiming,
+        staminaFree:gadgetInventory.cardsUntil>elapsed,
         direction: [forward.x, forward.z],
       });
       stamina.running = escapeMotion.sprinting;
@@ -6234,6 +6291,7 @@ export async function createGame(
     viewWeapon?.dispose();
     releaseWeapons?.();
     effects.dispose();
+    gadgetScene.dispose();
     gunEnvironment?.dispose();
     photographyMarkers?.dispose();
     world?.dispose();
@@ -6399,6 +6457,7 @@ export async function createGame(
       world?.retry();
       if (mode === "escape" && weapon === "awm") world?.retryView();
     },
+    selectGadget,
     dispose,
   };
   if (import.meta.env.DEV) (window as any).__gameAPI = api;
