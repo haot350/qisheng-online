@@ -58,6 +58,9 @@
 
 ## 接续记录
 
+- 2026-10-17收尾：公开源码v0.9.0/322de8d已推送，Linux与Windows CI39036792582成功。908文件及4份vendor人工与路径/签名审查通过；最后交接状态文档单独同步，代码标签不改。原生Windows完整校园包与Android arm64签名APK仅为M1内部样板，不保证正式物理与全模式兼容。
+
+
 - 2026-10-17：0.9.0已在香港备份、空房排空并统一发布。43项外部复检通过，schema6、20身份/123局、运营修订6及既有停用玩法、小齐配置保留；旧0.8.4回退应用可同库读取新记录，不恢复旧库。两真实Chrome六次击倒附近最长29–54ms；香港30秒20客户端混合P95/P99达标但不代表长期容量。自然完整单人/合作、Safari/安卓真机、多指、移动网络/真实TCP损伤未验证。新增NPC母版/校准与签名不进GitHub。
 
 
@@ -75,6 +78,6 @@
 - 2026-10-13：0.8.0账号与24成就已发布；随后补齐完整账号页入口。旧数据与运营设置保留。
 - 2026-10-14：0.8.1完成香港备份、空房排空、同步发布和外部复检。schema6、20个身份、111局成绩及原运营修订5保留；现有管理员停用的玩法没有被重新打开。807文件已审查并上传公开仓库 [haot350/qisheng-online](https://github.com/haot350/qisheng-online)，默认分支main，MIT署名OpenQS。本轮不更换联机传输、修改地图原件或竞技平衡。
 
-当前交付：[游戏包](../outputs/校园逃生游戏/qisheng-game-v0.9.0.zip) · [校园包](../outputs/校园交互网站/qisheng-campus-v0.9.0.zip) · [后端包](../outputs/校园排行榜服务/qisheng-online-v0.9.0.tar.gz)。香港两站与后端统一20261017T131443Z-0.9.0；GitHub同步状态见接续日志。
+当前交付：[游戏包](../outputs/校园逃生游戏/qisheng-game-v0.9.0.zip) · [校园包](../outputs/校园交互网站/qisheng-campus-v0.9.0.zip) · [后端包](../outputs/校园排行榜服务/qisheng-online-v0.9.0.tar.gz)。香港两站与后端统一20261017T131443Z-0.9.0；公开源码已同步v0.9.0（322de8d），Linux/Windows CI39036792582通过；人物、模型、签名和内部回执排除。
 
 本轮证据：[必要验收](v0.9.0/acceptance.md)、[外部复检](v0.9.0/postpublish.json)、[源码人工审查](v0.9.0/public-source-manual-review.md)。私密回执不上传。原生独立状态见[原生M1](../outputs/齐盛原生客户端/docs/MILESTONE-M1.md)：完整校园Windows内部包及Android内部APK已导出；仅隔离联机，不宣称完成正式Rapier预测或安卓真机适配。
