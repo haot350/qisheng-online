@@ -59,7 +59,11 @@
 
 ## 接续记录
 
-- 2026-10-18 本轮收尾：网页0.9.2保持香港正式发行。Windows0.1.0候选193247100字节、匿名演示43677185字节、Android内部221934847字节已生成并逐项核验地图/SDK/物理/许可/私密边界；首次正式release GPU启动0xC0000005未解释，随后完整启动及三次鲜APPDATA复验通过仍不据此认定修复。因此Windows/Android不公开、未上传原生包，不生成总验收PASS；公网页原生清单两平台false、未发布ZIP404/no-store已外部确认。候选与SHA、首FAIL/后PASS见原生docs/qa-0.1.0/PACKAGES.md和package-delivery.json。下一步先取首次崩溃栈/资源加载分段证据定位，278ms长帧亦待细分；不得用后续成功覆盖旧失败。所有我方测试退出，原玩家数据与运营保留。GitHub待本次最终审查推送。
+- 2026-10-18 最终源码验证：v0.9.2/d04a647的Linux与Windows CI39092455991已成功，不引用旧版CI。最终仅同步本交接文档并保持代码标签不变。网页香港0.9.2在线；Windows/Android原生候选仍不公开，首Windows GPU启动崩溃未闭合。全部本机测试/打包任务已退出。
+
+- 2026-10-18 源码已推送：haot350/qisheng-online v0.9.2、d04a64770aa96b8da07bd338c31ecb380c64cec6；1035白名单文件与四份118项相同共享归档通过路径/内容/凭据/IP/依赖闭包审查。正式资源、安装包与私密验收排除。当前新CI39092455991进行中，不能引用旧CI当新成功。Windows/安卓仍内部，公网页下载false保持。
+
+- 2026-10-18 本轮收尾：网页0.9.2保持香港正式发行。Windows0.1.0候选193247100字节、匿名演示43677185字节、Android内部221934847字节已生成并逐项核验地图/SDK/物理/许可/私密边界；首次正式release GPU启动0xC0000005未解释，随后完整启动及三次鲜APPDATA复验通过仍不据此认定修复。因此Windows/Android不公开、未上传原生包，不生成总验收PASS；公网页原生清单两平台false、未发布ZIP404/no-store已外部确认。候选与SHA、首FAIL/后PASS见原生docs/qa-0.1.0/PACKAGES.md和package-delivery.json。下一步先取首次崩溃栈/资源加载分段证据定位，278ms长帧亦待细分；不得用后续成功覆盖旧失败。所有我方测试退出，原玩家数据与运营保留。GitHub源码1035文件/4共享归档已审查推送，v0.9.2代码提交d04a647；Linux/Windows CI39092455991进行中，尚不算通过。
 
 - 2026-10-18 原生最后定向与公网：空动态姿态数组类型修补后，45秒真实楼梯38点到下一层、209块必要资源、loading=false、日志无脚本错误；普通校正max0.01699m、全流程最长278ms；粗采样不能确认其具体阶段归因，仍待细分。最终11项界面/设置与5项输入生命周期通过。正常香港原生SDK私房大厅发现/tickets缺省roomId错误传null，已改为仅有值才发送；复验5快照0拒收、TLS验证、临时账号删除、未开局未参榜。对应旧25秒FAIL和首次公网失败保留。native-preview现限定正式地图走正式入口，demo/internal仍环回；成包与分发待完成。
 
@@ -117,6 +121,8 @@
 - 2026-10-13：0.8.0账号与24成就已发布；随后补齐完整账号页入口。旧数据与运营设置保留。
 - 2026-10-14：0.8.1完成香港备份、空房排空、同步发布和外部复检。schema6、20个身份、111局成绩及原运营修订5保留；现有管理员停用的玩法没有被重新打开。807文件已审查并上传公开仓库 [haot350/qisheng-online](https://github.com/haot350/qisheng-online)，默认分支main，MIT署名OpenQS。本轮不更换联机传输、修改地图原件或竞技平衡。
 
-当前交付：[游戏包](../outputs/校园逃生游戏/qisheng-game-v0.9.2.zip) · [校园包](../outputs/校园交互网站/qisheng-campus-v0.9.2.zip) · [后端包](../outputs/校园排行榜服务/qisheng-online-v0.9.2.tar.gz)。两站静态ZIP直接来自实际不可变发行清单，逐条SHA/CRC核验。香港两站与后端统一20261017T162339Z-0.9.2；GitHub本轮待同步，未将旧v0.9.1当本轮已推送。
+当前交付：[游戏包](../outputs/校园逃生游戏/qisheng-game-v0.9.2.zip) · [校园包](../outputs/校园交互网站/qisheng-campus-v0.9.2.zip) · [后端包](../outputs/校园排行榜服务/qisheng-online-v0.9.2.tar.gz)。两站静态ZIP直接来自实际不可变发行清单，逐条SHA/CRC核验。香港两站与后端统一20261017T162339Z-0.9.2；GitHub本轮源码已同步v0.9.2/d04a647，1035文件与4归档审查通过；本次Linux/Windows CI39092455991成功，最后交接仅文档同步，代码标签不改。
 
 本轮证据：[必要验收](v0.9.2/acceptance.md)、[浏览器报告](v0.9.2/browser/report.json)、[外部复检](v0.9.2/postpublish.json)、[性能与架构记录](v0.9.2/implementation.md)。私密回执、截图、正式素材不上传GitHub。原生历史状态保留[原生M1](../outputs/齐盛原生客户端/docs/MILESTONE-M1.md)，新可玩状态以独立0.1.0里程碑和实际放行结果为准。
+
+本轮原生内部交付：[Windows候选](../outputs/齐盛原生客户端/dist/qisheng-native-0.1.0-windows.zip) · [Android内部APK](../outputs/齐盛原生客户端/dist/qisheng-native-0.1.0-android-arm64-internal.apk) · [成包/失败与重试记录](../outputs/齐盛原生客户端/docs/qa-0.1.0/PACKAGES.md)。这些文件未上传公共源码或开放公网。
