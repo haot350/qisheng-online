@@ -109,6 +109,24 @@ export function useResource<T = Row>(path: string | null) {
     setData,
   };
 }
+export function useLiveResource<T = Row>(path: string | null, interval = 5000) {
+  const resource = useResource<T>(path);
+  const busy = useRef(resource.loading);
+  busy.current = resource.loading;
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const reload = () => {if (!document.hidden && !busy.current) resource.reload();};
+    const visibility = () => {
+      if (timer) clearInterval(timer);
+      timer = undefined;
+      if (!document.hidden && path) {reload(); timer = setInterval(reload, interval);}
+    };
+    visibility();
+    document.addEventListener('visibilitychange', visibility);
+    return () => {if (timer) clearInterval(timer); document.removeEventListener('visibilitychange', visibility);};
+  }, [path, interval, resource.reload]);
+  return {...resource, loading: resource.loading && !resource.data, refreshing: resource.loading};
+}
 export const has = (a: Administrator, scope: string) =>
   a.owner || a.scopes.includes(scope);
 export function query(values: Record<string, unknown>) {

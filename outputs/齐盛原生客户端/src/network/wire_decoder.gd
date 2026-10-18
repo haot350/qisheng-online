@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Decodes the existing explicit recipient protocol. Roster rows never create positions.
 const WIRE_VERSION := 1
-const PROTOCOL := "campus-mp-0.9.0"
+const PROTOCOL := "campus-mp-0.9.4"
 var sequence := 0
 var viewer_id := ""
 var room_id := ""

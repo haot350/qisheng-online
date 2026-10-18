@@ -9,3 +9,11 @@
 账号数据库schema6；跨schema回滚必须有验证过的兼容程序，不能恢复旧库丢失新增账号。仅改静态页面时不应重启联机。服务器故障与网络问题先区分线路、模拟、发送积压和画面校正；日志不得输出恢复码、Bearer凭据、密码或完整个人材料。
 
 私密部署记录和历史数据核验保留在本机旧交付目录及 'work/private-project-state'，不上传到GitHub。CI仅安装、构建和短测，不持有生产发布权限。
+
+## 独立原生发行与协议协调
+
+原生ZIP/APK在独立原生目录按内容哈希保存，更新清单不缓存，普通网页资源清理不能删除它们。使用`publish-native.mjs --qa <验收回执> --package <包> --check`校验当前源码、地图、依赖、证据与包哈希；`--publish --stage-only`只上传并验证Range，不开放更新清单。当前客户端兼容包预上传就绪后再切换对应网页/服务器协议，随后不带stage-only激活原生清单。没有安卓真实设备验收时不能启用安卓公开下载。
+
+网页使用`prepare-release.mjs`、`publish-release.mjs`、`verify-published.mjs`和`register-verified-deployment.mjs`，以显式发行ID、版本和目标执行。当前维护版协议/回滚策略定义在`release-verification-policy.mjs`，不要再复制整份旧版本验证脚本。`publish-server.sh --prepare`仍会激活服务，不能当作纯上传使用。
+
+实验发行的已知问题与原始失败保留在本机证据和包内；下载页面只展示版本、功能、系统和入口。旧原生客户端若无法识别新协议更新清单，需从网站手动下载新包，不能修改清单协议谎称兼容。

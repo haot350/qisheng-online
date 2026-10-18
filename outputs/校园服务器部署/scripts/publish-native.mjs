@@ -7,11 +7,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {canonicalProtocolVersion} from './release-protocol.mjs';
 import {mapIdentityFromIndex} from './map-cache-policy.mjs';
-import {nativeReleaseEntry,nativeSourceHash,NATIVE_IDENTITY_FIELDS} from './native-release-policy.mjs';
+import {nativeReleaseEntry,nativeSourceHash,NATIVE_IDENTITY_FIELDS,hasImmutableNativeCache} from './native-release-policy.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url)),outputs=path.resolve(here,'../..');
-const args=process.argv.slice(2),flags=new Set(['--check','--publish','--allow-android']);
+const args=process.argv.slice(2),flags=new Set(['--check','--publish','--stage-only','--allow-android']);
 const options={};for(let i=0;i<args.length;i++){const key=args[i];if(flags.has(key)){if(options[key])throw Error('Duplicate option '+key);options[key]=true;}else if(['--qa','--package','--target','--report'].includes(key)){if(options[key]||!args[i+1]||args[i+1].startsWith('--'))throw Error('Missing or duplicate '+key);options[key]=args[++i];}else throw Error('Unknown option '+key);}
-if(!options['--qa']||!options['--package']||options['--check']&&options['--publish'])throw Error('Use --qa <receipt.json> --package <archive.zip|apk> [--check | --publish] [--target <name>] [--report <receipt.json>]. Default is --check.');
+if(!options['--qa']||!options['--package']||options['--check']&&options['--publish']||options['--stage-only']&&!options['--publish'])throw Error('Use --qa <receipt.json> --package <archive.zip|apk> [--check | --publish [--stage-only]] [--target <name>] [--report <receipt.json>]. Default is --check.');
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 async function fileHash(file){const hash=createHash('sha256');for await(const bytes of createReadStream(file))hash.update(bytes);return hash.digest('hex');}
 const qaPath=path.resolve(options['--qa']),packagePath=path.resolve(options['--package']);
@@ -53,18 +53,26 @@ async function response(route,headers={}){return fetch(new URL(route,origin),{re
 const sameEntry=(actual,expected)=>actual?.available===true&&['version','protocolVersion','downloadUrl','bytes','sha256','minimumOS'].every(key=>actual[key]===expected[key])&&NATIVE_IDENTITY_FIELDS.every(key=>actual.mapIdentity?.[key]===expected.mapIdentity[key])&&JSON.stringify(actual.notes)===JSON.stringify(expected.notes);
 let stage,activated;
 try{
- stage=await remote('stage');
- await captureProcess(localBinary('scp'),scpArguments(target,packagePath,stage.file));
- await remote('install',{source:stage.file,name:artifact.name,entry});
+ const existing=await remote('verify',{name:artifact.name,entry});
+ if(!existing.installed){stage=await remote('stage');
+  await captureProcess(localBinary('scp'),scpArguments(target,packagePath,stage.file));
+  await remote('install',{source:stage.file,name:artifact.name,entry});
+ }
  const download=await response(entry.downloadUrl,{Range:'bytes=0-15'});
- if(download.status!==206||download.headers.get('content-range')!=='bytes 0-15/'+entry.bytes||!/^public,.*max-age=31536000.*immutable/.test(download.headers.get('cache-control')??'')){await download.body?.cancel();throw Error('Native archive route or immutable Range check failed; manifest was not activated');}
+ if(download.status!==206||download.headers.get('content-range')!=='bytes 0-15/'+entry.bytes||!hasImmutableNativeCache(download.headers.get('cache-control'))){await download.body?.cancel();throw Error('Native archive route or immutable Range check failed; manifest was not activated');}
  const rangeBytes=new Uint8Array(await download.arrayBuffer());if(rangeBytes.byteLength!==16)throw Error('Native archive Range size is invalid; manifest was not activated');
+ if(options['--stage-only']){
+  Object.assign(result,{staged:true,target:target.id,stagedAt:new Date().toISOString()});
+  if(options['--report'])await writeFile(path.resolve(options['--report']),JSON.stringify(result,null,2)+'\n');
+  console.log(JSON.stringify(result));
+ }else{
  activated=await remote('activate',{platform:qa.platform,entry,acceptanceSha256:result.acceptanceSha256});
  const status=await response('/api/v1/native/updates');const publicManifest=await status.json();
  if(!status.ok||!/no-store/.test(status.headers.get('cache-control')??'')||!sameEntry(publicManifest[qa.platform],entry))throw Error('Native API manifest is not configured, stale, cached or different; reverting only the manifest');
  Object.assign(result,{published:true,target:target.id,publishedAt:new Date().toISOString(),manifestSha256:activated.manifestSha256});
  if(options['--report'])await writeFile(path.resolve(options['--report']),JSON.stringify(result,null,2)+'\n');
  console.log(JSON.stringify(result));
+ }
 }catch(error){
  if(activated){try{await remote('rollback',activated);}catch(rollback){throw new AggregateError([error,rollback],'Native publication failed and concurrent manifest state requires review; no database or old archive was changed');}}
  throw error;

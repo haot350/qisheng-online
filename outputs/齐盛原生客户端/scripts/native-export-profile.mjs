@@ -6,7 +6,8 @@ import {nativeSourceHash} from '../../校园服务器部署/scripts/native-relea
 import {canonicalProtocolVersion} from '../../校园服务器部署/scripts/release-protocol.mjs';
 import {mapIdentityFromIndex,assertSameMapIdentity} from '../../校园服务器部署/scripts/map-cache-policy.mjs';
 export const project=fileURLToPath(new URL('../',import.meta.url));
-export const NATIVE_VERSION='0.1.0';
+export const NATIVE_VERSION=(await readFile(new URL('../project.godot',import.meta.url),'utf8')).match(/^config\/version="([0-9]+[.][0-9]+[.][0-9]+)"$/m)?.[1];
+if(!NATIVE_VERSION)throw Error('Native project version is missing or invalid');
 export function exportOptions(argv=process.argv.slice(2)){
  let mode='internal',chosen=false,output;
  for(let i=0;i<argv.length;i++){

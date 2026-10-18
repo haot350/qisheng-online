@@ -21,6 +21,9 @@ var authoritative_motion := false
 var observation_allowed := true
 var touch_buttons := {"fire":false,"aim":false,"sprint":false,"crouch":false}
 var aim_toggle := true
+var mouse_aim_toggle := false
+var invert_y := false
+var _mouse_aim := false
 var external_controls: Dictionary = {}
 var keybindings: Dictionary = {}
 const DEFAULT_KEYS = preload("res://src/input_bindings.gd").DEFAULT_KEYS
@@ -46,6 +49,7 @@ func activate(value: bool) -> void:
 	move_touch = -1
 	look_touch = -1
 	jump_requested = false
+	_mouse_aim = false
 	velocity = Vector3.ZERO
 	for key in touch_buttons: touch_buttons[key] = false
 	if not DisplayServer.is_touchscreen_available():
@@ -81,6 +85,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			action_requested.emit(action)
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		look(event.relative)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and mouse_aim_toggle:
+		_mouse_aim = not _mouse_aim
 	if event is InputEventScreenTouch:
 		if not event.pressed or event.canceled:
 			_release_touch(event.index)
@@ -98,7 +104,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func look(relative: Vector2) -> void:
 	if not observation_allowed: return
 	yaw -= relative.x*sensitivity
-	pitch = clampf(pitch-relative.y*sensitivity, -1.35, 1.35)
+	pitch = clampf(pitch-relative.y*sensitivity*(-1.0 if invert_y else 1.0), -1.35, 1.35)
 	rotation.y = yaw
 	eye.rotation.x = pitch
 
@@ -118,7 +124,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if not DisplayServer.is_touchscreen_available():
 		direction = Vector2(float(_pressed("right"))-float(_pressed("left")),float(_pressed("back"))-float(_pressed("forward")))
-	controls_sampled.emit({"move":direction.limit_length(),"yaw":yaw,"pitch":pitch,"fire":Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or touch_buttons.fire,"aim":Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or touch_buttons.aim,"sprint":_pressed("sprint") or touch_buttons.sprint,"crouch":_pressed("crouch") or touch_buttons.crouch})
+	controls_sampled.emit({"move":direction.limit_length(),"yaw":yaw,"pitch":pitch,"fire":Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or touch_buttons.fire,"aim":(_mouse_aim if mouse_aim_toggle else Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) or touch_buttons.aim,"sprint":_pressed("sprint") or touch_buttons.sprint,"crouch":_pressed("crouch") or touch_buttons.crouch})
 	# Godot preview collision is not treated as equivalent Rapier prediction.
 	if authoritative_motion:
 		velocity = Vector3.ZERO

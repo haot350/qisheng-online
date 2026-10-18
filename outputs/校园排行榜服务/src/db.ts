@@ -23,6 +23,17 @@ export function openDatabase(path:string){
  CREATE INDEX IF NOT EXISTS feedback_image_owner ON feedback_images(feedback_id);
  CREATE INDEX IF NOT EXISTS feedback_followup_owner ON feedback_followups(feedback_id,created,id);
  CREATE INDEX IF NOT EXISTS issue_board_order ON issues(published,status,updated DESC,id);`);
+ // Additive operations metadata keeps schema-6 rollback applications readable.
+ // Commands created by this version are acked in the legacy table: older workers
+ // must never consume commands they cannot validate or report accurately.
+ db.exec(`CREATE TABLE IF NOT EXISTS room_runtime(room_id TEXT PRIMARY KEY,generation TEXT NOT NULL,revision INTEGER NOT NULL,signature TEXT NOT NULL,details TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS room_command_results(command_id TEXT PRIMARY KEY REFERENCES room_commands(id) ON DELETE CASCADE,request_key TEXT NOT NULL UNIQUE,actor TEXT NOT NULL,fingerprint TEXT NOT NULL,generation TEXT NOT NULL,revision INTEGER NOT NULL,state TEXT NOT NULL,expires INTEGER NOT NULL,updated INTEGER NOT NULL,outcome TEXT NOT NULL DEFAULT '',ban_minutes INTEGER NOT NULL DEFAULT 0);
+ CREATE INDEX IF NOT EXISTS room_command_pending ON room_command_results(state,expires);
+ CREATE TABLE IF NOT EXISTS presence_minutes(minute INTEGER PRIMARY KEY,accounts INTEGER NOT NULL,guests INTEGER NOT NULL,sessions INTEGER NOT NULL,web INTEGER NOT NULL,native INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS presence_daily(day TEXT PRIMARY KEY,accounts_peak INTEGER NOT NULL,guests_peak INTEGER NOT NULL,sessions_peak INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS online_room_activity ON online_rooms(updated DESC,state);
+ CREATE INDEX IF NOT EXISTS room_command_history ON room_commands(room_id,created DESC);
+ `);
  return db;
 }
 export type RankingDatabase=ReturnType<typeof openDatabase>;

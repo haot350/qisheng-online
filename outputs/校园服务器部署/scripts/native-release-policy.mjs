@@ -8,6 +8,10 @@ export const NATIVE_COMBAT_CAPABILITIES=['m4a1','ak47','mp5','r870','awm','m249'
 const sha=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const finite=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
 const assert=(value,message)=>{if(!value)throw Error(message);};
+export function hasImmutableNativeCache(value){
+ const directives=String(value??'').toLowerCase().split(',').map(item=>item.trim());
+ return directives.includes('public')&&directives.includes('immutable')&&directives.some(item=>/^max-age=\d+$/.test(item)&&Number(item.slice(8))>=31536000)&&!directives.some(item=>item==='no-store'||item==='private');
+}
 export function nativeReleaseEntry(qa,{protocolVersion,mapIdentity,artifact,sourceHash,now=Date.now(),allowAndroid=false}={}){
  assert(qa?.schema===1&&qa.kind==='native-release-acceptance'&&qa.profile==='production'&&qa.passed===true,'A successful production native acceptance receipt is required');
  assert(['windows','android'].includes(qa.platform),'Invalid native platform');

@@ -3,10 +3,10 @@
 import base64,fcntl,hashlib,json,os,pathlib,re,secrets,sys,time
 p=json.loads(base64.b64decode(sys.argv[1]));base=pathlib.Path(p['base']);releases=base/'releases';manifests=base/'manifests';incoming=base/'.incoming'
 if not base.is_absolute() or base.name!='native' or '..' in base.parts:raise ValueError('Unsafe native base')
-if p['action'] in ['install','activate']:
+if p['action'] in ['verify','install','activate']:
  entry=p.get('entry',{})
  if not re.fullmatch(r'[a-f0-9]{64}',entry.get('sha256','')) or not isinstance(entry.get('bytes'),int) or entry['bytes']<=0:raise ValueError('Unsafe native entry')
- if p['action']=='install' and not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]*[.](zip|apk)',p.get('name','')):raise ValueError('Unsafe native filename')
+ if p['action'] in ['verify','install'] and not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]*[.](zip|apk)',p.get('name','')):raise ValueError('Unsafe native filename')
  if p['action']=='activate' and p.get('platform') not in ['windows','android']:raise ValueError('Unsafe native platform')
 def safe_dir(folder,mode=0o755):
  if folder.is_symlink():raise ValueError('Native release directory must not be a symlink')
@@ -38,7 +38,15 @@ if lock.is_symlink():raise ValueError('Unsafe native publication lock')
 with lock.open('a+b') as lease:
  fcntl.flock(lease,fcntl.LOCK_EX)
  action=p['action'];manifest=base/'updates.json'
- if action=='stage':
+ if action=='verify':
+  folder=releases/p['entry']['sha256']
+  if folder.is_symlink():raise ValueError('Native release directory must not be a symlink')
+  file=folder/p['name']
+  if not file.exists():print(json.dumps({'installed':False}))
+  else:
+   if file.stat().st_size!=p['entry']['bytes'] or digest(file)!=p['entry']['sha256']:raise ValueError('Existing immutable native archive differs')
+   print(json.dumps({'installed':True,'bytes':file.stat().st_size,'sha256':p['entry']['sha256']}))
+ elif action=='stage':
   folder=incoming/secrets.token_hex(16);folder.mkdir(mode=0o700);print(json.dumps({'folder':str(folder),'file':str(folder/'archive')}))
  elif action=='install':
   source=pathlib.Path(p['source']);regular(source)

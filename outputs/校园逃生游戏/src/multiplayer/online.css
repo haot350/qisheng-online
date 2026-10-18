@@ -8,7 +8,7 @@
 .online-panel button:disabled{opacity:.45;cursor:default}
 .online-panel input,.online-panel select{width:100%;border:1px solid #c8cbc2;background:#fff;padding:8px 10px;box-sizing:border-box;border-radius:2px}
 .online-panel label{display:grid;gap:6px;font-size:12px;color:#6b7066}
-.online-header{display:flex;align-items:center;justify-content:space-between;padding:20px 26px 16px;border-bottom:1px solid #dcddd7}
+.online-header{display:flex;flex-shrink:0;align-items:center;justify-content:space-between;padding:20px 26px 16px;border-bottom:1px solid #dcddd7}
 .online-header h2{margin:0;font-size:28px;font-weight:500}
 .online-header p{font-size:11px;letter-spacing:.16em;color:#9d4e3e;margin:0 0 8px}
 .online-close{width:44px;font-size:28px!important;padding:0!important}
@@ -19,6 +19,7 @@
 .online-lobby-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
 .online-lobby-tools form{display:flex;gap:8px;margin-left:auto;flex:1;max-width:330px}
 .online-lobby-tools input{min-width:0}
+.online-lobby-tools form button{flex-shrink:0;min-width:44px;white-space:nowrap}
 .online-room-list{border-top:1px solid #dcddd7}
 .online-room-list>button{display:grid;grid-template-columns:minmax(0,1fr) 70px 90px;align-items:center;gap:16px;border:0;border-bottom:1px solid #dcddd7;width:100%;padding:17px 0;text-align:left;border-radius:0}
 .online-room-list>button>span:first-child{display:grid;gap:4px}

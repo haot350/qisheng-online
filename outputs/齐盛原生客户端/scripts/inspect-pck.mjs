@@ -21,7 +21,7 @@ export async function inspectPck(file,{demo=false,projectRoot,requireRuntimeNoti
   const name=bytes.subarray(cursor,cursor+length).toString('utf8').replace(/\0+$/,'').replace(/^res:\/\//,'');cursor+=length;
   const offset=base+u64(),size=u64();bounds(16);const md5=bytes.subarray(cursor,cursor+16).toString('hex');cursor+=16;const fileFlags=u32();
   if(fileFlags||!name||name.indexOf(String.fromCharCode(92))>=0||name.includes('\0')||name.startsWith('/')||name.split('/').some(part=>part==='..'||part==='.')||entries.has(name)||offset<0||offset+size>bytes.length)throw Error('Unsafe PCK directory entry');
-  if(/^(work|private|docs|tests|scripts|dist|physics-rs|[.]git)\//.test(name)||/^([.]godot\/(editor|shader_cache))\//.test(name)||/(^|\/)[.]env($|[.])|[.](pem|key|keystore|jks|sqlite|log)$/i.test(name)||/^account-.*[.]bin$/.test(name))throw Error('Private/development resource entered PCK: '+name);
+  if(/^(work|private|assets-source|docs|tests|scripts|dist|physics-rs|[.]git)\//.test(name)||/^([.]godot\/(editor|shader_cache))\//.test(name)||/(^|\/)[.]env($|[.])|[.](pem|key|keystore|jks|sqlite|log)$/i.test(name)||/^account-.*[.]bin$/.test(name))throw Error('Private/development resource entered PCK: '+name);
   const data=bytes.subarray(offset,offset+size);
   if(crypto.createHash('md5').update(data).digest('hex')!==md5)throw Error('PCK entry checksum mismatch: '+name);
   entries.set(name,{offset,size});
@@ -37,12 +37,12 @@ export async function inspectPck(file,{demo=false,projectRoot,requireRuntimeNoti
   return required(target);
  };
  const imported=new Set();
- if(demo&&projectRoot){for(const dir of ['content/production','content/combat']){
+ if(demo&&projectRoot){for(const dir of ['content/production','content/combat','content/branding']){
   const walk=async(relative)=>{for(const item of await fs.readdir(path.join(projectRoot,relative),{withFileTypes:true}).catch(e=>{if(e.code==='ENOENT')return [];throw e;})){const next=relative+'/'+item.name;if(item.isDirectory())await walk(next);else if(item.isFile()&&item.name.endsWith('.import'))for(const match of (await fs.readFile(path.join(projectRoot,next),'utf8')).matchAll(/res:\/\/([.]godot\/imported\/[^"\r\n]+)/g))imported.add(match[1]);}};
   await walk(dir);
  }}
  if(demo){
-  if([...entries.keys()].some(name=>/^content\/(production|combat)\//.test(name)||imported.has(name)))throw Error('Formal assets entered anonymous PCK');
+  if([...entries.keys()].some(name=>/^content\/(production|combat|branding)\//.test(name)||imported.has(name)))throw Error('Formal assets entered anonymous PCK');
   required('content/demo/map.json');required('content/demo/weapons.json');
  }else{
   const manifest=JSON.parse(read('content/production/map.json').toString());

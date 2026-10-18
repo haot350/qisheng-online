@@ -1,3 +1,5 @@
+import {adminRoomReadRoutes} from './admin-rooms.js';
+import {readPresence} from './presence.js';
 import {readFileSync, existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
@@ -40,6 +42,7 @@ export function readAdminStats(c: Context, q: any) {
 
 export function adminWorkbenchRoutes(c: Context, admin: Admin) {
   const {app, db, now} = c;
+  adminRoomReadRoutes(c,admin);
   app.get('/admin/services',async req=>{
     admin(req,false,'rooms');
     let release:any=null;try{const m=JSON.parse(readFileSync('/srv/codex/sites/current/manifest.json','utf8'));release={id:String(m.releaseId??''),version:String(m.version??'')};}catch{}
@@ -48,16 +51,12 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
         const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1800)}),h=await response.json() as any;
         if(!response.ok||h.ok!==true||h.worker!==id)throw Error('HEALTH');
         const rooms=db.prepare("SELECT id,state,updated,health FROM online_rooms WHERE worker=? AND state!='closed' AND updated>?").all(id,now()-30000) as any[];
-        return {id,available:true,checkedAt,version:h.version,protocolVersion:h.protocolVersion,combatRooms:h.combatRooms,rooms:rooms.map(r=>({...r,health:JSON.parse(r.health??'{}')}))};
+        let map:any=null;try{const mapResponse=await fetch('http://127.0.0.1:'+port+'/map-identity',{signal:AbortSignal.timeout(1800)});if(mapResponse.ok)map=await mapResponse.json();}catch{}
+        return {id,available:true,checkedAt,version:h.version,protocolVersion:h.protocolVersion,map,releaseMatches:release?.version?String(release.version).replace(/^Preview /,'')===String(h.version):null,combatRooms:h.combatRooms,rooms:rooms.map(r=>({...r,health:JSON.parse(r.health??'{}')}))};
       }catch{return{id,available:false,checkedAt,rooms:[]};}
     }));
     const target=adminDeploymentTarget();
     return {checkedAt:now(),target,release,api:{ok:true,node:process.version,uptimeSeconds:Math.floor(process.uptime()),schemaVersion:db.pragma('user_version',{simple:true})},workers:workerRows,deployments:db.prepare('SELECT id,version,site,verified FROM deployments ORDER BY verified DESC LIMIT 6').all()};
-  });
-  app.get('/admin/room-commands',req=>{
-    admin(req,false,'rooms');const roomId=String((req.query as any).roomId??'').slice(0,100);
-    const rows=(roomId?db.prepare('SELECT id,room_id roomId,action,player_id playerId,reason,created,acked FROM room_commands WHERE room_id=? ORDER BY created DESC LIMIT 30').all(roomId):db.prepare('SELECT id,room_id roomId,action,player_id playerId,reason,created,acked FROM room_commands ORDER BY created DESC LIMIT 30').all()) as any[];
-    return {items:rows.map(r=>({...r,state:r.acked?'acknowledged':now()-r.created>60000?'timeout':'queued'})),checkedAt:now()};
   });
   const directory = fileURLToPath(new URL('../admin/dist/', import.meta.url));
   for (const url of ['/admin', '/admin/']) app.get(url, (_, reply) => {
@@ -81,6 +80,7 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
     if (has(a, 'rooms')) {out.rooms = n("SELECT count(*) n FROM online_rooms WHERE state!='closed' AND updated>?", now() - 30000); out.maintenance = (db.prepare("SELECT value FROM operations WHERE key='maintenance'").get() as any)?.value === 'true';}
     if (has(a, 'players')) out.players = n('SELECT count(*) n FROM players');
     if (has(a, 'stats')) {
+      out.presence = readPresence(c);
       const today = new Date(now() + 8 * 3600000).toISOString().slice(0, 10);
       out.todayViews = n("SELECT COALESCE(sum(count),0) n FROM telemetry_daily WHERE day=? AND event='page-view'", today);
       out.todaySessions = n("SELECT COALESCE(sum(count),0) n FROM telemetry_daily WHERE day=? AND event='session-start'", today);
@@ -105,17 +105,6 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
     const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '', source = ' FROM feedback f LEFT JOIN feedback_resolutions r ON r.feedback_id=f.id';
     const items = (db.prepare('SELECT f.*' + source + where + ' ORDER BY f.updated DESC,f.id ASC LIMIT 20 OFFSET ?').all(...args, (pg - 1) * 20) as any[]).map(r => feedbackView(c, r, true));
     return {items, total: (db.prepare('SELECT count(*) n' + source + where).get(...args) as any).n, page: pg, pageSize: 20};
-  });
-  app.get('/admin/rooms', req => {
-    admin(req, false, 'rooms');
-    const q = req.query as any, pg = page(q.page), filters: string[] = [], args: any[] = [];
-    if (['lobby', 'preparing', 'countdown', 'playing', 'paused', 'ended', 'draining', 'closed'].includes(q.state)) {filters.push('state=?'); args.push(q.state);}
-    if (['coop', 'pvp'].includes(q.mode)) {filters.push('mode=?'); args.push(q.mode);}
-    if (['tdm', 'ffa'].includes(q.variant)) {filters.push('variant=?'); args.push(q.variant);}
-    if (q.active === 'true') {filters.push("updated>? AND state!='closed'"); args.push(now() - 30000);}
-    if (q.search) {filters.push('(instr(id,?)>0 OR instr(players,?)>0)'); args.push(String(q.search).slice(0, 100), String(q.search).slice(0, 100));}
-    const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
-    return {items: (db.prepare('SELECT * FROM online_rooms' + where + ' ORDER BY updated DESC,id ASC LIMIT 30 OFFSET ?').all(...args, (pg - 1) * 30) as any[]).map(r => ({...r, players: JSON.parse(r.players), health: r.health ? JSON.parse(r.health) : {}, stale: r.updated < now() - 30000})), total: (db.prepare('SELECT count(*) n FROM online_rooms' + where).get(...args) as any).n, page: pg, pageSize: 30, maintenance: (db.prepare("SELECT value FROM operations WHERE key='maintenance'").get() as any)?.value === 'true'};
   });
   app.get('/admin/audit', req => {
     admin(req, false, 'accounts');

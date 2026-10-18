@@ -32,6 +32,7 @@ var armor: Label
 var notice: Label
 var _notice_left := 0.0
 var _interact_button: Button
+var _aim_toggle := true
 var weapon_definitions: Dictionary = {}
 const INTERACTION_ACTIONS := {"revive":"救援", "take":"取走物资", "activate":"启动设备", "hold":"开始守点", "carry":"领取物资", "deliver":"送达物资", "extract":"开始撤离", "ammo":"补充弹药", "replace":"替换主枪", "supply":"领取补给", "helmet":"装备头盔", "grenade":"拾取手榴弹", "cards":"拾取扑克牌"}
 
@@ -155,17 +156,42 @@ func _build_touch() -> void:
 		button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT if id == "sprint" else Control.PRESET_BOTTOM_RIGHT)
 		button.position = spec[2]
 		button.size = Vector2(76,64)
+		button.set_meta("touch_position",spec[2])
+		button.set_meta("touch_size",Vector2(76,64))
 		button.focus_mode = Control.FOCUS_NONE
 		button.mouse_filter = Control.MOUSE_FILTER_STOP
 		if spec[3]:
 			button.button_down.connect(func(): held_changed.emit(id,true))
 			button.button_up.connect(func(): held_changed.emit(id,false))
 		elif id == "aim":
-			button.toggle_mode = true
-			button.toggled.connect(func(value): held_changed.emit(id,value))
+			button.set_meta("touch_aim",true)
+			button.toggle_mode = _aim_toggle
+			button.toggled.connect(func(value):
+				if _aim_toggle: held_changed.emit(id,value)
+			)
+			button.button_down.connect(func():
+				if not _aim_toggle: held_changed.emit(id,true)
+			)
+			button.button_up.connect(func():
+				if not _aim_toggle: held_changed.emit(id,false)
+			)
 		else:
 			button.pressed.connect(func(): action_requested.emit(id))
 		add_child(button)
+
+func configure_inputs(touch_scale: float, aim_toggle: bool) -> void:
+	_aim_toggle = aim_toggle
+	var viewport := get_viewport_rect().size
+	var fit := minf((viewport.x-60.0)/320.0,(viewport.y-30.0)/440.0)
+	var factor := clampf(minf(touch_scale,fit),0.7,1.5)
+	for child in get_children():
+		if not child is Button or not child.has_meta("touch_position"): continue
+		child.position = child.get_meta("touch_position")*factor
+		child.size = child.get_meta("touch_size")*factor
+		if child.get_meta("touch_aim",false):
+			child.set_pressed_no_signal(false)
+			child.toggle_mode = _aim_toggle
+	clear_touch()
 
 func clear_touch() -> void:
 	for id in ["fire","aim","sprint","crouch"]: held_changed.emit(id,false)

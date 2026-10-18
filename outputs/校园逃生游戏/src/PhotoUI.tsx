@@ -1,3 +1,4 @@
+import {GameDialog} from './GameDialog';
 import {useEffect,useRef,useState} from 'react';
 import {type PointerSession} from './pointer-owner';
 import {usePointerSession} from './use-pointer-session';
@@ -120,7 +121,7 @@ export function PhotoAlbum({onClose,extra,extras=[],onRealityState,onRemove}:{on
     {selected&&<><PhotoImage photo={selected}/>{selected.storageStatus==='temporary'&&<p role="status">未保存，可导出本次照片。</p>}<p>{selected.taskLabel??'校园随拍'} · {Math.round(selected.settings.focalLength)}mm · f/{selected.exposure.aperture} · {shutterLabel(selected.exposure.shutter)} · ISO {selected.exposure.iso} · {selected.width}×{selected.height}</p>
      <nav className="photo-album-actions"><button disabled={sharing||deleting} onClick={()=>share(selected)}>{sharing?'正在处理…':'分享／导出照片'}</button><button disabled={sharing||deleting} onClick={()=>exportParameters(selected)}>导出拍摄参数</button>{selected.reality&&<button disabled={sharing||deleting} onClick={()=>setReality(selected)}>重看遇见现实</button>}<button disabled={sharing||deleting} onClick={()=>{setDelivery('');setConfirmDelete(media.selected);}}>删除这张</button></nav>
     </>}
-    {confirmDelete&&<div className="photo-delete-confirm" role="alert"><span>删除这张照片？</span><button disabled={deleting} onClick={()=>setConfirmDelete(null)}>取消</button><button disabled={deleting} onClick={()=>void erase(confirmDelete)}>{deleting?'正在删除…':'删除'}</button></div>}
+    {confirmDelete&&<GameDialog title="删除这张照片？" tone="danger" confirmLabel="删除照片" busy={deleting} busyLabel="正在删除…" onConfirm={()=>void erase(confirmDelete)} onCancel={()=>setConfirmDelete(null)}><p>这张照片将从本机相册移除，删除后无法恢复。</p></GameDialog>}
     {delivery&&<p className="photo-delivery-result" role="status">{delivery}</p>}
    </section>
   </div>{reality?.reality&&<RealityUI photo={reality} association={reality.reality} replay onReady={()=>stateRef.current?.(true)} onClose={closeReality}/>}</div>;

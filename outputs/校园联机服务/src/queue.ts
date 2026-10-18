@@ -29,9 +29,9 @@ export class QueueRecords {
   // failure interrupted cleanup. Retrying removes only this row's old lock.
   await this.store.queueRemove(id);await this.releasePlayer(row);return true;
  }
- async cancel(id:string,tokenHash:string){
+ async cancel(id:string,tokenHash:string,unadmittedOwner?:string){
   for(let attempt=0;attempt<12;attempt++){
-   const raw=await this.store.get(key(id));if(!raw)return null;const row=JSON.parse(raw) as QueueRecord;if(row.tokenHash!==tokenHash)return null;
+   const raw=await this.store.get(key(id));if(!raw)return null;const row=JSON.parse(raw) as QueueRecord;if(row.tokenHash!==tokenHash||unadmittedOwner&&(row.player.id!==unadmittedOwner||row.admitted))return null;
    if(row.status!=='cancelled'){
     const cancelled={...row,status:'cancelled',reservation:null,error:undefined} as QueueRecord;
     if(!await this.store.compareSwap(key(id),raw,JSON.stringify(cancelled),900))continue;

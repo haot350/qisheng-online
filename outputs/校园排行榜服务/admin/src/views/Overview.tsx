@@ -1,3 +1,4 @@
+import Presence from './Presence';
 import { useState } from "react";
 import {
   has,
@@ -31,6 +32,7 @@ export function Overview({ administrator }: { administrator: Administrator }) {
       <Load loading={r.loading} error={r.error} retry={r.reload}>
         {r.data && (
           <>
+            {has(administrator, 'stats') && <Presence/>}
             <div className="dashboard-grid">
               {cards
                 .filter((x) => has(administrator, x[3]))

@@ -6,6 +6,7 @@ export const root=fileURLToPath(new URL('../',import.meta.url));
 const fileSet=new Set();
 const rootFiles=['.gitignore','AGENTS.md','README.md','LICENSE','CONTRIBUTING.md','SECURITY.md'];
 const docs=['HANDOFF.md','architecture.md','development.md','admin.md','assistant.md','operations.md','roadmap.md','OPEN_SOURCE.md','DEMO.md','THIRD_PARTY.md'];
+const reviewedGenerated=new Set(['outputs/齐盛原生客户端/src/generated/weather_profiles.gd','outputs/齐盛原生客户端/src/generated/weather_profiles.gd.uid']);
 const code=/\.(?:[cm]?js|ts|tsx|css|scss|json|html|sql|sh|py|md|yml|yaml|gd|rs|toml|tres|tscn|gdextension|uid)$/;
 const forbidden=/(?:^|\/)(?:node_modules|dist|build|release|releases|backups?|data|config|\.git|\.next|\.vinext|\.openai|\.sites-runtime|\.npm-cache|generated|assets|public|docs\/v[^/]*|[^/]*(?:备份|快照)[^/]*)(?:\/|$)|(?:^|\/)\.env(?:\.|$)|\.(?:sqlite(?:3)?|db|log|cookies|png|jpe?g|webp|glb|blend|bin|mp3|wav|ogg|mp4|zip|7z|pdf)$/i;
 const scriptLists={
@@ -21,7 +22,7 @@ async function sourceTree(relative){let entries;try{entries=await readdir(path.j
  for(const entry of entries){const file=relative+'/'+entry.name;if(file==='outputs/校园服务器部署/tests/maintenance-v084.test.mjs'||forbidden.test(file)||entry.isDirectory()&&/^release/i.test(entry.name)||file.endsWith('/app/astra/logo.json'))continue;if(entry.isSymbolicLink())throw Error('Source symlink is not allowed: '+file);if(entry.isDirectory())await sourceTree(file);else if(entry.isFile()&&code.test(entry.name))await add(file);}
 }
 export async function listPublicSource(){fileSet.clear();for(const file of rootFiles)await add(file);for(const file of docs)await add('docs/'+file);await sourceTree('.github');
- for(const script of ['dev-demo.mjs','check-demo.mjs','verify-demo.mjs','check-environment.mjs','public-source.mjs','collect-third-party-licenses.mjs'])await add('scripts/'+script);
+ for(const script of ['dev-demo.mjs','check-demo.mjs','verify-demo.mjs','check-environment.mjs','public-source.mjs','audit-public-source.mjs','collect-third-party-licenses.mjs'])await add('scripts/'+script);
  for(const entry of await readdir(path.join(root,'THIRD_PARTY_LICENSES')).catch(error=>{if(error.code==='ENOENT')return [];throw error;}))if(/LICENSE|NOTICE|licen[cs]e|notice|dependencies\.json|^rapier-Apache-2\.0\.txt$/i.test(entry))await add('THIRD_PARTY_LICENSES/'+entry);
  for(const [module,scripts]of Object.entries(scriptLists)){
   const base='outputs/'+module;for(const file of ['README.md','package.json','package-lock.json','tsconfig.json','vite.config.ts','vite.production.config.ts','next.config.ts','next-env.d.ts','postcss.config.mjs','eslint.config.mjs','components.json'])await add(base+'/'+file);
@@ -36,8 +37,9 @@ export async function listPublicSource(){fileSet.clear();for(const file of rootF
  const native='outputs/齐盛原生客户端';
  for(const file of ['project.godot','main.tscn','icon.svg','README.md','AGENTS.md','LICENSES.txt','export_presets.cfg','export_presets.demo.cfg','export_presets.android.fragment.cfg','content/demo/map.json','content/demo/weapons.json'])await add(native+'/'+file);
  // Public prose is explicit: internal map/package audits and test receipts stay local.
- for(const file of ['LICENSES.md','MILESTONE-M1.md','PREVIEW-0.1.0.md','combat-presentation-0.1.0.md','qa-runtime-repair-0.1.0.md','render-performance-review-0.1.0.md','android-build.md','network-compatibility.md'])await add(native+'/docs/'+file,true);
+ for(const file of ['LICENSES.md','MILESTONE-M1.md','PREVIEW-0.1.0.md','combat-presentation-0.1.0.md','qa-runtime-repair-0.1.0.md','render-performance-review-0.1.0.md','android-build.md','network-compatibility.md','ENGINE-DECISION.md','UI-0.2.0.md'])await add(native+'/docs/'+file,true);
  for(const dir of ['src','tests','scripts','scenes','themes','physics-rs/src'])await sourceTree(native+'/'+dir);
+ for(const file of reviewedGenerated)await add(file,true);
  for(const file of ['Cargo.toml','Cargo.lock','rust-toolchain.toml'])await add(native+'/physics-rs/'+file);
 
  await add(native+'/physics-rs/movement-source.json');
@@ -45,13 +47,27 @@ export async function listPublicSource(){fileSet.clear();for(const file of rootF
  await add(native+'/docs/physics-bridge.md');
  await add(native+'/physics-rs/THIRD-PARTY.md');
  await add(native+'/scripts/rustc-local-wrapper.cmd',true);
- for(const file of ['install-colyseus.ps1','prepare-android-tools.ps1','export-android.ps1'])await add(native+'/scripts/'+file,true);
+ for(const file of ['install-colyseus.ps1','prepare-android-tools.ps1','export-android.ps1','capture-windows-crash.ps1'])await add(native+'/scripts/'+file,true);
  for(const entry of await readdir(path.join(root,native,'third_party_licenses')))if(/\.txt$|^sources\.json$/i.test(entry))await add(native+'/third_party_licenses/'+entry,true);
  await add('outputs/校园逃生游戏/scripts/legacy/characters.ts',true);
  return [...fileSet].sort();
 }
 function checkVendor(bytes,name){const archive=gunzipSync(bytes);let offset=0,count=0;while(offset+512<=archive.length){const header=archive.subarray(offset,offset+512);if(header.every(byte=>byte===0))break;const entry=header.subarray(0,100).toString().replace(/\0.*$/s,''),size=parseInt(header.subarray(124,136).toString().replace(/\0.*$/s,'').trim()||'0',8),type=header[156];if(!Number.isFinite(size)||size<0||!entry.startsWith('package/')||entry.split('/').includes('..')||entry.includes('\\')||![0,48,53].includes(type)||/\.(?:png|webp|jpe?g|glb|bin|blend|sqlite|log)$|(?:^|\/)\.(?:env|git)/i.test(entry))throw Error('Unsafe shared vendor entry in '+name+': '+entry);count++;offset+=512+Math.ceil(size/512)*512;}if(!count)throw Error('Empty shared vendor tarball: '+name);return count;}
-async function check(files){let vendorEntries=0;for(const file of files){if(file.includes('..')||path.isAbsolute(file))throw Error('Unsafe public path: '+file);if(file.endsWith('/.npmrc')){const options=(await readFile(path.join(root,file),'utf8')).split(/\r?\n/).map(x=>x.trim()).filter(x=>x&&!x.startsWith('#')&&!x.startsWith(';'));if(options.length!==1||options[0]!=='ignore-scripts=true')throw Error('Public API .npmrc must contain only the reviewed lifecycle policy; registry credentials are forbidden.');}if(file.endsWith('.tgz'))vendorEntries+=checkVendor(await readFile(path.join(root,file)),file);else if(file.endsWith('.uid')){if(!/^uid:\/\/[a-z0-9]+\s*$/.test(await readFile(path.join(root,file),'utf8')))throw Error('Unexpected Godot resource UID content: '+file);}else if(forbidden.test(file)&&!file.endsWith('/templates/local-demo.env.example')&&!file.endsWith('/demo/public/anonymous-avatar.svg'))throw Error('Private asset path in public whitelist: '+file);if(/\/npc-(?:contours|layout(?:-v13|-motion|-combat)?)\.ts$/.test(file)){const source=await readFile(path.join(root,file),'utf8');if(/preserved PNG masters|calibrated pixel regions|native pixel regions|per-pose alpha bounds|"rows"\s*:\s*\[|PNG母版|原有母版参考/.test(source)||source.length>1000)throw Error('Photograph-derived NPC calibration cannot enter public source: '+file);}}console.log(JSON.stringify({ok:true,files:files.length,sharedVendorEntries:vendorEntries,policy:'explicit-source-whitelist',note:'Path/archive and private-NPC payload check; maintainers must also review source for sensitive literals.'}));}
+export function checkReviewedGenerated(file,text){
+ if(!reviewedGenerated.has(file))return;
+ if(file.endsWith('.uid')){if(!/^uid:\/\/[a-z0-9]+\s*$/.test(text))throw Error('Unexpected generated UID: '+file);return;}
+ const match=/^# Generated by scripts\/export-weather\.mjs from canonical shared visual presets\.\r?\nextends RefCounted\r?\nconst PRESETS = (\{[\s\S]*\})\s*$/.exec(text);
+ if(!match)throw Error('Generated weather source must contain only the reviewed data constant: '+file);
+ const data=JSON.parse(match[1]);
+ if(JSON.stringify(Object.keys(data).sort())!==JSON.stringify(['clear','light-rain','overcast']))throw Error('Unexpected weather preset set: '+file);
+ const labels={clear:'晴天',overcast:'阴天','light-rain':'小雨'};
+ for(const [id,value]of Object.entries(data)){
+  if(!value||Array.isArray(value)||JSON.stringify(Object.keys(value).sort())!==JSON.stringify(['ambientIntensity','label','rain','sky','sun','sunIntensity','wetness'])||value.label!==labels[id])throw Error('Unexpected weather preset fields: '+file);
+  for(const key of ['sky','sun'])if(!Number.isInteger(value[key])||value[key]<0||value[key]>0xffffff)throw Error('Invalid public weather color: '+file);
+  for(const key of ['sunIntensity','ambientIntensity','rain','wetness'])if(typeof value[key]!=='number'||!Number.isFinite(value[key])||value[key]<0||value[key]>(['rain','wetness'].includes(key)?1:10))throw Error('Invalid public weather scalar: '+file);
+ }
+}
+async function check(files){for(const file of reviewedGenerated)checkReviewedGenerated(file,await readFile(path.join(root,file),'utf8'));let vendorEntries=0;for(const file of files){if(file.includes('..')||path.isAbsolute(file))throw Error('Unsafe public path: '+file);if(file.endsWith('/.npmrc')){const options=(await readFile(path.join(root,file),'utf8')).split(/\r?\n/).map(x=>x.trim()).filter(x=>x&&!x.startsWith('#')&&!x.startsWith(';'));if(options.length!==1||options[0]!=='ignore-scripts=true')throw Error('Public API .npmrc must contain only the reviewed lifecycle policy; registry credentials are forbidden.');}if(file.endsWith('.tgz'))vendorEntries+=checkVendor(await readFile(path.join(root,file)),file);else if(file.endsWith('.uid')){if(!/^uid:\/\/[a-z0-9]+\s*$/.test(await readFile(path.join(root,file),'utf8')))throw Error('Unexpected Godot resource UID content: '+file);}else if(forbidden.test(file)&&!reviewedGenerated.has(file)&&!file.endsWith('/templates/local-demo.env.example')&&!file.endsWith('/demo/public/anonymous-avatar.svg'))throw Error('Private asset path in public whitelist: '+file);if(/\/npc-(?:contours|layout(?:-v13|-motion|-combat)?)\.ts$/.test(file)){const source=await readFile(path.join(root,file),'utf8');if(/preserved PNG masters|calibrated pixel regions|native pixel regions|per-pose alpha bounds|"rows"\s*:\s*\[|PNG母版|原有母版参考/.test(source)||source.length>1000)throw Error('Photograph-derived NPC calibration cannot enter public source: '+file);}}console.log(JSON.stringify({ok:true,files:files.length,sharedVendorEntries:vendorEntries,policy:'explicit-source-whitelist',note:'Path/archive and private-NPC payload check; maintainers must also review source for sensitive literals.'}));}
 const command=process.argv[2]??'--list';if(fileURLToPath(import.meta.url)===path.resolve(process.argv[1]??'')){
  const files=await listPublicSource();
  if(command==='--list')console.log(files.join('\n'));

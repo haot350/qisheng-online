@@ -7,8 +7,10 @@ import {ALL_EXTENSIONS} from '../../校园逃生游戏/node_modules/@gltf-transf
 import {dequantize} from '../../校园逃生游戏/node_modules/@gltf-transform/functions/dist/functions.modern.js';
 import {MeshoptDecoder} from '../../校园逃生游戏/node_modules/meshoptimizer/meshopt_decoder.module.js';
 import {WEAPONS} from '../../校园共享模块/src/rules.ts';
+import {canonicalProtocolVersion} from '../../校园服务器部署/scripts/release-protocol.mjs';
 import {spawnSync} from 'node:child_process';
 const root=fileURLToPath(new URL('../',import.meta.url)),game=fileURLToPath(new URL('../../校园逃生游戏/',import.meta.url));
+const PROTOCOL_VERSION=canonicalProtocolVersion(await readFile(new URL('../../校园共享模块/src/protocol.ts',import.meta.url),'utf8'));
 const production=process.argv.includes('--production');
 if(!production)throw Error('Formal combat resources require --production; no assets are added to public source.');
 const output=path.join(root,'content/combat');await mkdir(output,{recursive:true});
@@ -33,5 +35,5 @@ await mkdir(path.join(output,'cards'),{recursive:true});
 for(const id of Object.keys(WEAPONS))await copyFile(path.join(game,'public/weapon-cards',id+'.webp'),path.join(output,'cards',id+'.webp'));
 for(const variant of ['dark','light'])await copyFile(path.join(game,'src/assets/branding',`qisheng-online-${variant}.webp`),path.join(output,`logo-${variant}.webp`));
 await writeFile(path.join(output,'weapons.json'),JSON.stringify(definitions,null,2)+'\n');
-await writeFile(path.join(output,'manifest.json'),JSON.stringify({profile:'production',protocolVersion:'campus-mp-0.9.0',assets},null,2)+'\n');
+await writeFile(path.join(output,'manifest.json'),JSON.stringify({profile:'production',protocolVersion:PROTOCOL_VERSION,assets},null,2)+'\n');
 console.log(JSON.stringify({status:'PASS',resources:assets.length,originalsUnchanged:true,privateAssets:true}));

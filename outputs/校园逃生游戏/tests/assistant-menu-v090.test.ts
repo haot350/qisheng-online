@@ -66,8 +66,8 @@ test('an action failure reports that item once and does not run later actions or
   {index:1,total:3,phase:'running'},
   {index:1,total:3,phase:'failed',message:'武器暂不可用'},
  ]);
- await assert.rejects(executor.run(plan,runtime),/已经处理/);
- assert.equal(progress.length,4);assert.equal(calls.length,2);
+ await assert.rejects(executor.run(plan,runtime),/武器暂不可用/);
+ assert.deepEqual(calls,['select_mode','select_weapon','select_weapon'],'retry does not repeat the completed mode action');
 });
 
 test('cancellation during an awaited action marks it failed and ignores its late successful result',async()=>{
@@ -91,4 +91,12 @@ test('cancellation during an awaited action marks it failed and ignores its late
  ]);
  await assert.rejects(executor.run(plan,runtime),/已经处理/);
  assert.equal(progress.length,4);assert.equal(calls.length,2);
+});
+
+
+test('retry resumes the failed action and never repeats a completed room side effect',async()=>{
+ const executor=new AssistantMenuExecution(),calls:string[]=[],context:AssistantMenuContext={token:base.contextToken,inBattle:false,page:'assistant'};let failures=0;
+ const plan:AssistantActionPlan={...base,id:'room-retry-resume',actions:[{type:'create_room',mode:'tdm',difficulty:'normal',private:true,maxPlayers:8},{type:'select_weapon',weapon:'m4a1'}]};
+ const runtime:AssistantMenuRuntime={context:()=>context,identity:()=> 'p0',execute:async action=>{calls.push(action.type);if(action.type==='select_weapon'&&failures++===0)throw Error('temporary snapshot wait');return action.type;}};
+ await assert.rejects(executor.run(plan,runtime,true),/temporary/);assert.deepEqual(await executor.run(plan,runtime,true),['create_room','select_weapon']);assert.deepEqual(calls,['create_room','select_weapon','select_weapon']);await assert.rejects(executor.run(plan,runtime,true),/已经处理/);
 });

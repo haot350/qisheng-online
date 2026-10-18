@@ -16,9 +16,9 @@ $node = (Get-Command node -ErrorAction Stop).Source
 $preflightText = & $node (Join-Path $project 'scripts/native-export-preflight.mjs') android
 if ($LASTEXITCODE -ne 0) { throw 'Android native identity or physics verification failed' }
 $preflight = $preflightText | ConvertFrom-Json
-if ($Check) { @{checked=$true;exported=$false;published=$false;version='0.1.0';platform='android';stage='internal';sourceHash=$preflight.sourceHash} | ConvertTo-Json; return }
+if ($Check) { @{checked=$true;exported=$false;published=$false;version='0.2.0';platform='android';stage='internal';sourceHash=$preflight.sourceHash} | ConvertTo-Json; return }
 $distRoot = [IO.Path]::GetFullPath((Join-Path $project 'dist'))
-$delivery = if ($OutputFile) { [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($OutputFile)) { $OutputFile } else { Join-Path $project $OutputFile })) } else { Join-Path $distRoot 'qisheng-native-0.1.0-android-arm64-internal.apk' }
+$delivery = if ($OutputFile) { [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($OutputFile)) { $OutputFile } else { Join-Path $project $OutputFile })) } else { Join-Path $distRoot 'qisheng-native-0.2.0-android-arm64-internal.apk' }
 if (-not $delivery.StartsWith(($distRoot+[IO.Path]::DirectorySeparatorChar),[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetExtension($delivery) -ne '.apk') { throw 'Android output must be a new APK inside native dist' }
 if (Test-Path -LiteralPath $delivery) { throw 'Android output already exists; choose a new -OutputFile. Historical packages are never overwritten.' }
 & $node (Join-Path $project 'scripts/prepare-runtime-licenses.mjs')
@@ -57,15 +57,15 @@ $escapedSdk = $sdk.Replace('\','/')
 @('[gd_resource type="EditorSettings" format=3]','','[resource]',('export/android/java_sdk_path = "'+$escapedJava+'"'),('export/android/android_sdk_path = "'+$escapedSdk+'"')) | Set-Content -LiteralPath (Join-Path $env:APPDATA 'Godot/editor_settings-4.7.tres') -Encoding utf8
 # Google's Windows SDK utilities reject non-ASCII archive arguments. Keep their
 # staging arguments ASCII; Godot's project and final delivery may remain Chinese.
-$stage = [IO.Path]::GetFullPath((Join-Path $project ('../../work/native-android-0.1.0-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'))))
+$stage = [IO.Path]::GetFullPath((Join-Path $project ('../../work/native-android-0.2.0-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'))))
 New-Item -ItemType Directory -Force $stage | Out-Null
-$apk = Join-Path $stage 'qisheng-native-0.1.0-android-arm64-internal.apk'
+$apk = Join-Path $stage 'qisheng-native-0.2.0-android-arm64-internal.apk'
 try {
     & $GodotBin --headless --path $project --export-debug 'Android Internal arm64' $apk
     if ($LASTEXITCODE -ne 0) { throw 'Godot Android internal export failed' }
     $unsigned = Join-Path $stage 'android-sdk-levels-unsigned.apk'
     $aligned = Join-Path $stage 'android-sdk-levels-aligned.apk'
-    & $python (Join-Path $project 'scripts/set-android-sdk.py') $apk $unsigned --min-sdk 29 --target-sdk 35 --report (Join-Path $project 'work/android-manifest-report-0.1.0.json')
+    & $python (Join-Path $project 'scripts/set-android-sdk.py') $apk $unsigned --min-sdk 29 --target-sdk 35 --report (Join-Path $project 'work/android-manifest-report-0.2.0.json')
     if ($LASTEXITCODE -ne 0) { throw 'APK minimum SDK preparation failed' }
     & (Join-Path $sdk 'build-tools/35.0.1/zipalign.exe') -f -P 16 4 $unsigned $aligned
     if ($LASTEXITCODE -ne 0) { throw 'APK page alignment failed' }
@@ -79,8 +79,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'APK metadata inspection failed' }
     $description = $metadata -join "`n"
     if ($description -notmatch "sdkVersion:'29'" -or $description -notmatch "targetSdkVersion:'35'" -or $description -notmatch "native-code: 'arm64-v8a'" -or $description -notmatch "package: name='org.openqs.qisheng.nativepreview'" -or $description -notmatch 'android.permission.INTERNET') { throw 'Unexpected APK platform, ABI, package or network permission' }
-    if ($description -notmatch "versionName='0.1.0-internal'" -or $description -notmatch "versionCode='100'") { throw 'Unexpected Android Preview 0.1.0 version identity' }
-    $auditFile = Join-Path $project ('work/android-package-audit-0.1.0-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'.json')
+    if ($description -notmatch "versionName='0.2.0-internal'" -or $description -notmatch "versionCode='200'") { throw 'Unexpected Android Preview 0.2.0 version identity' }
+    $auditFile = Join-Path $project ('work/android-package-audit-0.2.0-'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'.json')
     & $python (Join-Path $project 'scripts/audit-android-apk.py') $apk --report $auditFile --project $project
     if ($LASTEXITCODE -ne 0) { throw 'Android package boundary, raw map, native dependencies or licenses failed audit' }
     $audit = Get-Content -LiteralPath $auditFile -Raw | ConvertFrom-Json
@@ -92,12 +92,12 @@ try {
     New-Item -ItemType Directory -Force ([IO.Path]::GetDirectoryName($delivery)) | Out-Null
     Copy-Item -LiteralPath $apk -Destination $delivery -Force
     $hash = (Get-FileHash -LiteralPath $delivery -Algorithm SHA256).Hash.ToLowerInvariant()
-    $receipt = @{schema=1;kind='native-package';platform='android';version='0.1.0';profile='production';stage='internal';published=$false;formalAssets=$true;file=[IO.Path]::GetFileName($delivery);bytes=(Get-Item -LiteralPath $delivery).Length;sha256=$hash;artifact=@{file=[IO.Path]::GetFileName($delivery);bytes=(Get-Item -LiteralPath $delivery).Length;sha256=$hash};sourceHash=$preflight.sourceHash;protocolVersion=$preflight.protocolVersion;mapIdentity=$preflight.mapIdentity;physics=$preflight.physics;sdk=$preflight.sdk;signatureVerified=$true;pageAlignmentKiB=16;minimumSdk=29;targetSdk=35;abi='arm64-v8a';deviceVerified=$false;signing='internal-preview';checkedAt=[DateTime]::UtcNow.ToString('o');audit=$audit}
+    $receipt = @{schema=1;kind='native-package';platform='android';version='0.2.0';profile='production';stage='internal';published=$false;formalAssets=$true;file=[IO.Path]::GetFileName($delivery);bytes=(Get-Item -LiteralPath $delivery).Length;sha256=$hash;artifact=@{file=[IO.Path]::GetFileName($delivery);bytes=(Get-Item -LiteralPath $delivery).Length;sha256=$hash};sourceHash=$preflight.sourceHash;protocolVersion=$preflight.protocolVersion;mapIdentity=$preflight.mapIdentity;physics=$preflight.physics;sdk=$preflight.sdk;signatureVerified=$true;pageAlignmentKiB=16;minimumSdk=29;targetSdk=35;abi='arm64-v8a';deviceVerified=$false;signing='internal-preview';checkedAt=[DateTime]::UtcNow.ToString('o');audit=$audit}
     $receiptJson = $receipt | ConvertTo-Json -Depth 12
     $utf8 = New-Object Text.UTF8Encoding $false
     [IO.File]::WriteAllText(($delivery+'.json'),$receiptJson,$utf8)
     [IO.File]::WriteAllText(($delivery+'.sha256'),($hash+'  '+[IO.Path]::GetFileName($delivery)+[Environment]::NewLine),$utf8)
-    [IO.File]::WriteAllText((Join-Path $project 'work/android-export-report-0.1.0.json'),$receiptJson,$utf8)
+    [IO.File]::WriteAllText((Join-Path $project 'work/android-export-report-0.2.0.json'),$receiptJson,$utf8)
     Write-Output ('APK SHA-256 '+$hash)
 } finally {
     Remove-Item Env:OPENQS_INTERNAL_KEYSTORE_PASSWORD -ErrorAction SilentlyContinue

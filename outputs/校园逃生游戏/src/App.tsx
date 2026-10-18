@@ -1,3 +1,4 @@
+import {WeatherChoice} from './WeatherChoice';
 import type {AssistantMenuAction, AssistantMenuContext} from '@qisheng/shared/assistant';
 import {readRecentPlay,saveRecentPlay,type RecentPlay} from './recent-mode';
 import {GadgetHUD} from './GadgetHUD';
@@ -41,6 +42,8 @@ import {
 import { ModuleBoundary } from "./ModuleBoundary";
 import {MenuPage, useMenuPages, type MenuPageId} from "./MenuPages";
 import {SessionMenuActions} from './SessionMenuActions';
+import {GameDialog} from './GameDialog';
+import {useGamePresence} from './game-presence';
 import { MenuFAQ, MenuUpdates } from "./ReadingUI";
 import { TouchControls } from "./TouchControls";
 import {
@@ -409,6 +412,8 @@ export default function App() {
   const pages = useMenuPages(new URLSearchParams(location.search).get("panel")==="leaderboard"?"ranking":null,accountBusy);
   const [requestedRankPanel,setRequestedRankPanel] = useState<"board"|"recent">("board");
   const [leaveConfirmation,setLeaveConfirmation] = useState(false);
+  const [leavingRoom,setLeavingRoom] = useState(false);
+  const leaveWork=useRef<Promise<void>|null>(null);
   const [leaveDestination,setLeaveDestination] = useState<'main'|'lobby'>('main');
   const [replayGuidanceOnContinue,setReplayGuidanceOnContinue]=useState(false);
   const openMenuPage = (page:MenuPageId) => {
@@ -486,7 +491,8 @@ export default function App() {
         break;
       case "retry":
       case "reconnect":
-        if (client.hasResumeSession()) void client.reconnect();
+        if (client.hasUncertainAdmission()) void client.recoverAdmission();
+        else if (client.hasResumeSession()) void client.reconnect();
         else void client.refresh();
         break;
       case "create":
@@ -1029,11 +1035,15 @@ export default function App() {
       retry: retryEscape,
     });
   };
-  const finishReturnMenu = () => {
+  useGamePresence();
+  const finishReturnMenu = ():Promise<void> => {
+    if(leaveWork.current)return leaveWork.current;
     const leavingOnline = !!onlineRoomKey || !!onlineClient.current?.view.currentRoom;
+    const work=(async()=>{
+    setLeavingRoom(true);
+    if(onlineClient.current?.view.currentRoom||onlineOpen||['connecting','queued','reconnecting'].includes(onlineClient.current?.view.status??'')){await onlineClient.current?.leave();setOnlineRoomKey(null);setOnlineOpen(false);}
     pages.clear();
     setLeaveConfirmation(false);
-    if(onlineClient.current?.view.currentRoom||onlineOpen||['connecting','queued','reconnecting'].includes(onlineClient.current?.view.status??'')){void onlineClient.current?.leave();setOnlineRoomKey(null);setOnlineOpen(false);}
     localRoundAccepted.current = false;
     setNoticesOpen(false);
     setModeBlocked(null);
@@ -1055,20 +1065,22 @@ export default function App() {
     setTouchEditor(false);
     setShowSettings(false);
     if (!leavingOnline) game.current?.menu();
+    })().finally(()=>{setLeavingRoom(false);if(leaveWork.current===work)leaveWork.current=null;});
+    leaveWork.current=work;return work;
   };
   const returnMenu = () => {
     setLeaveDestination('main');
     if(["playing","paused","intro"].includes(snapshot.phase) || onlineClient.current?.view.currentRoom){
       game.current?.clearInput?.();game.current?.pause();setLeaveConfirmation(true);return;
     }
-    finishReturnMenu();
+    void finishReturnMenu();
   };
   const returnLobby = () => {
     game.current?.clearInput?.();game.current?.pause();
     setLeaveDestination('lobby');setLeaveConfirmation(true);
   };
-  const finishReturnLobby = () => {
-    finishReturnMenu();
+  const finishReturnLobby = async () => {
+    await finishReturnMenu();
     setSelectedMode('escape');setMenuScreen('prepare');
     setOnlineOpen(true);setAttempt(n=>n+1);
   };
@@ -1237,11 +1249,12 @@ export default function App() {
   const [assistantReturnScreen,setAssistantReturnScreen]=useState<'home'|'modes'|'prepare'|null>(null);
   const assistantScope=useRef({key:'',token:crypto.randomUUID()});
   useEffect(()=>{if(snapshot.phase!=='playing')return;const room=onlineView.currentRoom;const value:RecentPlay={mode:snapshot.mode,entry:room?(room.mode==='coop'?'coop':'pvp'):'single',variant:room?.variant==='ffa'?'ffa':'tdm'};setRecentPlay(previous=>{if(previous&&JSON.stringify(previous)===JSON.stringify(value))return previous;saveRecentPlay(value);return value;});},[snapshot.phase,snapshot.mode,onlineView.currentRoom?.mode,onlineView.currentRoom?.variant]);
-  const assistantInBattle=['playing','paused','won','lost'].includes(snapshot.phase)||!!(onlineView.currentRoom&&onlineView.currentRoom.phase!=='lobby');
+  const assistantInBattle=onlineView.currentRoom?onlineView.currentRoom.phase!=='lobby':['playing','paused','won','lost'].includes(snapshot.phase);
   const assistantKey=(rankingPlayer?.id??'guest')+':'+(pages.active==='assistant')+':'+assistantInBattle;
   if(assistantScope.current.key!==assistantKey)assistantScope.current={key:assistantKey,token:crypto.randomUUID()};
   const assistantContext:AssistantMenuContext={token:assistantScope.current.token,inBattle:assistantInBattle,page:'assistant'};
   const assistantAdmission=useRef<symbol|null>(null);
+  const assistantAdmissionResult=useRef<{identity:string;contextToken:string;action:string}|null>(null);
   const assistantAction=async(action:AssistantMenuAction,signal:AbortSignal):Promise<string>=>{
     if(signal.aborted||assistantInBattle||pages.active!=='assistant'||accountBusy)throw Error('当前页面不适合代办，请返回菜单后重试。');
     const contextToken=assistantScope.current.token,identity=rankingClient.getPlayer()?.id;
@@ -1262,7 +1275,7 @@ export default function App() {
       case'select_difficulty':if(onlineClient.current?.view.currentRoom)throw Error('房间难度已经确定，请在创建房间时选择。');changeSettings({...settingsRef.current,escapeDifficulty:difficulty(action.difficulty)});return '难度已选好。';
       case'select_weapon':{
         const client=onlineClient.current!,room=client.view.currentRoom;
-        if(room){const me=room.players.find(p=>p.id===client.playerId);if(!me)throw Error('房间状态已变化，请重试。');client.send('loadout',{weapon:action.weapon,avatar:me.avatar,team:me.team});return '已提交房间装备选择。';}
+        if(room){const me=room.players.find(p=>p.id===client.playerId);if(!me)throw Error('房间状态已变化，请重试。');await client.selectLoadout({weapon:action.weapon,avatar:me.avatar,team:me.team},signal);valid();return '房间装备已选好。';}
         setPrimary(action.weapon);return '主武器已选好。';
       }
       case'setting':{
@@ -1274,20 +1287,28 @@ export default function App() {
       }
       case'create_room':case'join_room':{
         if(!identity||rankingClient.getPlayer()?.accountStatus!=='active')throw Error('请先在账号页登录，再加入联机。');
-        const client=onlineClient.current!;if(client.view.currentRoom||client.hasResumeSession())throw Error('请先返回原房间或明确离开，再进行此操作。');
+        const client=onlineClient.current!;
+        // A retry must reconcile its own admitted seat before requesting another room.
+        if(client.view.currentRoom||client.hasResumeSession()){
+          if(!assistantAdmissionResult.current||assistantAdmissionResult.current.identity!==identity||assistantAdmissionResult.current.contextToken!==contextToken||assistantAdmissionResult.current.action!==JSON.stringify(action))throw Error('请先返回原房间或明确离开，再进行此操作。');
+          if(!client.room)await client.reconnect();
+          const original=await client.waitForOwnSnapshot(signal);valid();
+          setSelectedMode('escape');setEscapeEntry(original.mode==='coop'?'coop':'pvp');setPvpVariant(original.variant);setMenuScreen('prepare');setAssistantReturnScreen('prepare');return '已回到房间。';
+        }
         if(action.type==='create_room'&&!guardEntry(entryFor('escape',action.mode==='coop'?'coop':'pvp',action.mode==='ffa'?'ffa':'tdm')))throw Error('该玩法暂时不可用。');
         const token=Symbol('assistant-admission');assistantAdmission.current=token;
+        assistantAdmissionResult.current={identity,contextToken,action:JSON.stringify(action)};
         const cancel=()=>{if(assistantAdmission.current===token){assistantAdmission.current=null;void client.leave();}};
         signal.addEventListener('abort',cancel,{once:true});
         try{
           client.playerId=identity;
-          if(action.type==='create_room')await client.join({mode:action.mode==='coop'?'coop':'pvp',variant:action.mode==='ffa'?'ffa':'tdm',difficulty:difficulty(action.difficulty),private:action.private,maxPlayers:action.maxPlayers});
-          else await client.join(undefined,undefined,action.code);
+          if(action.type==='create_room')await client.join({mode:action.mode==='coop'?'coop':'pvp',variant:action.mode==='ffa'?'ffa':'tdm',difficulty:difficulty(action.difficulty),private:action.private,maxPlayers:action.maxPlayers,weather:settingsRef.current.weather??'clear'},undefined,undefined,signal);
+          else await client.join(undefined,undefined,action.code,signal);
           valid();const joinedRoom=(client.view as LobbyView).currentRoom;if(!joinedRoom)throw Error(client.view.error||'暂时未能加入房间，请重试。');
           setSelectedMode('escape');setEscapeEntry(joinedRoom.mode==='coop'?'coop':'pvp');setPvpVariant(joinedRoom.variant);setMenuScreen('prepare');
           setAssistantReturnScreen('prepare');
           return '房间已就绪。';
-        }catch(error){if(assistantAdmission.current===token){assistantAdmission.current=null;await client.leave();}throw error;}finally{signal.removeEventListener('abort',cancel);if(assistantAdmission.current===token)assistantAdmission.current=null;}
+        }catch(error){if(signal.aborted&&assistantAdmission.current===token){assistantAdmission.current=null;await client.leave();}throw error;}finally{signal.removeEventListener('abort',cancel);if(assistantAdmission.current===token)assistantAdmission.current=null;}
       }
     }
   };
@@ -1403,7 +1424,7 @@ export default function App() {
             void importStory(file, true);
         }}
       />
-      {upgradePrompt&&isMenu&&!rankingPanel&&<MenuReadingPanel title="保留记录，升级账号" onClose={deferUpgrade}><p>设置用户名和密码，保存新的恢复码，即可继续使用原来的成绩、反馈和联机身份。</p><p>升级后可以跨设备登录，查看竞技档案与成就。照片、故事进度和本机成绩仍留在当前浏览器。</p><div className="upgrade-prompt-actions"><button className="primary" onClick={()=>{setUpgradePrompt(false);openRanking("identity");}}>升级账号</button><button className="secondary" onClick={deferUpgrade}>稍后再说</button></div></MenuReadingPanel>}
+      {upgradePrompt&&isMenu&&!rankingPanel&&<GameDialog title="保留记录，升级账号" onCancel={deferUpgrade} cancelLabel="稍后再说" confirmLabel="升级账号" onConfirm={()=>{setUpgradePrompt(false);openRanking("identity");}}><p>设置用户名和密码，保存新的恢复码，即可继续使用原来的成绩、反馈和联机身份。</p><p>照片、故事进度和本机成绩仍留在当前浏览器。</p></GameDialog>}
       {isMenu && (
         <MainMenu
           recent={recentPlay}
@@ -1545,25 +1566,26 @@ export default function App() {
                     : "随时探索与拍照，不计时，也没有敌人。"}
                 </p>
               )}
+              {selectedMode!=='story'&&<WeatherChoice value={settings.weather??'clear'} onChange={weather=>changeSettings({...settings,weather})} disabled={busy}/>}
             </>
           }
         />
       )}
       {announcements.flash && playing && <div className="announcement-flash" role="status"><strong>{announcements.flash.title}</strong><span>暂停菜单可查看完整通知</span></div>}
-      {modeBlocked && <MenuReadingPanel title="玩法暂时不可用" onClose={()=>setModeBlocked(null)}><p>{modeBlocked}</p></MenuReadingPanel>}
+      {modeBlocked && <GameDialog title="玩法暂时不可用" confirmLabel="知道了" onConfirm={()=>setModeBlocked(null)}><p>{modeBlocked}</p></GameDialog>}
       {noticesOpen && <MenuReadingPanel title="游戏通知" onClose={()=>setNoticesOpen(false)}><AnnouncementList items={announcements.list} onRead={announcements.markRead}/></MenuReadingPanel>}
       {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
-        {page==='settings'?<SettingsPanel mode={helpMode} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
+        {page==='settings'?<SettingsPanel mode={helpMode} onlineWeather={onlineView.currentRoom?(onlineView.currentRoom.weather?.preset??'clear'):undefined} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
         page==='help'?<div className="help-panel">{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题 →</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
         page==='faq'?<MenuFAQ mode={helpMode} context={menuScreen==='prepare'?'prepare':'home'}/>:
         page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
         page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
-        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
+        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} onPlanComplete={plan=>{if(plan.actions.some(action=>action.type==='create_room'||action.type==='join_room')&&onlineClient.current?.view.currentRoom?.phase==='lobby'){pages.clear();setOnlineOpen(true);}}} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
-      {leaveConfirmation&&<MenuReadingPanel title={leaveDestination==='lobby'?'离开本局并返回联机大厅？':onlineView.currentRoom?'离开房间并返回主菜单？':'结束本局并返回主菜单？'} onClose={()=>setLeaveConfirmation(false)}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位，其他玩家可以继续对局。':storyMode?'故事进度会保留在本机；返回后可以继续上次的故事。':'本局尚未完成，返回会结束当前游玩。'}</p><div className="upgrade-prompt-actions"><button className="secondary" onClick={()=>setLeaveConfirmation(false)}>留在菜单</button><button className="primary" onClick={leaveDestination==='lobby'?finishReturnLobby:finishReturnMenu}>{leaveDestination==='lobby'?'确认返回联机大厅':'确认返回主菜单'}</button></div></MenuReadingPanel>}
+      {leaveConfirmation&&<GameDialog tactical={snapshot.mode==='escape'||!!onlineView.currentRoom} tone="danger" title={leaveDestination==='lobby'?'返回联机大厅？':onlineView.currentRoom?'离开当前房间？':'结束本局？'} busy={leavingRoom} busyLabel="正在离开…" onCancel={()=>setLeaveConfirmation(false)} cancelLabel="留在菜单" confirmLabel={leaveDestination==='lobby'?'返回联机大厅':'返回主菜单'} onConfirm={()=>void (leaveDestination==='lobby'?finishReturnLobby():finishReturnMenu())}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位。其他玩家可以继续对局。':storyMode?'故事进度会保留在本机，下次可以继续。':'本局尚未完成，返回主菜单将结束当前游玩。'}</p></GameDialog>}
       {briefing && (
         <CombatBriefing
           mode={briefing.mode}
@@ -2137,6 +2159,7 @@ export default function App() {
           <Suspense fallback={<p role="status">正在打开联机大厅…</p>}><ModuleBoundary label="联机大厅" retry={multiplayerComponent} onClose={returnMenu}><MultiplayerUI embedded
             initialMode={escapeEntry === "pvp" ? "pvp" : "coop"}
             initialVariant={pvpVariant}
+            initialWeather={settings.weather??'clear'}
             view={onlineView}
             playerId={rankingPlayer?.id || onlineClient.current!.playerId}
             onAction={onlineAction}

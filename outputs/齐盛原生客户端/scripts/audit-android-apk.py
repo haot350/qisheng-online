@@ -83,7 +83,9 @@ def audit(apk,project):
   for marker,file in [('qs_native_physics','bin/libqs_native_physics.arm64.so'),('colyseus','addons/colyseus/bin/libcolyseus_godot.android.arm64.debug.so')]:
    actual=next(row['sha256'] for name,row in libraries.items() if marker in name)
    if hashlib.sha256((project/file).read_bytes()).hexdigest()!=actual:raise ValueError('APK extension differs from the verified platform source: '+marker)
-  return{'passed':True,'kind':'internal-native-apk','version':'0.1.0','stage':'internal','published':False,'entries':len(names),'architectures':sorted(abis),'nativeLibraries':libraries,'physicsRuntimeNotices':len(PHYSICS_NOTICES),'privateOrDevelopmentEntries':0,'campusChunks':209,'mapIdentity':identity,'deviceVerified':False}
+  version_match=re.search(r'^config/version="([0-9]+\.[0-9]+\.[0-9]+)"$',(project/'project.godot').read_text(encoding='utf-8'),re.M)
+  if not version_match:raise ValueError('Native project version missing')
+  return{'passed':True,'kind':'internal-native-apk','version':version_match.group(1),'stage':'internal','published':False,'entries':len(names),'architectures':sorted(abis),'nativeLibraries':libraries,'physicsRuntimeNotices':len(PHYSICS_NOTICES),'privateOrDevelopmentEntries':0,'campusChunks':209,'mapIdentity':identity,'deviceVerified':False}
 if __name__=='__main__':
  parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('apk',type=Path);parser.add_argument('--report',type=Path,required=True);parser.add_argument('--project',type=Path,default=Path(__file__).resolve().parents[1]);args=parser.parse_args()
  report=audit(args.apk,args.project);args.report.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps({key:value for key,value in report.items() if key not in ['mapIdentity','nativeLibraries']},ensure_ascii=False))

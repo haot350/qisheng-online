@@ -14,6 +14,7 @@ import roamDesktop from './assets/mode-covers/roam-desktop.webp';
 import roamMobile from './assets/mode-covers/roam-mobile.webp';
 import './menu.css';
 import {BrandLogo} from './BrandLogo';
+import {NativeDownloads} from './NativeDownloads';
 import {recentPlayName,type RecentPlay} from './recent-mode';
 import {MenuNavigation,type MenuPageId} from './MenuPages';
 import '@qisheng/shared/player-content/reading.css';
@@ -73,6 +74,7 @@ export function MenuAbout({onUpdates,onCopyright}:{onUpdates:()=>void;onCopyrigh
   <div className="menu-about-brand"><BrandLogo/></div>
   <p className="menu-release-meta">{LATEST_RELEASE.version} · 预览版</p>
   <p className="menu-about-intro">在数字校园里同行、探索、驾驶，或与同伴完成一场突围。</p>
+  <NativeDownloads/>
   <button className="menu-information-card menu-update-card" onClick={onUpdates}><span className="menu-information-copy"><strong>更新记录{unread&&<span className="menu-update-dot" role="img" aria-label="有未读更新"/>}</strong><time dateTime={LATEST_RELEASE.date}>{LATEST_RELEASE.date}</time><span>{LATEST_RELEASE.overview??LATEST_RELEASE.summary[0]}</span><span className="menu-information-link">查看本次与历史更新 →</span></span></button>
   <div className="menu-about-links">{onCopyright&&<button onClick={onCopyright}>版权与许可 →</button>}<a href="https://zbqsgz.tianhw.top/game" target="_blank" rel="noreferrer">游戏介绍 ↗</a><a href="https://zbqsgz.tianhw.top" target="_blank" rel="noreferrer">校园主站 ↗</a></div><p className="menu-release-meta">© 2026 OpenQS · 齐盛Online</p>
  </div>;

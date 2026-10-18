@@ -35,7 +35,7 @@ async function until(check: () => boolean) {
     await new Promise((resolve) => setImmediate(resolve));
   assert.ok(check(), "expected lifecycle stage was not reached");
 }
-function fakeRoom(id = "room") {
+function fakeRoom(id = "room", autoSnapshot = true) {
   const callbacks = new Map<string, Function>(),
     sent: { type: string; data: unknown }[] = [];
   let left = 0;
@@ -50,7 +50,7 @@ function fakeRoom(id = "room") {
     reconnectionToken: id + ":test-token",
     reconnection: { enabled: true },
     connection,
-    onMessage: (name: string, fn: Function) => callbacks.set(name, fn),
+    onMessage: (name: string, fn: Function) => {callbacks.set(name, fn);if(name === "snapshot" && autoSnapshot)queueMicrotask(()=>fn({roomId:id,phase:"lobby",tick:0,players:[{id:"p0"}],events:[]}));},
     onDrop: (fn: Function) => callbacks.set("drop", fn),
     onReconnect: (fn: Function) => callbacks.set("reconnect", fn),
     onError: (fn: Function) => callbacks.set("error", fn),
@@ -145,6 +145,7 @@ function setup(
         return Response.json(defaultGameConfig());
       requests.push({ url, init });
       if (url.endsWith("/map-identity")) return Response.json(identity);
+      if (url.endsWith("/v1/admission/reconcile")) return Response.json({cleared:true});
       if (init.method === "DELETE") return new Response(null, { status: 204 });
       return reply ? reply(url, init) : Response.json(admission());
     },
@@ -342,7 +343,7 @@ test("late cleanup of an old active room cannot clear a new join", async (t) => 
   release.resolve(0);
   await leaving;
   assert.equal(client.room, newRoom);
-  assert.equal(client.view.currentRoom, null);
+  assert.equal(client.view.currentRoom?.roomId, "new-room");
   assert.equal(client.view.status, "lobby");
 });
 
@@ -643,4 +644,37 @@ test('pending SDK room socket is retired immediately at admission timeout, befor
 
 test('SDK duplicate identity rejection displays a player action instead of an internal error code',async t=>{
  const {client}=setup(t);t.mock.method((client as any).sdk,'consumeSeatReservation',async()=>{throw Error('DUPLICATE_IDENTITY');});await client.join({mode:'pvp'});assert.equal(client.view.errorCode,'DUPLICATE_IDENTITY');assert.match(client.view.error!,/原游戏页面重连/);assert.doesNotMatch(client.view.error!,/DUPLICATE_IDENTITY/);assert.equal(client.room,null);
+});
+
+
+test('admission waits for its own authoritative first snapshot, not just the SDK handshake',async t=>{
+ const {client}=setup(t),room=fakeRoom('first-snapshot',false);t.mock.method((client as any).sdk,'consumeSeatReservation',async()=>room);
+ let settled=false;const work=client.join({mode:'pvp'}).then(value=>{settled=true;return value;});await until(()=>client.room===room);assert.equal(settled,false);
+ room.callbacks.get('snapshot')!({roomId:room.roomId,phase:'lobby',tick:0,players:[{id:'other'}],events:[]});await Promise.resolve();assert.equal(settled,false);
+ room.callbacks.get('snapshot')!({roomId:room.roomId,phase:'lobby',tick:1,players:[{id:'p0'}],events:[]});assert.equal((await work)?.roomId,room.roomId);assert.equal(room.left,0);
+});
+test('first snapshot timeout preserves the admitted seat for a retry instead of opening a second room',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});const {client,requests}=setup(t),room=fakeRoom('pending',false);t.mock.method((client as any).sdk,'consumeSeatReservation',async()=>room);
+ const work=client.join({mode:'pvp'});await until(()=>client.room===room);t.mock.timers.tick(12000);await work;
+ assert.equal(client.view.errorCode,'JOIN_PENDING');assert.equal(client.room,room);assert.equal(client.hasResumeSession(),true);assert.equal(room.left,0);
+ const retry=client.waitForOwnSnapshot();room.callbacks.get('snapshot')!({roomId:room.roomId,phase:'lobby',tick:2,players:[{id:'p0'}],events:[]});assert.equal((await retry).roomId,room.roomId);assert.equal(requests.filter(r=>r.url.endsWith('/queue')&&r.init.method==='POST').length,1);
+});
+test('cancelling before the first snapshot prevents late success and explicit leave releases that seat',async t=>{
+ const {client}=setup(t),room=fakeRoom('cancelled',false),abort=new AbortController();t.mock.method((client as any).sdk,'consumeSeatReservation',async()=>room);
+ const work=client.join({mode:'pvp'},undefined,undefined,abort.signal);await until(()=>client.room===room);abort.abort();await client.leave();await work;
+ room.callbacks.get('snapshot')!({roomId:room.roomId,phase:'lobby',tick:2,players:[{id:'p0'}],events:[]});assert.equal(client.room,null);assert.equal(client.view.currentRoom,null);assert.equal(room.left,1);assert.equal(client.hasResumeSession(),false);
+});
+test('equipment success waits for the requested server loadout rather than the send call',async t=>{
+ const {client}=setup(t),room=fakeRoom('equipment',false);client.playerId='p0';(client as any).bind(room);
+ room.callbacks.get('snapshot')!({roomId:room.roomId,phase:'lobby',tick:1,players:[{id:'p0',weapon:'mp5',avatar:'campus-a',team:'blue'}],events:[]});
+ let confirmed=false;const work=client.selectLoadout({weapon:'m4a1',avatar:'campus-a',team:'blue'},new AbortController().signal).then(()=>confirmed=true);assert.equal(confirmed,false);assert.equal(room.sent.at(-1)?.type,'loadout');
+ room.callbacks.get('snapshot')!({roomId:room.roomId,phase:'lobby',tick:2,players:[{id:'p0',weapon:'m4a1',avatar:'campus-a',team:'blue'}],events:[]});await work;assert.equal(confirmed,true);
+});
+test('unknown queue delivery survives reload and blocks every new create until authenticated reconciliation clears it',async t=>{
+ let posts=0,blocked=true;const {client,requests,data}=setup(t,()=>{if(++posts===1)throw Error('response lost after server accepted');return Response.json(admission('retry'));}),room=fakeRoom('retry-room');
+ const transport=globalThis.fetch;t.mock.method(globalThis,'fetch',async(raw,init)=>String(raw).endsWith('/v1/admission/reconcile')?Response.json({cleared:!blocked,active:blocked}):transport(raw,init));t.mock.method((client as any).sdk,'consumeSeatReservation',async()=>room);
+ await client.join({mode:'pvp'});assert.equal(client.hasUncertainAdmission(),true);assert.equal(client.view.errorCode,'ADMISSION_UNCERTAIN');assert.equal(data.has('qisheng-pending-admission-v1'),true);
+ const restored=new OnlineClient();assert.equal(restored.hasUncertainAdmission(),true);restored.dispose();
+ await client.join({mode:'pvp'});assert.equal(posts,1);assert.equal(client.hasUncertainAdmission(),true);assert.equal(requests.filter(r=>r.url.endsWith('/queue')&&r.init.method==='POST').length,1);
+ blocked=false;assert.equal((await client.join({mode:'pvp'}))?.roomId,room.roomId);assert.equal(posts,2);assert.equal(client.hasUncertainAdmission(),false);assert.equal(data.has('qisheng-pending-admission-v1'),false);
 });

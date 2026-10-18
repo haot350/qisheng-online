@@ -1,11 +1,11 @@
-[gd_resource type="Theme" load_steps=9 format=3]
+[gd_resource type="Theme" load_steps=11 format=3]
 
 [sub_resource type="SystemFont" id="Font"]
 font_names = PackedStringArray("Microsoft YaHei", "Noto Sans CJK SC", "sans-serif")
 font_weight = 500
 
 [sub_resource type="StyleBoxFlat" id="Button"]
-bg_color = Color(0.115, 0.137, 0.145, 1)
+bg_color = Color(0.08, 0.105, 0.105, 0.87)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
@@ -33,7 +33,7 @@ content_margin_top = 13.0
 content_margin_bottom = 13.0
 
 [sub_resource type="StyleBoxFlat" id="Selected"]
-bg_color = Color(0.44, 0.19, 0.13, 1)
+bg_color = Color(0.20, 0.17, 0.12, 0.98)
 border_width_left = 3
 border_width_top = 1
 border_width_right = 1
@@ -45,7 +45,7 @@ content_margin_top = 13.0
 content_margin_bottom = 13.0
 
 [sub_resource type="StyleBoxFlat" id="Card"]
-bg_color = Color(0.09, 0.11, 0.115, 0.97)
+bg_color = Color(0.045, 0.066, 0.068, 0.92)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
@@ -76,6 +76,28 @@ border_color = Color(0.65, 0.68, 0.63, 1)
 [sub_resource type="StyleBoxFlat" id="Empty"]
 bg_color = Color(0, 0, 0, 0)
 
+[sub_resource type="StyleBoxFlat" id="Primary"]
+bg_color = Color(0.60, 0.27, 0.15, 1)
+border_width_bottom = 2
+border_color = Color(0.91, 0.57, 0.34, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_left = 2
+corner_radius_bottom_right = 2
+content_margin_left = 24.0
+content_margin_right = 24.0
+content_margin_top = 13.0
+content_margin_bottom = 13.0
+
+[sub_resource type="StyleBoxFlat" id="PrimaryHover"]
+bg_color = Color(0.72, 0.36, 0.20, 1)
+border_width_bottom = 2
+border_color = Color(1, 0.71, 0.47, 1)
+content_margin_left = 24.0
+content_margin_right = 24.0
+content_margin_top = 13.0
+content_margin_bottom = 13.0
+
 [resource]
 default_font = SubResource("Font")
 default_font_size = 18
@@ -101,6 +123,14 @@ OptionButton/styles/pressed = SubResource("Selected")
 OptionButton/styles/focus = SubResource("Focus")
 ProgressBar/styles/background = SubResource("Button")
 ProgressBar/styles/fill = SubResource("Selected")
-HSeparator/styles/separator = SubResource("Empty")
+HSeparator/styles/separator = SubResource("Focus")
 VBoxContainer/constants/separation = 16
 HBoxContainer/constants/separation = 16
+
+PrimaryButton/base_type = &"Button"
+PrimaryButton/styles/normal = SubResource("Primary")
+PrimaryButton/styles/hover = SubResource("PrimaryHover")
+PrimaryButton/styles/pressed = SubResource("Primary")
+SelectedButton/base_type = &"Button"
+SelectedButton/styles/normal = SubResource("Selected")
+SelectedButton/styles/hover = SubResource("Hover")

@@ -15,8 +15,10 @@ var _mean_ms := 0.0
 var _slow_seconds := 0.0
 var _fast_seconds := 0.0
 var _cooldown := 0.0
+var _options: Dictionary = {}
 
-func configure(value: int, touch_device: bool, cap: int = 60) -> Dictionary:
+func configure(value: int, touch_device: bool, cap: int = 60, options: Dictionary = {}) -> Dictionary:
+	_options = options.duplicate()
 	var next_quality := clampi(value,0,4)
 	var next_fps := cap if cap > 0 else 60
 	if _configured and next_quality == quality and mobile == touch_device and target_fps == next_fps: return profile()
@@ -31,7 +33,7 @@ func configure(value: int, touch_device: bool, cap: int = 60) -> Dictionary:
 	_cooldown = 0.0
 	return profile()
 
-func profile() -> Dictionary:
+func _base_profile() -> Dictionary:
 	if quality == 1: return {"scale":0.65,"msaa":Viewport.MSAA_DISABLED,"shadows":false}
 	if quality == 2: return {"scale":1.0,"msaa":Viewport.MSAA_2X,"shadows":true}
 	if quality == 3: return {"scale":1.0,"msaa":Viewport.MSAA_4X,"shadows":true}
@@ -39,6 +41,26 @@ func profile() -> Dictionary:
 	if automatic_stage == 1: return {"scale":0.75 if mobile else 0.85,"msaa":Viewport.MSAA_DISABLED,"shadows":false}
 	if automatic_stage == 2: return {"scale":0.60 if mobile else 0.70,"msaa":Viewport.MSAA_DISABLED,"shadows":false}
 	return {"scale":0.85 if mobile else 1.0,"msaa":Viewport.MSAA_DISABLED if mobile else Viewport.MSAA_2X,"shadows":not mobile}
+
+func profile() -> Dictionary:
+	var result := _base_profile()
+	result.scale = clampf(float(result.scale)*float(_options.get("renderScale",1.0)),0.5,1.5)
+	var shadows := int(_options.get("shadowQuality",-1))
+	if shadows >= 0: result.shadows = shadows > 0
+	result["shadowAtlas"] = [1024,1024,2048,4096][shadows] if shadows >= 0 else 4096 if quality == 3 else 2048
+	var aa := int(_options.get("antialiasing",-1))
+	result["fxaa"] = aa == 1
+	if aa >= 0: result.msaa = [Viewport.MSAA_DISABLED,Viewport.MSAA_DISABLED,Viewport.MSAA_2X,Viewport.MSAA_4X,Viewport.MSAA_8X][aa]
+	result["textureBias"] = float(_options.get("textureBias",0))+float(automatic_stage)*0.25 if quality == 0 else float(_options.get("textureBias",0))
+	var forward := RenderingServer.get_current_rendering_method() == "forward_plus"
+	var environment := int(_options.get("environmentQuality",0))
+	var enhanced := forward and (environment == 2 or environment == 0 and quality not in [1,4] and automatic_stage == 0)
+	result["ssao"] = enhanced
+	result["ssil"] = enhanced and quality == 3
+	result["ssr"] = enhanced and quality == 3
+	result["glow"] = enhanced
+	result["rainCount"] = 48 if quality in [1,4] or automatic_stage > 0 else 128 if quality == 3 else 80
+	return result
 
 func observe_frame(frame_ms: float, eligible: bool, elapsed_ms: float = -1.0) -> bool:
 	if quality != 0: return false

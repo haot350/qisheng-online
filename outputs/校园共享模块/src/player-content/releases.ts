@@ -2,6 +2,18 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.9.4',sequence:42,date:'2026-10-18',version:'Preview 0.9.4',
+ overview:'晴天、阴天和小雨，为校园带来不同的光影。',
+ summary:['创建联机房间时可以选择晴天、阴天或小雨。','漫游、突围和大飞可在设置中选择天气，故事保留原有氛围。','Windows 测试版更新战术大厅与分组设置。'],
+ items:['新增：晴天、阴天和小雨，联机同一房间保持相同天气。','新增：单人、漫游和大飞的天气选择。','调整：联机准备页和房间列表显示天气，重新加入后保持本局天气。','新增：Windows 测试版战术大厅、武器卡及显示、画质、声音、操作与辅助设置。']
+},
+{
+ id:'preview-0.9.3',sequence:41,date:'2026-10-18',version:'Preview 0.9.3',
+ overview:'加入房间更可靠，离场与菜单确认更清楚。',
+ summary:['修复小齐创建或加入房间时过早报告失败。','离场、清理和删除采用统一确认，处理期间显示实际状态。','小齐安排完成后直接进入房间准备，可以继续选择装备。'],
+ items:['修复：小齐加入房间时等待本人席位确认，避免刚连接便退出。','修复：大厅准备不再被误认为正在战斗，装备选择以房间确认结果为准。','调整：小齐建房成功直接进入房间准备，开始本局仍由你点击。','调整：结束本局、离开房间、删除照片和清理地图使用更清楚的确认。','修复：离场完成前不切换到新的房间，减少席位冲突。']
+},
+{
  id:'preview-0.9.2',sequence:40,date:'2026-10-18',version:'Preview 0.9.2',
  overview:'准备更直接，交战信息更清楚，常用操作更顺手。',
  summary:['房间内收起装备清单，准备与开始始终容易找到。','队友状态与战斗提示更清楚，手机可长按切换道具。','账号找回入口收纳，小齐记住本机的使用确认。'],

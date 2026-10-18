@@ -1,3 +1,4 @@
+import {WeatherScene} from './weather-scene';
 import {stairGuideForRoute,type StairGuide} from './escape-stair-guidance';
 import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGadget,cycleGadget,helmetDamage,grenadeDamage,useCards,confiscatedHealth,type GadgetId,type GadgetLoot,type GrenadeState} from '@qisheng/shared/gadgets';
 import {GadgetScene} from './gadget-scene';
@@ -299,7 +300,8 @@ export async function createGame(
   scene.fog = new THREE.Fog(0xccdce3, 180, 390);
   const camera = new THREE.PerspectiveCamera(settings.fov, 1, 0.075, 420);
   camera.rotation.order = "YXZ";
-  scene.add(new THREE.HemisphereLight(0xf2f3eb, 0x858e78, 2.6));
+  const ambientLight=new THREE.HemisphereLight(0xf2f3eb, 0x858e78, 2.6);
+  scene.add(ambientLight);
   const sun = new THREE.DirectionalLight(0xffefcf, 2.7);
   sun.position.set(-110, 160, 50);
   sun.castShadow = true;
@@ -315,6 +317,7 @@ export async function createGame(
   sun.shadow.normalBias = 0.1;
   sun.shadow.bias = -0.00015;
   scene.add(sun, sun.target);
+  const weatherScene=new WeatherScene(scene,sun,ambientLight);
   const viewScene = new THREE.Scene(),
     viewCamera = new THREE.PerspectiveCamera(52, 1, 0.02, 10);
   viewScene.add(new THREE.HemisphereLight(0xfff5e3, 0x777c80, 2.9));
@@ -824,6 +827,7 @@ export async function createGame(
     scene.fog = narrative
       ? new THREE.Fog(scene.background as THREE.Color, 100, 330)
       : new THREE.Fog(0xccdce3, low ? 35 : 50, low ? 72 : 98);
+    weatherScene.set({preset:settings.weather??'clear',seed:roundSeed>>>0,startedAtTick:0},low,mode!=='story');
     photo?.setPreviewQuality(settings.quality, adaptiveRatio);
     photo?.setPreviewMobile(profile.previewMobile);
     quality = profile.label;
@@ -5981,6 +5985,7 @@ export async function createGame(
         photo?.snapshot().open ? photo.camera : camera,
         story.snapshot,
       );
+    if(mode!=='story')weatherScene.update(elapsed,camera.position.toArray() as Vec3,world?(origin,direction,max)=>world!.rayDistance(new THREE.Vector3(...origin),new THREE.Vector3(...direction),max):undefined,world);
     const photographed =
       photo?.snapshot().open &&
       (buffering || phase === "paused" || storyOverlayOpen
@@ -6301,6 +6306,7 @@ export async function createGame(
     releaseWeapons?.();
     effects.dispose();
     gadgetScene.dispose();
+    weatherScene.dispose();
     gunEnvironment?.dispose();
     photographyMarkers?.dispose();
     world?.dispose();

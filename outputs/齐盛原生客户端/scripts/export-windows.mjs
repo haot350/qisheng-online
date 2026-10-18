@@ -17,6 +17,15 @@ const executable=path.join(staging,options.executable),pck=executable.replace(/[
 const code=await new Promise((resolve,reject)=>{const child=spawn(process.execPath,[path.join(project,'scripts/run-godot.mjs'),'--headless',options.mode==='internal'?'--export-debug':'--export-release',options.preset,executable],{cwd:project,stdio:'inherit',windowsHide:true});child.on('error',reject);child.on('exit',resolve);});
 if(code!==0)throw Error('Godot Windows export failed; the staging directory is retained for review');
 await stat(executable);await stat(pck);await copyRuntimeLicenses(staging);
+await writeFile(path.join(staging,'Launch-Compatibility.cmd'),'@echo off\r\nstart "" "%~dp0'+options.executable+'" --rendering-method gl_compatibility -- --safe-renderer\r\nexit /b\r\n');
+if(options.preview)await writeFile(path.join(staging,'KNOWN-ISSUES.txt'),[
+ '齐盛Online · 原生 Preview '+NATIVE_VERSION+' · 实验性测试版','',
+ '早期测试包曾出现一次首次载入校园时程序退出（0xC0000005），原因尚未确认。后续检查通过不表示问题已经根治。',
+ '遇到退出可尝试Launch-Compatibility.cmd；若仍失败，请先使用网页版。',
+ '反馈时提供发生步骤、显卡与系统信息即可，不要公开账号令牌、恢复码或崩溃转储。',
+ '本版提供校园步行探索、团队对战和个人混战；故事、摄影、驾驶、单人与合作突围尚未移植。',
+ '浏览器与客户端分别登录；不会自动迁移本机照片和剧情存档。',''
+].join('\r\n'));
 const after=await exportIdentity(options);if(after.sourceHash!==identity.sourceHash)throw Error('Native source changed during export; candidate not installed');
 const {names,...pckAudit}=await inspectPck(pck,{demo:options.demo,projectRoot:project});
 await writeFile(path.join(staging,'READ-ME-FIRST.txt'),[
@@ -25,6 +34,7 @@ await writeFile(path.join(staging,'READ-ME-FIRST.txt'),[
  'Windows 10/11 x64，支持OpenGL 3.3的显卡。首次启动请等待必要资源准备。',
  options.demo?'本包使用原创匿名演示资源，与正式校园、账号和房间隔离。':options.preview?'内置完整开放校园；账号登录状态与浏览器分别保存。':'本包仍限制本机隔离服务，不作为公开游玩版本。',
  'WASD移动，鼠标观察，Esc打开菜单；其他按键可在设置中查看或调整。',
+ '若显示异常，可运行Launch-Compatibility.cmd以兼容渲染模式启动。',
  '© 2026 OpenQS · 齐盛Online。自有源码MIT，第三方技术及正式素材保留各自许可。',
  '运行库完整声明位于LICENSES.txt、third_party_licenses与runtime_licenses。',''
 ].join('\r\n'));

@@ -6,7 +6,7 @@ size_flags_vertical = 3
 
 [node name="Panel" type="PanelContainer" parent="."]
 layout_mode = 2
-custom_minimum_size = Vector2(430, 0)
+custom_minimum_size = Vector2(460, 0)
 
 [node name="Actions" type="VBoxContainer" parent="Panel"]
 unique_name_in_owner = true

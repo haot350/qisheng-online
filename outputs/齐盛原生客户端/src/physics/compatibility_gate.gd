@@ -4,7 +4,7 @@ extends RefCounted
 ## Godot's collision engine is not assumed equivalent to the web Rapier controller.
 const REQUIRED_JS_VERSION := "0.19.3"
 const REQUIRED_RUST_VERSION := "0.30.1"
-const REQUIRED_PROTOCOL := "campus-mp-0.9.0"
+const REQUIRED_PROTOCOL := "campus-mp-0.9.4"
 const VERIFIED_PREDICTION := true
 
 static func allows_endpoint(endpoint: String) -> bool:

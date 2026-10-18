@@ -35,3 +35,17 @@ test('0.9.0 rejects stale protocol/rules, missing assets, unsafe assistant and w
   r=>row(r,'worker-health').protocolVersion='campus-mp-0.8.2',
  ]){const report=evidence();mutate(report);assert.throws(()=>verifiedDeploymentEvidence(report,id,now));}
 });
+
+for(const [version,protocol,rollback] of [['0.9.3','campus-mp-0.9.0','0.9.2'],['0.9.4','campus-mp-0.9.4','0.9.3']]){
+ test(version+' registration retains privacy/data checks and enforces its exact protocol and rollback',()=>{
+  const releaseId=id.replace('0.9.0',version);
+  const report=JSON.parse(JSON.stringify(evidence()).replaceAll(id,releaseId));
+  report.releaseId=releaseId;
+  for(const check of report.checks){if(check.version==='0.9.0')check.version=version;if(check.protocolVersion)check.protocolVersion=protocol;}
+  Object.assign(row(report,'server-audit'),{rollbackSiteVersion:rollback,rollbackRealtimeVersion:rollback});
+  assert.equal(verifiedDeploymentEvidence(report,releaseId,now).protocolVersion,protocol);
+  for(const mutate of [r=>row(r,'release-protocol').protocolVersion='campus-mp-wrong',r=>row(r,'server-audit').rollbackRealtimeVersion='0.8.4',r=>row(r,'private-account-endpoints').rejected=false]){
+   const bad=structuredClone(report);mutate(bad);assert.throws(()=>verifiedDeploymentEvidence(bad,releaseId,now));
+  }
+ });
+}

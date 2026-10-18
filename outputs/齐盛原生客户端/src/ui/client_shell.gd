@@ -4,7 +4,8 @@ extends Control
 signal action_requested(name: String, payload: Dictionary)
 
 const TACTICAL = preload("res://themes/tactical.tres")
-const CAMPUS = preload("res://themes/campus.tres")
+const SettingsPanel = preload("res://src/ui/settings_panel.gd")
+const WeatherProfiles = preload("res://src/generated/weather_profiles.gd")
 const LOBBY = preload("res://scenes/lobby.tscn")
 const LOADOUT = preload("res://scenes/loadout.tscn")
 const PAUSE = preload("res://scenes/pause.tscn")
@@ -12,6 +13,11 @@ const Bindings = preload("res://src/input_bindings.gd")
 const WEAPONS := ["mp5", "m4a1", "ak47", "r870", "awm", "m249"]
 const WEAPON_NAMES := {"glock":"Glock 17", "mp5":"MP5", "m4a1":"M4A1", "ak47":"AK-47", "r870":"Remington 870", "awm":"AWM", "m249":"M249"}
 const ROLES := {"mp5":"近距离 · 冲锋枪", "m4a1":"均衡 · 突击步枪", "ak47":"高威力 · 突击步枪", "r870":"近距离 · 霰弹枪", "awm":"远距离 · 狙击步枪", "m249":"持续压制 · 轻机枪"}
+var preferences: QsClientSettings
+var settings_tab := "display"
+var weather := "clear"
+var _backdrop: TextureRect
+var _display_font: SystemFont
 var mobile := false
 var page := "lobby"
 var data: Dictionary = {}
@@ -33,11 +39,11 @@ var footer: HBoxContainer
 var feedback: Label
 var scroll: ScrollContainer
 var background: ColorRect
+var _top: HBoxContainer
 var _root: VBoxContainer
 var _last_room_signature := ""
 var _rebuild_queued := false
 var _binding_action := ""
-var _binding_button: Button
 var _binding_notice: AcceptDialog
 
 func _ready() -> void:
@@ -52,37 +58,55 @@ func _ready() -> void:
 	show_page("lobby")
 
 func _build_frame() -> void:
-	var shade := ColorRect.new()
-	background = shade
-	shade.color = Color("111a1e")
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(shade)
-	var line := ColorRect.new()
-	line.color = Color("85432f")
-	line.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	line.offset_bottom = 4
-	add_child(line)
+	_backdrop = TextureRect.new()
+	_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if ResourceLoader.exists("res://content/branding/lobby-campus-v020.webp"):
+		_backdrop.texture = load("res://content/branding/lobby-campus-v020.webp")
+	add_child(_backdrop)
+	background = ColorRect.new()
+	background.color = Color(0.025,0.035,0.035,0.65)
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(background)
+	var gradient := Gradient.new()
+	gradient.set_color(0,Color(0.018,0.028,0.028,0.92))
+	gradient.set_color(1,Color(0.02,0.03,0.03,0.12))
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	var veil := TextureRect.new()
+	veil.texture = texture
+	veil.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(veil)
+	_display_font = SystemFont.new()
+	_display_font.font_names = PackedStringArray(["Microsoft YaHei","Noto Sans CJK SC","sans-serif"])
+	_display_font.font_weight = 750
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_"+side, 18 if mobile else 40)
+	for side in ["left", "right"]: margin.add_theme_constant_override("margin_"+side,20 if mobile else 48)
+	for side in ["top", "bottom"]: margin.add_theme_constant_override("margin_"+side,16 if mobile else 30)
 	add_child(margin)
 	_root = VBoxContainer.new()
-	_root.add_theme_constant_override("separation", 22 if not mobile else 12)
+	_root.add_theme_constant_override("separation", 18 if not mobile else 12)
 	margin.add_child(_root)
 	var top := HBoxContainer.new()
+	_top = top
+	top.custom_minimum_size.y = 56
 	_root.add_child(top)
-	heading = label("齐盛Online", 28 if mobile else 38)
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(heading)
 	if ResourceLoader.exists("res://content/combat/logo-light.webp"):
 		logo = TextureRect.new()
 		logo.texture = load("res://content/combat/logo-light.webp")
 		logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-		logo.custom_minimum_size = Vector2(260 if mobile else 330,56 if mobile else 64)
-		logo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		logo.custom_minimum_size = Vector2(170 if mobile else 210,48)
+		logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		top.add_child(logo)
+	heading = label("齐盛Online", 26 if mobile else 30)
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(heading)
 	account_button = button("账号", func(): show_page("account"))
 	top.add_child(account_button)
 	scroll = ScrollContainer.new()
@@ -95,9 +119,10 @@ func _build_frame() -> void:
 	content.add_theme_constant_override("separation", 20)
 	scroll.add_child(content)
 	feedback = label("", 14)
-	feedback.modulate = Color("c9b894")
+	feedback.modulate = Color("ddc28e")
 	_root.add_child(feedback)
 	footer = HBoxContainer.new()
+	footer.add_theme_constant_override("separation",12)
 	_root.add_child(footer)
 
 func show_page(next: String) -> void:
@@ -107,15 +132,18 @@ func show_page(next: String) -> void:
 			container.remove_child(child)
 			child.queue_free()
 	scroll.scroll_vertical = 0
-	theme = CAMPUS if page in ["account", "help", "about"] else TACTICAL
-	background.color = Color("f0eee5") if page in ["account","help","about"] else Color("111a1e")
+	theme = TACTICAL
+	_backdrop.visible = not bool(data.get("inSession",false))
+	background.color = Color(0.025,0.035,0.035,0.48 if page == "lobby" else 0.86)
 	heading.visible = page != "pause"
+	feedback.visible = not status_text.is_empty()
 	if logo:
-		logo.visible = page == "lobby"
-		if logo.visible: heading.hide()
+		logo.visible = page != "pause"
+		if page == "lobby": heading.text = ""
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if page == "pause" and get_viewport_rect().size.y > 600 else ScrollContainer.SCROLL_MODE_AUTO
 	content.custom_minimum_size.y = maxf(0,get_viewport_rect().size.y-240) if page == "pause" and get_viewport_rect().size.y > 600 else 0
-	heading.text = {"lobby":"齐盛Online", "loadout":"更换装备", "room":"房间准备", "pause":"个人菜单" if not room.is_empty() else "已暂停", "settings":"设置", "account":"账号与档案", "map":"校园地图", "help":"游玩帮助", "about":"齐盛Online", "result":"本局结束"}.get(page, "齐盛Online")
+	heading.text = {"lobby":"齐盛Online", "loadout":"更换装备", "room":"房间准备", "pause":"个人菜单" if not room.is_empty() else "已暂停", "settings":"设置", "account":"账号与档案", "map":"校园地图", "help":"游玩帮助", "about":"关于", "result":"本局结束"}.get(page, "齐盛Online")
+	if page == "lobby" and logo: heading.text = ""
 	account_button.text = str(account.get("nickname", account.get("username", "账号")))
 	account_button.visible = page in ["lobby", "loadout", "room"]
 	match page:
@@ -129,6 +157,8 @@ func show_page(next: String) -> void:
 		"help": _help()
 		"result": _result()
 		_: _about()
+	_top.visible = page != "pause"
+	footer.visible = footer.get_child_count() > 0
 	_feedback_status()
 	if not reduced_motion:
 		content.modulate.a = 0.0
@@ -148,69 +178,112 @@ func _focus_first() -> void:
 			return
 
 func _lobby() -> void:
+	var primary_action: Button
+	var browse_action: Button
 	var layout := LOBBY.instantiate()
 	content.add_child(layout)
 	var left: VBoxContainer = layout.get_node("PlaySelection")
 	var right: VBoxContainer = layout.get_node("CurrentLoadout")
+	left.add_theme_constant_override("separation",12)
 	if mobile and get_viewport_rect().size.x < 700:
-		layout.queue_free()
+		layout.remove_child(left)
+		layout.remove_child(right)
 		content.remove_child(layout)
-		left = VBoxContainer.new()
-		right = VBoxContainer.new()
+		layout.queue_free()
 		content.add_child(left)
 		content.add_child(right)
-	left.add_child(label("选择玩法", 23))
-	for row in [["tdm", "团队对战", "两队交战 · 10分钟复活赛"], ["ffa", "个人混战", "各自为战 · 10分钟复活赛"], ["roam", "校园漫游", "步行探索校园"]]:
+	left.add_child(label("选择玩法",42 if not mobile else 32))
+	for row in [["tdm", "团队对战", "两队交战 · 10分钟复活赛"], ["ffa", "个人混战", "各自为战 · 10分钟复活赛"], ["roam", "校园漫游", "从庭院出发，自由探索"]]:
 		var id: String = row[0]
 		var chosen := (selected_mode == "roam" and id == "roam") or (selected_mode == "pvp" and variant == id)
-		var item := button(("●  " if chosen else "    ")+row[1]+"\n"+row[2], func():
+		var item := button(row[1], func():
 			selected_mode = "roam" if id == "roam" else "pvp"
 			if id != "roam": variant = id
 			show_page("lobby")
 		)
-		item.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		item.custom_minimum_size.y = 96 if not mobile else 78
-		item.button_pressed = chosen
+		item.text = ""
+		item.custom_minimum_size.y = 78 if not mobile else 76
+		if chosen: item.theme_type_variation = "SelectedButton"
+		var inset := MarginContainer.new()
+		inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		for edge in ["left","right"]: inset.add_theme_constant_override("margin_"+edge,22)
+		for edge in ["top","bottom"]: inset.add_theme_constant_override("margin_"+edge,12)
+		item.add_child(inset)
+		var words := VBoxContainer.new()
+		words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		words.add_theme_constant_override("separation",5)
+		inset.add_child(words)
+		var title := label(row[1],22)
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		words.add_child(title)
+		var hint := label(row[2],14)
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hint.add_theme_color_override("font_color",Color("aeb8ad"))
+		words.add_child(hint)
 		left.add_child(item)
-	right.add_child(label("当前装备" if selected_mode == "pvp" else "校园资料", 23))
+	var weather_row := HBoxContainer.new()
+	left.add_child(weather_row)
+	var weather_label := label("天气",16)
+	weather_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	weather_row.add_child(weather_label)
+	var weather_choice := OptionButton.new()
+	weather_choice.custom_minimum_size = Vector2(180,48)
+	for value in ["晴天","阴天","小雨"]: weather_choice.add_item(value)
+	weather_choice.select(maxi(0,["clear","overcast","light-rain"].find(weather)))
+	weather_choice.item_selected.connect(func(index): weather = ["clear","overcast","light-rain"][index])
+	weather_row.add_child(weather_choice)
 	if selected_mode == "pvp":
-		var card := panel()
-		right.add_child(card)
-		var stack := VBoxContainer.new()
-		stack.add_theme_constant_override("separation",8)
-		card.add_child(stack)
-		stack.add_child(label(WEAPON_NAMES.get(weapon, weapon), 34 if not mobile else 28))
-		var picture := _weapon_picture(weapon,100 if not mobile else 70)
-		if picture: stack.add_child(picture)
-		stack.add_child(label(ROLES.get(weapon, ""), 16))
-		stack.add_child(label("副武器  Glock 17\n角色  "+_avatar_name(avatar), 17))
-		stack.add_child(button("更换装备", func(): show_page("loadout")))
-		right.add_child(button("创建房间", func(): action_requested.emit("create", {"mode":"pvp", "variant":variant,"maxPlayers":8,"private":false,"ranked":false,"weapon":weapon,"avatar":avatar}), true))
+		var play := button("登录后创建房间" if account.is_empty() else "创建房间", func():
+			if account.is_empty(): show_page("account")
+			else: action_requested.emit("create",{"mode":"pvp","variant":variant,"maxPlayers":8,"private":false,"ranked":false,"weapon":weapon,"avatar":avatar,"weather":weather})
+		,true)
+		play.custom_minimum_size = Vector2(220 if not mobile else 160,58)
+		primary_action = play
 		var join := HBoxContainer.new()
-		right.add_child(join)
+		left.add_child(join)
 		var code := LineEdit.new()
-		code.placeholder_text = "房间码"
+		code.placeholder_text = "输入房间码"
 		code.max_length = 8
 		code.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		code.custom_minimum_size.y = 52
+		code.custom_minimum_size.y = 48
 		join.add_child(code)
-		join.add_child(button("加入", func(): action_requested.emit("join", {"code":code.text.strip_edges()})))
-		right.add_child(button("浏览公开房间", func(): action_requested.emit("list-rooms", {})))
+		join.add_child(button("加入",func(): action_requested.emit("join",{"code":code.text.strip_edges()})))
+		browse_action = button("公开房间",func(): action_requested.emit("list-rooms",{}))
 	else:
-		right.add_child(label("南楼 · 庭院 · 操场", 36))
-		right.add_child(label("完整开放区域已随客户端提供。", 17))
-		right.add_child(button("进入校园", func(): action_requested.emit("roam", {}), true))
-	for row in [["settings", "设置"], ["help", "帮助"], ["about", "关于"]]:
+		primary_action = button("进入校园",func(): action_requested.emit("roam",{"weather":weather}),true)
+	var space := Control.new()
+	space.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right.add_child(space)
+	var card := panel()
+	right.add_child(card)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation",12)
+	card.add_child(stack)
+	stack.add_child(label("行动装备" if selected_mode == "pvp" else "齐盛校园",16))
+	if selected_mode == "pvp":
+		stack.add_child(label(WEAPON_NAMES.get(weapon,weapon),36))
+		var picture := _weapon_picture(weapon,130 if not mobile else 80)
+		if picture: stack.add_child(picture)
+		stack.add_child(label(ROLES.get(weapon,""),16))
+		stack.add_child(label("Glock 17 · "+_avatar_name(avatar),14))
+		stack.add_child(button("更换装备",func(): show_page("loadout")))
+	else:
+		stack.add_child(label("南楼 · 庭院 · 操场",30))
+		stack.add_child(label("走过熟悉的道路，寻找新的风景。",17))
+	if browse_action: footer.add_child(browse_action)
+	for row in [["settings","设置"],["help","帮助"],["about","关于"]]:
 		var target: String = row[0]
-		footer.add_child(button(row[1], func(): show_page(target)))
+		footer.add_child(button(row[1],func(): show_page(target)))
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(spacer)
-	var version := label("Preview 0.1.0 · 预览版",13)
+	var version := label("Preview "+str(ProjectSettings.get_setting("application/config/version","0.2.0"))+" · 预览版",13)
 	version.autowrap_mode = TextServer.AUTOWRAP_OFF
-	version.custom_minimum_size.x = 190
 	version.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	version.visible = not mobile
 	footer.add_child(version)
+	footer.add_child(primary_action)
 
 func _loadout() -> void:
 	var layout := LOADOUT.instantiate()
@@ -251,7 +324,7 @@ func _loadout() -> void:
 		stats.add_child(group)
 		group.add_child(label(item[0], 14))
 		group.add_child(label(item[1], 22))
-	detail.add_child(label("副武器固定为 Glock 17。伤害为当前对战基础值，命中部位和护具参与判定。", 14))
+	detail.add_child(label("副武器 · Glock 17。实际伤害随命中部位与头盔变化。", 14))
 	var characters := HBoxContainer.new()
 	content.add_child(characters)
 	var role_label := label("角色",18)
@@ -283,6 +356,8 @@ func _room() -> void:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_child(info)
 	title.add_child(button("复制房间码", func(): DisplayServer.clipboard_set(str(room.get("inviteCode", "")))))
+	var current_weather: String = str(room.get("weather",{}).get("preset","clear"))
+	content.add_child(label(str(WeatherProfiles.PRESETS.get(current_weather,{}).get("label","晴天"))+" · 本局天气",15))
 	var list := panel()
 	content.add_child(list)
 	var rows := VBoxContainer.new()
@@ -318,11 +393,11 @@ func _room() -> void:
 		var blue := participants.filter(func(member): return member.get("team") == "blue").size()
 		var red := participants.size()-blue
 		if blue == 0 or red == 0 or absi(blue-red) > 1: can_start = false
-	var ready_button := button("取消准备" if is_ready else "准备", func(): action_requested.emit("ready", {"ready":not is_ready}), not (host and can_start))
+	var ready_button := button("资源准备中" if self_state.get("loading",true) else "取消准备" if is_ready else "准备", func(): action_requested.emit("ready", {"ready":not is_ready}), not is_ready and not (host and can_start))
 	ready_button.disabled = self_state.get("loading",true)
 	footer.add_child(ready_button)
 	if host:
-		var start_button := button("开始本局", func(): action_requested.emit("start", {}),can_start)
+		var start_button := button("开始本局" if can_start else "等待队员准备" if participants.size() >= 2 else "等待玩家加入", func(): action_requested.emit("start", {}),can_start)
 		start_button.disabled = not can_start
 		footer.add_child(start_button)
 	footer.add_child(button("离开房间", func(): action_requested.emit("confirm-leave", {})))
@@ -331,74 +406,80 @@ func _pause() -> void:
 	var layout := PAUSE.instantiate()
 	content.add_child(layout)
 	var actions: VBoxContainer = layout.get_node("Panel/Actions")
-	actions.add_child(label("个人菜单" if not room.is_empty() else "已暂停", 28))
-	actions.add_child(button("继续游玩", func(): action_requested.emit("resume", {}), true))
-	for row in [["settings", "设置"], ["map", "地图"], ["help", "帮助"]]:
+	actions.add_child(label("个人菜单" if not room.is_empty() else "已暂停",32))
+	var continue_button := button("继续游玩",func(): action_requested.emit("resume",{}),true)
+	continue_button.custom_minimum_size.y = 62
+	actions.add_child(continue_button)
+	var shortcuts := HBoxContainer.new()
+	actions.add_child(shortcuts)
+	for row in [["settings","设置"],["map","地图"],["help","帮助"]]:
 		var target: String = row[0]
-		actions.add_child(button(row[1], func(): show_page(target)))
+		var shortcut := button(row[1],func(): show_page(target))
+		shortcut.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		shortcuts.add_child(shortcut)
+	var divider := HSeparator.new()
+	actions.add_child(divider)
 	if not room.is_empty():
-		actions.add_child(button("返回联机大厅", func(): action_requested.emit("confirm-leave", {})))
-	actions.add_child(button("返回主菜单", func(): action_requested.emit("confirm-home", {})))
+		actions.add_child(button("离开房间并返回大厅",func(): action_requested.emit("confirm-leave",{})))
+	else:
+		actions.add_child(button("结束探索并返回大厅",func(): action_requested.emit("confirm-home",{})))
 
 func _settings() -> void:
-	var controls := panel()
-	content.add_child(controls)
-	var stack := VBoxContainer.new()
-	controls.add_child(stack)
-	stack.add_child(label("画面", 24))
-	_option(stack, "画质", ["自动", "流畅", "高清", "超清", "兼容"], int(settings.get("quality", 0)), func(index): action_requested.emit("setting", {"key":"quality","value":index}))
-	_option(stack, "帧率", ["60 FPS", "30 FPS", "120 FPS", "不限"], int(settings.get("fps", 0)), func(index): action_requested.emit("setting", {"key":"fps","value":index}))
-	if not mobile:
-		_option(stack, "显示", ["窗口", "全屏"], int(settings.get("fullscreen", 0)), func(index): action_requested.emit("setting", {"key":"fullscreen","value":index}))
-		var vsync := CheckButton.new()
-		vsync.text = "垂直同步"
-		vsync.custom_minimum_size.y = 48
-		vsync.button_pressed = bool(settings.get("vsync",true))
-		vsync.toggled.connect(func(value): action_requested.emit("setting", {"key":"vsync","value":value}))
-		stack.add_child(vsync)
-	stack.add_child(label("操作与声音", 24))
-	_slider(stack, "观察灵敏度", float(settings.get("sensitivity", 1.0)), 0.2, 3.0, func(value): action_requested.emit("setting", {"key":"sensitivity","value":value}))
-	_slider(stack, "主音量", float(settings.get("volume", 0.8)), 0.0, 1.0, func(value): action_requested.emit("setting", {"key":"volume","value":value}))
-	var motion := CheckButton.new()
-	motion.text = "减少界面动态效果"
-	motion.button_pressed = reduced_motion
-	motion.toggled.connect(func(value): reduced_motion = value; action_requested.emit("setting", {"key":"reducedMotion","value":value}))
-	stack.add_child(motion)
-	if not mobile:
-		var keys := GridContainer.new()
-		keys.columns = 2
-		stack.add_child(keys)
-		var bindings: Dictionary = settings.get("bindings",{})
-		for item in [["forward","前进",KEY_W],["back","后退",KEY_S],["left","向左",KEY_A],["right","向右",KEY_D],["sprint","冲刺",KEY_SHIFT],["crouch","蹲伏",KEY_CTRL],["jump","跳跃",KEY_SPACE],["reload","装填",KEY_R],["interact","互动",KEY_E],["switch","切枪",KEY_Q],["gadget","使用道具",KEY_G],["cycle","切换道具",KEY_B],["slide","滑铲",KEY_C],["map","地图",KEY_M]]:
-			keys.add_child(label(item[1],16))
-			var action: String = item[0]
-			var key_button := button(OS.get_keycode_string(int(bindings.get(action,item[2]))),func(): _request_binding(action))
-			key_button.set_meta("binding",action)
-			keys.add_child(key_button)
-	stack.add_child(label("鼠标左键射击 · 右键开镜 · Esc 菜单", 15))
-	footer.add_child(button("返回菜单", _return_menu, true))
+	var view := SettingsPanel.new()
+	view.values = settings
+	view.capabilities = preferences.capabilities() if preferences else {}
+	if preferences:
+		view.profile_reader = func(): return float(preferences.render_profile.profile().get("scale",1.0))
+	view.mobile = mobile
+	view.active_tab = settings_tab
+	view.setting_requested.connect(func(key,value):
+		if key == "reducedMotion": reduced_motion = bool(value)
+		action_requested.emit("setting",{"key":key,"value":value})
+	)
+	view.display_requested.connect(func(changes): action_requested.emit("preview-display",changes))
+	view.restart_requested.connect(func(): action_requested.emit("restart-renderer",{}))
+	view.binding_requested.connect(_request_binding)
+	view.tab_changed.connect(func(id): settings_tab = id; show_page("settings"))
+	var inset := MarginContainer.new()
+	var padding := maxi(0,int((get_viewport_rect().size.x-96-1080)/2)) if not mobile else 0
+	inset.add_theme_constant_override("margin_left",padding)
+	inset.add_theme_constant_override("margin_right",padding)
+	content.add_child(inset)
+	inset.add_child(view)
+	footer.add_child(button("返回菜单",_return_menu))
 
 func _account() -> void:
+	var center := CenterContainer.new()
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_child(center)
+	var card := panel()
+	card.custom_minimum_size.x = minf(560,get_viewport_rect().size.x-80)
+	center.add_child(card)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation",18)
+	card.add_child(stack)
 	if account.is_empty():
-		content.add_child(label("登录账号", 28))
+		stack.add_child(label("欢迎回来",32))
 		var username := LineEdit.new()
 		username.placeholder_text = "用户名"
 		username.custom_minimum_size.y = 52
-		content.add_child(username)
+		stack.add_child(username)
 		var password := LineEdit.new()
 		password.placeholder_text = "密码"
 		password.secret = true
 		password.custom_minimum_size.y = 52
-		content.add_child(password)
-		content.add_child(button("登录", func(): action_requested.emit("login", {"username":username.text,"password":password.text}); password.clear(), true))
-		content.add_child(button("注册或找回账号 ↗", func(): action_requested.emit("web", {"path":"/account/"})))
+		stack.add_child(password)
+		var login := func(): action_requested.emit("login",{"username":username.text,"password":password.text}); password.clear()
+		stack.add_child(button("登录",login,true))
+		password.text_submitted.connect(func(_text): login.call())
+		stack.add_child(button("注册或找回账号 ↗",func(): action_requested.emit("web",{"path":"/account/"})))
 	else:
-		content.add_child(label(str(account.get("nickname", account.get("username", "玩家"))), 36))
-		content.add_child(label("玩家编号  "+str(account.get("shortId", "—")), 16))
-		content.add_child(button("查看完整档案 ↗", func(): action_requested.emit("web", {"path":"/account/"})))
-		content.add_child(button("退出账号", func(): action_requested.emit("logout", {})))
-	content.add_child(label("客户端与网页分别登录。", 14))
-	footer.add_child(button("返回菜单", _return_menu, true))
+		stack.add_child(label(str(account.get("nickname",account.get("username","玩家"))),36))
+		stack.add_child(label("玩家编号  "+str(account.get("shortId","—")),16))
+		stack.add_child(button("查看完整档案 ↗",func(): action_requested.emit("web",{"path":"/account/"}),true))
+		stack.add_child(button("退出账号",func(): action_requested.emit("logout",{})))
+	stack.add_child(label("客户端与网页分别登录。",14))
+	footer.add_child(button("返回菜单",_return_menu))
 
 func _map() -> void:
 	var map_script := load("res://src/ui/campus_map.gd")
@@ -422,12 +503,13 @@ func _help() -> void:
 	footer.add_child(button("返回菜单", _return_menu, true))
 
 func _about() -> void:
-	content.add_child(label("齐盛Online", 42))
-	content.add_child(label("Preview 0.1.0 · 原生预览版", 18))
-	content.add_child(label("重访校园，与朋友并肩行动。", 22))
+	content.add_child(label("齐盛Online · 原生客户端",32))
+	content.add_child(label("Preview "+str(ProjectSettings.get_setting("application/config/version","0.2.0"))+" · 原生预览版", 18))
+	content.add_child(label("制作与开发 · OpenQS",18))
 	content.add_child(button("检查更新", func(): action_requested.emit("check-updates",{})))
 	content.add_child(button("制作名单 ↗", func(): action_requested.emit("web", {"path":"/credits/"})))
 	content.add_child(button("版权与许可 ↗", func(): action_requested.emit("web", {"path":"/copyright/"})))
+	content.add_child(label("音乐：Wildflowers — Scott Buckley · CC BY 4.0",14))
 	content.add_child(label("© 2026 OpenQS · 齐盛Online", 14))
 	footer.add_child(button("返回菜单", _return_menu, true))
 
@@ -477,7 +559,9 @@ func set_status(message: String) -> void:
 	_feedback_status()
 
 func _feedback_status() -> void:
-	if feedback: feedback.text = status_text
+	if feedback:
+		feedback.text = status_text
+		feedback.visible = not status_text.is_empty()
 
 func _return_menu() -> void:
 	show_page("pause" if data.get("inSession", false) else "room" if not room.is_empty() else "lobby")
@@ -485,40 +569,13 @@ func _return_menu() -> void:
 func _avatar_name(value: String) -> String:
 	return {"campus-a":"校园运动装 A", "campus-b":"校园运动装 B", "tactical-a":"现代战术装 A", "tactical-b":"现代战术装 B"}.get(value, "校园运动装 A")
 
-func _option(parent: Control, title: String, choices: Array, selected: int, changed: Callable) -> void:
-	var row := HBoxContainer.new()
-	parent.add_child(row)
-	var name_label := label(title)
-	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(name_label)
-	var option := OptionButton.new()
-	option.custom_minimum_size = Vector2(180, 48)
-	for value in choices: option.add_item(value)
-	option.select(selected)
-	option.item_selected.connect(changed)
-	row.add_child(option)
-
-func _slider(parent: Control, title: String, value: float, lower: float, upper: float, changed: Callable) -> void:
-	var row := HBoxContainer.new()
-	parent.add_child(row)
-	var name_label := label(title)
-	name_label.custom_minimum_size.x = 140
-	row.add_child(name_label)
-	var slider := HSlider.new()
-	slider.min_value = lower
-	slider.max_value = upper
-	slider.step = 0.01
-	slider.value = value
-	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slider.custom_minimum_size.y = 48
-	slider.value_changed.connect(changed)
-	row.add_child(slider)
 
 func label(text: String, size := 18) -> Label:
 	var result := Label.new()
 	result.text = text
 	result.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	result.add_theme_font_size_override("font_size", size)
+	if size >= 24 and _display_font: result.add_theme_font_override("font",_display_font)
 	return result
 
 func button(text: String, callback: Callable, primary := false) -> Button:
@@ -526,9 +583,9 @@ func button(text: String, callback: Callable, primary := false) -> Button:
 	result.text = text
 	result.custom_minimum_size.y = 52
 	result.set_meta("primary",primary)
-	result.pressed.connect(callback)
+	result.pressed.connect(func(): action_requested.emit("ui-sound",{}); callback.call())
 	if primary:
-		result.add_theme_stylebox_override("normal", TACTICAL.get_stylebox("pressed", "Button"))
+		result.theme_type_variation = "PrimaryButton"
 	return result
 
 func panel() -> PanelContainer:

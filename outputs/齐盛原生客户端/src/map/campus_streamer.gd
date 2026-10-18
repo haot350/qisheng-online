@@ -4,6 +4,7 @@ extends Node3D
 signal progress_changed(loaded: int, required: int)
 signal region_ready
 signal region_failed(message: String)
+signal chunk_attached(root: Node3D, row: Dictionary)
 
 var manifest: Dictionary = {}
 var profile := "demo"
@@ -25,8 +26,17 @@ var collision_used: Dictionary = {}
 var suspended := false
 var last_progress_loaded := -1
 var last_progress_required := -1
+var diagnostics: QsRuntimeDiagnostics
+# Bound main-thread scene attachment independently of the two IO requests.
+# One large imported chunk may exceed the budget; its measured stage is kept
+# so it can be split/optimized rather than concealing it in an average.
+const ATTACH_BUDGET_USEC := 3500
+var max_pending_loads := 2
+var retiring := false
 
 func _ready() -> void:
+	if "--serialized-campus-load" in OS.get_cmdline_user_args(): max_pending_loads = 1
+	if diagnostics: diagnostics.record("campus-open",{"limit":max_pending_loads})
 	var file := "res://content/production/map.json"
 	if not FileAccess.file_exists(file):
 		file = "res://content/demo/map.json"
@@ -87,12 +97,19 @@ func prepare_at(position: Vector3, force := false) -> void:
 	_pump()
 
 func _process(delta: float) -> void:
-	if suspended: return
+	if suspended:
+		_drain_pending()
+		if retiring and pending.is_empty(): queue_free()
+		return
 	use_clock += minf(delta, 0.2)
+	var attach_started := Time.get_ticks_usec()
+	var attached := 0
 	for id in pending.keys():
 		var progress: Array = []
 		var status = ResourceLoader.load_threaded_get_status(id, progress)
 		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			if attached > 0 or Time.get_ticks_usec()-attach_started >= ATTACH_BUDGET_USEC: break
+			if diagnostics: diagnostics.record("chunk-read-complete",{"resource":id})
 			var packed = ResourceLoader.load_threaded_get(id)
 			pending.erase(id)
 			if not wanted.has(id):
@@ -100,16 +117,23 @@ func _process(delta: float) -> void:
 			if not packed is PackedScene:
 				region_failed.emit("一块校园场景未能打开，请重新进入。")
 				continue
+			var started := Time.get_ticks_usec()
+			if diagnostics: diagnostics.record("chunk-instantiate",{"resource":id})
 			var root: Node3D = packed.instantiate()
+			if diagnostics: diagnostics.record("chunk-instantiated",{"resource":id,"durationMs":float(Time.get_ticks_usec()-started)/1000.0})
+			started = Time.get_ticks_usec()
 			add_child(root)
 			resident[id] = {"root":root,"used":use_clock,"row":wanted[id]}
+			chunk_attached.emit(root,wanted[id])
+			attached += 1
+			if diagnostics: diagnostics.record("chunk-attached",{"resource":id,"durationMs":float(Time.get_ticks_usec()-started)/1000.0,"resident":resident.size()})
 		elif status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 			pending.erase(id)
 			failed[id] = true
 			region_failed.emit("校园场景读取失败。")
 	_pump()
 	for id in collision_wanted:
-		if not collision_resident.has(id) and not failed.has(id):
+		if Time.get_ticks_usec()-attach_started < ATTACH_BUDGET_USEC and not collision_resident.has(id) and not failed.has(id):
 			_create_collision(id)
 			break
 	var loaded := 0
@@ -126,6 +150,7 @@ func _process(delta: float) -> void:
 		progress_changed.emit(loaded, wanted.size())
 	if not complete and loaded == wanted.size() and collision_ready and not wanted.is_empty():
 		complete = true
+		if diagnostics: diagnostics.record("campus-ready",{"resident":resident.size(),"required":wanted.size()})
 		region_ready.emit()
 	_evict()
 
@@ -142,18 +167,20 @@ func _pump() -> void:
 				var root: Node3D = packed.instantiate()
 				add_child(root)
 				resident[id] = {"root":root,"used":use_clock,"row":wanted[id]}
+				chunk_attached.emit(root,wanted[id])
 			else:
 				failed[id] = true
 				region_failed.emit("校园文件未能打开。")
 			break
-		if pending.size() >= 2:
+		if pending.size() >= max_pending_loads:
 			break
 		if resident.has(id) or pending.has(id) or failed.has(id):
 			continue
 		var error = ResourceLoader.load_threaded_request(id, "PackedScene", false)
 		if error == OK:
 			pending[id] = true
-		else:
+			if diagnostics: diagnostics.record("chunk-request",{"resource":id,"pending":pending.size()})
+		elif error != ERR_BUSY:
 			failed[id] = true
 			region_failed.emit("校园文件缺失，请重新安装完整地图。")
 
@@ -209,9 +236,22 @@ func release_all() -> void:
 	collision_used.clear()
 	failed.clear()
 	complete = false
-	# Godot threaded IO cannot be canceled. The node may be released while the
-	# loader finishes; no late result is permitted to instantiate a scene.
-	pending.clear()
+	# IO cannot be canceled. A retiring owner drains completed loader jobs but
+	# never instantiates them or emits readiness for a subsequent session.
+	_drain_pending()
+
+func retire() -> void:
+	retiring = true
+	visible = false
+	release_all()
+
+func _drain_pending() -> void:
+	for id in pending.keys():
+		var status := ResourceLoader.load_threaded_get_status(id)
+		if status == ResourceLoader.THREAD_LOAD_LOADED:
+			ResourceLoader.load_threaded_get(id)
+			pending.erase(id)
+		elif status in [ResourceLoader.THREAD_LOAD_FAILED,ResourceLoader.THREAD_LOAD_INVALID_RESOURCE]: pending.erase(id)
 
 func update_camera_visibility(camera: Camera3D) -> void:
 	if not is_instance_valid(camera): return

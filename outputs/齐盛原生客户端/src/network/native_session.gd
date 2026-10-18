@@ -13,8 +13,10 @@ signal input_reset(reason: String)
 
 const Decoder = preload("res://src/network/wire_decoder.gd")
 const Compatibility = preload("res://src/physics/compatibility_gate.gd")
-const PROTOCOL := "campus-mp-0.9.0"
+const PROTOCOL := "campus-mp-0.9.4"
 const SecureSession = preload("res://src/network/secure_session.gd")
+const Presence = preload("res://src/network/client_presence.gd")
+var _presence: QsClientPresence
 var api_base := "http://127.0.0.1:2568/v1"
 var realtime_base := "http://127.0.0.1:2567"
 var map_identity: Dictionary = {}
@@ -69,6 +71,10 @@ func configure(api: String, realtime: String, identity: Dictionary) -> bool:
 	api_base = next_api
 	realtime_base = realtime.trim_suffix("/")
 	map_identity = identity.duplicate(true)
+	if not _presence:
+		_presence = Presence.new()
+		add_child(_presence)
+	_presence.configure(api_base,_token)
 	return true
 
 func restore_login() -> bool:
@@ -82,6 +88,7 @@ func restore_login() -> bool:
 		return false
 	if not result.data.get("account") is Dictionary: return false
 	_token = token
+	if _presence: _presence.configure(api_base,_token)
 	player = result.data.get("player", {}).duplicate(true)
 	account_changed.emit(player)
 	return true
@@ -100,6 +107,7 @@ func login(username: String, password: String) -> bool:
 		_fail("登录未完成，请重试。")
 		return false
 	_token = data.token
+	if _presence: _presence.configure(api_base,_token)
 	SecureSession.save_token(_token,api_base)
 	player = data.player.duplicate(true)
 	account_changed.emit(player)
@@ -486,6 +494,7 @@ func logout() -> void:
 	var previous := _token
 	leave_room()
 	_token = ""
+	if _presence: _presence.configure(api_base,"")
 	SecureSession.clear(api_base)
 	player.clear()
 	account_changed.emit(player)

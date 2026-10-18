@@ -22,6 +22,7 @@ func _ready() -> void:
 	hit = _synthesize(0.025,1300,790,0.035)
 	for index in range(16):
 		var voice := AudioStreamPlayer3D.new()
+		voice.bus = "SFX"
 		voice.max_distance = 180
 		voice.unit_size = 8.0
 		voice.volume_db = -9
@@ -29,6 +30,7 @@ func _ready() -> void:
 		voices.append(voice)
 	for index in range(6):
 		var voice := AudioStreamPlayer.new()
+		voice.bus = "SFX"
 		voice.volume_db = -9
 		add_child(voice)
 		local_voices.append(voice)

@@ -1,3 +1,5 @@
+import type {WeatherPreset} from '@qisheng/shared/weather';
+import {WeatherChoice,RoomWeather} from './WeatherChoice';
 import {useRef, useState, type ReactNode} from 'react';
 import CacheSettingsUI from './CacheSettingsUI';
 import {TransmissionChoice} from './DrivingUI';
@@ -15,9 +17,9 @@ const sections = [
 ] as const;
 type Section = typeof sections[number]['id'];
 
-export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmission,onEditTouch}:{
+export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmission,onEditTouch,onlineWeather}:{
   settings:Settings; onChange:(next:Settings)=>void; onClose:()=>void; mode:Mode;
-  canChangeTransmission:boolean; onEditTouch:()=>void;
+  canChangeTransmission:boolean; onEditTouch:()=>void; onlineWeather?:WeatherPreset;
 }) {
   const [section,setSection]=useState<Section>('controls');
   const nav=useRef<HTMLElement>(null);
@@ -57,6 +59,7 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
           {mode==='escape'&&<div className="settings-choice-block"><h3>突围配乐</h3><EscapeMusicChoice settings={settings} onChange={onChange}/></div>}
         </>}
         {section==='gameplay'&&<>
+          {mode!=='story'&&(onlineWeather?<RoomWeather preset={onlineWeather}/>:<WeatherChoice value={settings.weather??'clear'} onChange={weather=>onChange({...settings,weather})}/>)}
           {toggle('onlinePing','联机显示 Ping','在对局中显示当前网络往返时间。')}
           {modeCapabilities(mode).photography&&toggle('realityHints','实拍机位提示','在校园中显示可以对照实景照片的位置。')}
         </>}

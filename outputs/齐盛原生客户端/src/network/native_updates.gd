@@ -4,7 +4,7 @@ extends Node
 signal status_changed(message: String)
 signal update_available(entry: Dictionary)
 
-const VERSION := "0.1.0"
+const VERSION := "0.2.0"
 const MANIFEST_URL := "https://game.tianhw.top/api/v1/native/updates"
 var candidate: Dictionary = {}
 var _request: HTTPRequest
@@ -127,7 +127,8 @@ func _valid_entry(entry: Dictionary) -> bool:
 		if not identity.get(key) is String or not regex.search(identity[key]): return false
 	var size: Variant = entry.get("bytes")
 	if not (size is int or size is float) or not is_finite(float(size)) or float(size) != floorf(float(size)): return false
-	return size > 0 and size <= 2147483648 and str(entry.get("protocolVersion","")) == "campus-mp-0.9.0"
+	regex.compile("^campus-mp-[0-9]+[.][0-9]+[.][0-9]+$")
+	return size > 0 and size <= 2147483648 and regex.search(str(entry.get("protocolVersion",""))) != null
 
 func _newer(candidate_version: String,current_version: String) -> bool:
 	var candidate_parts := candidate_version.split(".")

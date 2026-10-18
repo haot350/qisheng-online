@@ -36,8 +36,17 @@ var _confirmation: ConfirmationDialog
 var _confirmation_action := ""
 var updater: Node
 var _offline_actions: Array[String] = []
+var diagnostics := preload("res://src/runtime_diagnostics.gd").new()
+var world_look: QsWorldEnvironment
+var menu_audio: QsMenuAudio
+var _solo_weather := "clear"
+var _display_confirmation: ConfirmationDialog
+var _display_timer: Timer
+var _display_seconds := 0
+var _settings_save_timer: Timer
 
 func _ready() -> void:
+	get_window().title = "齐盛Online · 原生 Preview "+str(ProjectSettings.get_setting("application/config/version"))
 	mobile = OS.get_name() == "Android" or "--mobile-ui" in OS.get_cmdline_user_args()
 	get_tree().auto_accept_quit = false
 	get_viewport().disable_3d = true
@@ -46,13 +55,21 @@ func _ready() -> void:
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(file))
 	if parsed is Dictionary: metadata = parsed
 	preferences.load_settings()
+	if preferences.bootstrap_renderer(get_tree()): return
 	preferences.apply(get_viewport(),mobile)
+	_settings_save_timer = Timer.new()
+	_settings_save_timer.one_shot = true
+	_settings_save_timer.wait_time = 0.2
+	add_child(_settings_save_timer)
+	_settings_save_timer.timeout.connect(preferences.flush)
+	preferences.persist_requested.connect(func(): _settings_save_timer.start())
 	_apply_ui_scale()
 	get_window().size_changed.connect(_apply_ui_scale)
 	var canvas := CanvasLayer.new()
 	add_child(canvas)
 	hud = Hud.new()
 	canvas.add_child(hud)
+	hud.configure_inputs(float(preferences.values.touchScale),bool(preferences.values.aimToggle))
 	hud.hide()
 	hud.menu_requested.connect(_pause_preview)
 	hud.action_requested.connect(_input_action)
@@ -63,9 +80,14 @@ func _ready() -> void:
 	shell = Shell.new()
 	canvas.add_child(shell)
 	shell.settings = preferences.values
+	shell.preferences = preferences
 	shell.reduced_motion = bool(preferences.values.reducedMotion)
 	shell.action_requested.connect(_menu_action)
+	menu_audio = preload("res://src/menu_audio.gd").new()
+	add_child(menu_audio)
 	_build_loading(canvas)
+	if not preferences.boot_message.is_empty(): shell.set_status(preferences.boot_message)
+	if DisplayServer.get_name() != "headless" and FileAccess.file_exists(Preferences.RENDER_PROBE): _confirm_render_boot.call_deferred()
 	session = Session.new()
 	session.process_physics_priority = 10
 	add_child(session)
@@ -124,6 +146,7 @@ func _build_loading(canvas: CanvasLayer) -> void:
 	loading_cover.add_child(loading_label)
 	loading_cover.hide()
 	_confirmation = ConfirmationDialog.new()
+	_confirmation.theme = shell.theme
 	_confirmation.title = "离开当前对局？"
 	_confirmation.dialog_text = "本局仍会继续。离开后将释放席位。"
 	_confirmation.ok_button_text = "确认离开"
@@ -131,36 +154,76 @@ func _build_loading(canvas: CanvasLayer) -> void:
 	_confirmation.confirmed.connect(func():
 		if _confirmation_action == "quit": get_tree().quit()
 		elif _confirmation_action == "update": updater.download()
+		elif _confirmation_action == "restart-renderer": _restart_renderer()
 		else: _return_home()
 	)
 	canvas.add_child(_confirmation)
+	_build_display_confirmation(canvas)
+
+func _build_display_confirmation(canvas: CanvasLayer) -> void:
+	_display_confirmation = ConfirmationDialog.new()
+	_display_confirmation.title = "保留这些显示设置？"
+	_display_confirmation.ok_button_text = "保留"
+	_display_confirmation.cancel_button_text = "恢复"
+	_display_confirmation.theme = preload("res://themes/tactical.tres")
+	canvas.add_child(_display_confirmation)
+	_display_timer = Timer.new()
+	_display_timer.wait_time = 1.0
+	add_child(_display_timer)
+	_display_timer.timeout.connect(func():
+		_display_seconds -= 1
+		_display_confirmation.dialog_text = "%d 秒后恢复原来的显示设置。" % _display_seconds
+		if _display_seconds <= 0: _finish_display(false)
+	)
+	_display_confirmation.confirmed.connect(func(): _finish_display(true))
+	_display_confirmation.canceled.connect(func(): _finish_display(false))
+
+func _finish_display(keep: bool) -> void:
+	_display_timer.stop()
+	_display_confirmation.hide()
+	if keep: preferences.confirm_display()
+	else: preferences.revert_display()
+	_apply_ui_scale()
+	if shell and shell.page == "settings": shell.show_page("settings")
+
+func _confirm_render_boot() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	preferences.confirm_renderer()
+
+func _restart_renderer() -> void:
+	_return_home()
+	await get_tree().process_frame
+	if not preferences.restart_renderer(get_tree()): shell.set_status("重启未完成，请重试。")
 
 func _ensure_world(competitive: bool) -> void:
 	if world_owner: return
+	diagnostics.record("world-create")
 	world_owner = Node3D.new()
 	add_child(world_owner)
-	var environment := WorldEnvironment.new()
-	var settings := Environment.new()
-	settings.background_mode = Environment.BG_COLOR
-	settings.background_color = Color("bfd1d8")
-	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	settings.ambient_light_color = Color("dbe9ef")
-	settings.ambient_light_energy = 0.65
-	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.environment = settings
-	world_owner.add_child(environment)
-	sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48,-35,0)
-	sun.light_color = Color("ffefd6")
-	sun.light_energy = 0.95
-	sun.shadow_enabled = bool(preferences.render_profile.profile().shadows)
-	world_owner.add_child(sun)
+	world_look = preload("res://src/world_environment.gd").new()
+	world_look.configure(preferences.render_profile.profile())
+	world_owner.add_child(world_look)
+	world_look.weather_changed.connect(func():
+		if campus: world_look.refresh_resident(campus.resident)
+	)
+	sun = world_look.sun
+	world_look.set_cover_query(func(at: Vector3):
+		return prediction != null and prediction.world != null and float(prediction.world.call("ray_distance",at+Vector3(0,0.2,0),Vector3.UP,40.0)) < 39.9
+	)
+	world_look.apply_weather(session.snapshot.get("weather",{"preset":_solo_weather,"seed":0,"startedAtTick":0}) if competitive else {"preset":_solo_weather,"seed":0,"startedAtTick":0},int(session.snapshot.get("tick",0)) if competitive else -1)
 	campus = Campus.new()
+	campus.diagnostics = diagnostics
+	campus.chunk_attached.connect(func(root,row):
+		if world_look: world_look.prepare_chunk(root,row)
+	)
 	campus.formal_collision = competitive
 	world_owner.add_child(campus)
 	player = Controller.new()
 	player.authoritative_motion = competitive
 	player.sensitivity = 0.0024*float(preferences.values.sensitivity)
+	player.invert_y = bool(preferences.values.invertY)
+	player.mouse_aim_toggle = bool(preferences.values.mouseAimToggle)
 	player.keybindings = preferences.values.bindings
 	world_owner.add_child(player)
 	player.position = campus.spawn_position()+Vector3(0,0.1,0)
@@ -193,6 +256,8 @@ func _start_preview() -> void:
 	hud.update_snapshot({"self":{},"variant":"tdm"},true)
 	player.activate(true)
 	campus.prepare_at(player.position,true)
+	menu_audio.set_mode("roam")
+	menu_audio.set_weather(_solo_weather)
 
 func _boot_online(own: Dictionary) -> void:
 	if _booting or network_preview: return
@@ -260,6 +325,7 @@ func _fail_boot(message: String) -> void:
 func _pause_preview() -> void:
 	if not preview: return
 	_paused = true
+	if menu_audio: menu_audio.set_mode("pause")
 	get_viewport().disable_3d = true
 	player.activate(false)
 	_controls.clear()
@@ -280,8 +346,10 @@ func _resume() -> void:
 	shell.hide()
 	hud.show()
 	player.activate(true)
+	if menu_audio: menu_audio.set_mode("combat" if network_preview else "roam")
 
 func _return_home() -> void:
+	diagnostics.record("world-release")
 	_session_epoch += 1
 	_booting = false
 	preview = false
@@ -297,9 +365,15 @@ func _return_home() -> void:
 	prediction = null
 	if presentation: presentation.release_all()
 	presentation = null
-	if campus: campus.release_all()
+	if campus:
+		if not campus.pending.is_empty():
+			campus.reparent(self)
+			campus.retire()
+		else: campus.release_all()
 	if world_owner: world_owner.queue_free()
 	world_owner = null
+	world_look = null
+	sun = null
 	campus = null
 	player = null
 	hud.clear_touch()
@@ -309,10 +383,14 @@ func _return_home() -> void:
 	shell.data["inSession"] = false
 	shell.show()
 	shell.show_page("lobby")
+	if menu_audio: menu_audio.set_mode("home")
 
 func _menu_action(name: String, payload: Dictionary) -> void:
 	match name:
-		"roam": _start_preview()
+		"roam":
+			_solo_weather = str(payload.get("weather","clear"))
+			_start_preview()
+		"ui-sound": menu_audio.play_click()
 		"resume": _resume()
 		"create":
 			if await session.create_room(payload): shell.show_page("room")
@@ -334,7 +412,23 @@ func _menu_action(name: String, payload: Dictionary) -> void:
 			if player:
 				player.sensitivity = 0.0024*float(preferences.values.sensitivity)
 				player.keybindings = preferences.values.bindings
-			if sun: sun.shadow_enabled = bool(preferences.render_profile.profile().shadows)
+				player.invert_y = bool(preferences.values.invertY)
+				player.mouse_aim_toggle = bool(preferences.values.mouseAimToggle)
+			if world_look: world_look.apply_profile(preferences.render_profile.profile())
+			hud.configure_inputs(float(preferences.values.touchScale),bool(preferences.values.aimToggle))
+			_apply_ui_scale()
+		"preview-display":
+			if preferences.begin_display(payload):
+				_display_seconds = 15
+				_display_confirmation.dialog_text = "15 秒后恢复原来的显示设置。"
+				_display_confirmation.popup_centered(Vector2i(470,200))
+				_display_timer.start()
+		"restart-renderer":
+			_confirmation_action = "restart-renderer"
+			_confirmation.title = "重启客户端？"
+			_confirmation.dialog_text = "重启后应用新的渲染模式。当前对局将会离开。" if preview or not session.snapshot.is_empty() else "重启后应用新的渲染模式。"
+			_confirmation.ok_button_text = "重启"
+			_confirmation.popup_centered(Vector2i(470,200))
 		"confirm-home", "confirm-leave":
 			if preview or not session.snapshot.is_empty():
 				_confirmation_action = "home"
@@ -385,6 +479,12 @@ func _network_status(status: String, message: String) -> void:
 
 func _network_snapshot(snapshot: Dictionary) -> void:
 	shell.update_room(snapshot)
+	if world_look:
+		world_look.apply_weather(snapshot.get("weather",{}),int(snapshot.get("tick",0)))
+	if menu_audio:
+		menu_audio.set_weather(str(snapshot.get("weather",{}).get("preset","clear")))
+		if snapshot.get("phase") == "lobby": menu_audio.set_mode("room")
+		elif snapshot.get("phase") == "playing" and not _paused: menu_audio.set_mode("combat")
 	var own: Dictionary = snapshot.get("self",{})
 	if snapshot.get("phase") in ["lobby","preparing","playing","paused"] and not own.is_empty():
 		if not network_preview and not _booting: _boot_online(own)
@@ -412,6 +512,7 @@ func _network_snapshot(snapshot: Dictionary) -> void:
 			session.set_loading(false)
 			if not _paused and snapshot.get("phase") != "lobby": player.activate(true)
 	elif snapshot.get("phase") == "ended":
+		if menu_audio: menu_audio.set_mode("pause")
 		if player: player.activate(false)
 		preview = false
 		_paused = true
@@ -449,6 +550,7 @@ func _spectate_pose() -> Dictionary:
 	return {}
 
 func _process(delta: float) -> void:
+	diagnostics.frame(delta,_booting or (campus != null and not campus.complete),campus.resident.size() if campus else 0,campus.pending.size() if campus else 0)
 	if not preview or not campus or not player: return
 	if not _paused:
 		var alive: bool = not network_preview or session.snapshot.get("self",{}).get("life","alive") == "alive"
@@ -464,6 +566,7 @@ func _process(delta: float) -> void:
 		if prediction: player.eye.position.y = 1.04 if prediction.motion.get("crouched",false) else 1.62
 		campus.prepare_at(player.position)
 		campus.update_camera_visibility(player.eye)
+		if world_look: world_look.follow_view(player.eye.global_position)
 		player.motion_allowed = campus.complete and not _booting and alive
 		if not campus.complete:
 			player.velocity = Vector3.ZERO
@@ -489,16 +592,18 @@ func _process(delta: float) -> void:
 	var eligible: bool = not _paused and not _booting and campus.complete and not loading_cover.visible and get_window().has_focus()
 	if preferences.render_profile.observe_frame(Performance.get_monitor(Performance.TIME_PROCESS)*1000.0,eligible,delta*1000.0):
 		preferences.apply_render(get_viewport())
-		if sun: sun.shadow_enabled = bool(preferences.render_profile.profile().shadows)
+		if world_look: world_look.apply_profile(preferences.render_profile.profile())
 
 func _apply_ui_scale() -> void:
-	var factor := clampf(float(DisplayServer.screen_get_dpi())/160,1.0,1.8) if mobile else 1.0
+	var factor := (clampf(float(DisplayServer.screen_get_dpi())/160,1.0,1.8) if mobile else 1.0)*float(preferences.values.get("uiScale",1.0))
 	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	get_window().content_scale_size = Vector2i(Vector2(get_window().size)/factor)
 
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_APPLICATION_PAUSED,NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
-		if player: _pause_preview()
+		preferences.set_background_audio(true)
+		if player and not _paused: _pause_preview()
+	if what in [NOTIFICATION_APPLICATION_RESUMED,NOTIFICATION_WM_WINDOW_FOCUS_IN]: preferences.set_background_audio(false)
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		if preview:
 			_pause_preview()
@@ -509,6 +614,9 @@ func _notification(what: int) -> void:
 		if preview and not _paused: _pause_preview()
 		elif shell and shell.page != "lobby": shell.show_page("pause" if preview else "lobby")
 		else: get_tree().quit()
+
+func _exit_tree() -> void:
+	if preferences: preferences.flush()
 
 func _smoke() -> void:
 	_start_preview()
@@ -526,7 +634,7 @@ func _capture_ui() -> void:
 		for i in range(5): await get_tree().process_frame
 		await get_tree().create_timer(0.2).timeout
 		await RenderingServer.frame_post_draw
-		get_viewport().get_texture().get_image().save_png(directory.path_join("native-"+page+"-0.1.0.png"))
+		get_viewport().get_texture().get_image().save_png(directory.path_join("native-"+page+"-"+str(ProjectSettings.get_setting("application/config/version"))+".png"))
 	print(JSON.stringify({"status":"captured","screens":["lobby","loadout","pause"],"worldCreated":world_owner != null,"viewport":[get_window().size.x,get_window().size.y]}))
 	get_tree().quit()
 
@@ -538,6 +646,6 @@ func _capture() -> void:
 	if directory.is_empty(): directory = "user://captures"
 	DirAccess.make_dir_recursive_absolute(directory)
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(directory.path_join("native-campus-0.1.0.png"))
+	get_viewport().get_texture().get_image().save_png(directory.path_join("native-campus-"+str(ProjectSettings.get_setting("application/config/version"))+".png"))
 	print(JSON.stringify({"status":"captured","profile":campus.profile,"resident":campus.resident.size(),"drawCalls":Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),"texturesBytes":Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED),"fps":Engine.get_frames_per_second()}))
 	get_tree().quit()

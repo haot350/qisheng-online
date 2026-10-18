@@ -1,4 +1,5 @@
 import {nativeUpdateRoutes} from './native-updates.js';
+import {presenceRoutes} from './presence.js';
 import Fastify,{type FastifyRequest} from 'fastify';
 import {assistantRoutes,closeAssistant} from './assistant.js';
 import type {AssistantTransport} from './assistant-upstream.js';
@@ -46,9 +47,9 @@ export async function createApp(opts:AppOptions={}){
  const audit=(action:string,target:string,detail:unknown={},actor?:string)=>db.prepare('INSERT INTO audit(created,action,target,detail,actor) VALUES (?,?,?,?,?)').run(now(),action,target,JSON.stringify(detail),actor??null);
  app.setErrorHandler((error,req,reply)=>{const e=error as Error&{statusCode?:number};if(e.statusCode===429){if(req.routeOptions.url==='/admin/assistant/test'){const retryAfterSeconds=Math.min(60,Math.max(1,Math.ceil(Number(reply.getHeader('retry-after'))||60)));return reply.header('Retry-After',String(retryAfterSeconds)).code(429).send({error:{code:'ASSISTANT_TEST_LIMIT',message:'测试过于频繁，请在'+retryAfterSeconds+'秒后再试。',retryable:true,retryAfterSeconds}});}return reply.code(429).send({error:{code:'RATE_LIMIT',message:'请求较多，请稍后再试。',retryable:true}});}if(e instanceof AppError)return reply.code(e.status).send({error:{code:e.code,message:e.message,retryable:e.retryable}});if(e.statusCode&&e.statusCode<500)return reply.code(e.statusCode).send({error:{code:'REQUEST',message:'请求格式无效。',retryable:false}});console.error(JSON.stringify({time:now(),level:'error',route:req.routeOptions.url,code:'INTERNAL',name:e.name}));return reply.code(500).send({error:{code:'INTERNAL',message:'服务暂时不可用，请稍后重试。',retryable:true}});});
  app.addHook('onSend',async(req,reply,payload)=>{reply.header('X-Content-Type-Options','nosniff').header('Referrer-Policy','no-referrer').header('Cache-Control','no-store');if(req.url.startsWith('/admin'))reply.header('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");return payload;});
- app.get('/health',()=>({ok:true,version:'0.9.2',ruleVersion:RANKING_RULE_VERSION,ruleVersions:{escape:rankingRuleVersion('escape'),dafei:rankingRuleVersion('dafei')},sqliteVersion:(db.prepare('select sqlite_version() v').get() as {v:string}).v}));
+ app.get('/health',()=>({ok:true,version:'0.9.4',ruleVersion:RANKING_RULE_VERSION,ruleVersions:{escape:rankingRuleVersion('escape'),dafei:rankingRuleVersion('dafei')},sqliteVersion:(db.prepare('select sqlite_version() v').get() as {v:string}).v}));
  nativeUpdateRoutes(app,opts.nativeManifestFile);
- const ctx={app,db,now,auth,requireAccount,safe,session,loadRun,submission,audit,opts,credential};operationsRoutes(ctx);identityRoutes(ctx);accountRoutes(ctx);accountProfileRoutes(ctx);achievementRoutes(ctx);runRoutes(ctx);boardRoutes(ctx);feedbackRoutes(ctx);multiplayerRoutes(ctx);telemetryRoutes(ctx);assistantRoutes(ctx);adminRoutes(ctx);
+ const ctx={app,db,now,auth,requireAccount,safe,session,loadRun,submission,audit,opts,credential};operationsRoutes(ctx);identityRoutes(ctx);accountRoutes(ctx);accountProfileRoutes(ctx);achievementRoutes(ctx);runRoutes(ctx);boardRoutes(ctx);feedbackRoutes(ctx);multiplayerRoutes(ctx);telemetryRoutes(ctx);presenceRoutes(ctx);assistantRoutes(ctx);adminRoutes(ctx);
  app.addHook('onClose',async()=>{await closeAssistant(ctx);if(!opts.db)db.close();});return {app,db};
 }
 export type Context=Awaited<ReturnType<typeof createContext>>;

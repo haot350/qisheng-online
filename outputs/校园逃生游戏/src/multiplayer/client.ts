@@ -5,6 +5,7 @@ import { gameOperations } from '../game-operations';
 import { entryFor, ModeUnavailableError } from '../game-config-store';
 import { OnlineClock } from "./netcode";
 import { sameMenuView } from './menu-view';
+import {waitForSnapshot} from './snapshot-wait';
 import { WireDecoder, type RoomWireMessage } from "./shared/wire";
 import {
   PROTOCOL_VERSION,
@@ -25,6 +26,8 @@ export const REALTIME_API = (env?.VITE_REALTIME_API || "/realtime").replace(
   "",
 );
 const RESUME_KEY = "qisheng-online-room-v1";
+const PENDING_ADMISSION_KEY='qisheng-pending-admission-v1';
+type PendingAdmission={id:string;playerId:string;mode:'coop'|'pvp';variant:'tdm'|'ffa'};
 type ResumeSession = {
   token: string;
   playerId: string;
@@ -125,11 +128,35 @@ export class OnlineClient {
   private reconnectStarted: number | null = null;
   private resumeWork: Promise<boolean> | null = null;
   private sdk = new AdmissionClient(REALTIME_API);
+  private pendingAdmission:PendingAdmission|null=null;
+  private admissionRecovery:Promise<boolean>|null=null;
   private retiredRooms = new WeakSet<Room>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private resyncPending = false;
   private resyncLastAt = -Infinity;
   private resyncTimer: ReturnType<typeof setTimeout> | null = null;
+  constructor(){try{const value=JSON.parse(sessionStorage.getItem(PENDING_ADMISSION_KEY)||'null');if(value&&typeof value.id==='string'&&/^[a-f0-9-]{36}$/i.test(value.id)&&typeof value.playerId==='string'&&value.playerId.length<=100&&['coop','pvp'].includes(value.mode)&&['tdm','ffa'].includes(value.variant))this.pendingAdmission=value;}catch{}}
+  private savePendingAdmission(value:PendingAdmission|null){this.pendingAdmission=value;try{if(value)sessionStorage.setItem(PENDING_ADMISSION_KEY,JSON.stringify(value));else sessionStorage.removeItem(PENDING_ADMISSION_KEY);}catch{}}
+  hasUncertainAdmission(){return !!this.pendingAdmission;}
+  recoverAdmission(signal?:AbortSignal):Promise<boolean>{
+    if(this.admissionRecovery)return this.admissionRecovery;
+    const pending=this.pendingAdmission;if(!pending)return Promise.resolve(true);
+    const controller=new AbortController(),cancel=()=>controller.abort(),timer=setTimeout(cancel,8000);
+    signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();
+    const valid=()=>!this.disposed&&this.pendingAdmission?.id===pending.id;
+    const work=(async()=>{try{
+      const player=await rankingClient.me();if(!valid())return false;
+      if(player?.id!==pending.playerId){if(player?.id){this.savePendingAdmission(null);return true;}throw Error('请先登录原账号，再核对加入状态。');}
+      this.set({status:'reconnecting',error:'正在核对上一次加入请求…',errorCode:'ADMISSION_UNCERTAIN'});
+      const {ticket}=await rankingClient.request<{ticket:string}>('/multiplayer/tickets',{method:'POST',body:{mode:pending.mode,variant:pending.variant},signal:controller.signal});
+      const result=await this.request<{cleared:boolean;active?:boolean}>('/v1/admission/reconcile',{method:'POST',body:JSON.stringify({ticket,admissionId:pending.id,mode:pending.mode,variant:pending.variant})},controller.signal);
+      if(!valid())return false;
+      if(result.cleared){this.savePendingAdmission(null);this.set({status:'lobby',error:undefined,errorCode:undefined});return true;}
+      this.set({status:'error',error:result.active?'原房间连接仍在使用，请回到原页面重连或明确离开。':'原加入请求仍在确认中，请稍后重试连接。',errorCode:'ADMISSION_UNCERTAIN'});return false;
+    }catch{if(valid())this.set({status:'error',error:'暂时无法确认原加入请求，请重试连接后再创建房间。',errorCode:'ADMISSION_UNCERTAIN'});return false;}
+    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}})();
+    this.admissionRecovery=work;void work.finally(()=>{if(this.admissionRecovery===work)this.admissionRecovery=null;});return work;
+  }
   subscribe(fn: () => void) {
     this.listeners.add(fn);
     return () => {
@@ -351,8 +378,10 @@ export class OnlineClient {
       if (signal.aborted) cancel();
     });
   }
-  async join(options?: RoomOptions, roomId?: string, inviteCode?: string) {
+  async join(options?: RoomOptions, roomId?: string, inviteCode?: string, externalSignal?: AbortSignal):Promise<RoomSnapshot|undefined> {
     if (this.disposed) return;
+    if(externalSignal?.aborted)throw new DOMException('Cancelled','AbortError');
+    if(this.pendingAdmission&&!this.room&&!await this.recoverAdmission(externalSignal))return;
     const saved = this.readResume();
     if (
       !this.room &&
@@ -361,13 +390,14 @@ export class OnlineClient {
     ) {
       const recovery = this.reconnect(),
         recoveryOperation = this.operation;
+      const recovered=await recovery;
       if (
-        (await recovery) ||
+        recovered ||
         recoveryOperation !== this.operation ||
         this.hasResumeSession() ||
         this.view.errorCode !== "RECONNECT_EXPIRED"
       )
-        return;
+        return recovered ? this.waitForOwnSnapshot(externalSignal) : undefined;
     }
     const serial = ++this.operation;
     await this.releaseCurrent(serial);
@@ -375,6 +405,9 @@ export class OnlineClient {
     const controller = new AbortController();
     this.abort = controller;
     const signal = controller.signal;
+    const cancel=()=>controller.abort();
+    externalSignal?.addEventListener('abort',cancel,{once:true});
+    if(externalSignal?.aborted)cancel();
     let admission: AdmissionHandle | null = null,
       unboundRoom: Room | null = null;
     this.set({
@@ -425,6 +458,8 @@ export class OnlineClient {
       if (!this.current(serial) || signal.aborted) return;
       // Creation has a server-side effect. Let its bounded response arrive so a cancelled
       // operation can revoke its own handle instead of orphaning the queue.
+      const pending:PendingAdmission={id:crypto.randomUUID(),playerId,mode:options?.mode==='pvp'?'pvp':'coop',variant:options?.variant==='ffa'?'ffa':'tdm'};
+      this.savePendingAdmission(pending);
       let admitted = await this.request<AdmissionResult>(
         "/v1/queue",
         {
@@ -437,10 +472,12 @@ export class OnlineClient {
             roomId,
             inviteCode,
             create: !!options && !roomId && !inviteCode,
+            admissionId:pending.id,
           }),
         },
         new AbortController().signal,
       );
+      if(this.pendingAdmission?.id===pending.id)this.savePendingAdmission(null);
       admission = {
         queueId: admitted.queueId,
         queueToken: admitted.queueToken,
@@ -495,6 +532,7 @@ export class OnlineClient {
       unboundRoom = null;
       if (this.queue === admission) this.queue = null;
       admission = null;
+      return await this.waitForOwnSnapshot(signal);
     } catch (error) {
       const e = playerJoinError(error);
       if (admission) void this.cancelAdmission(admission);
@@ -503,10 +541,24 @@ export class OnlineClient {
         this.set({
           status: "error",
           error: (e as Error).message,
-          errorCode: e instanceof RankingError || e instanceof ModeUnavailableError ? e.code : undefined,
+          errorCode: this.pendingAdmission?'ADMISSION_UNCERTAIN':e instanceof RankingError || e instanceof ModeUnavailableError ? e.code : undefined,
           queuePosition: undefined,
         });
-    }
+    } finally { externalSignal?.removeEventListener('abort',cancel); }
+  }
+  async waitForOwnSnapshot(signal:AbortSignal=new AbortController().signal):Promise<RoomSnapshot>{
+    const room=this.room,playerId=this.playerId;
+    if(!room||!playerId)throw new RankingError(this.view.error||'暂时未能加入房间，请重试。',this.view.errorCode||'JOIN_RETRY',true);
+    const abort=new AbortController(),cancel=()=>abort.abort(),ownSignal=this.abort.signal;
+    signal.addEventListener('abort',cancel,{once:true});ownSignal.addEventListener('abort',cancel,{once:true});
+    if(signal.aborted||ownSignal.aborted)cancel();
+    try{return await waitForSnapshot({read:()=>this.room===room?this.view.currentRoom:null,subscribe:fn=>this.subscribe(fn)},snapshot=>snapshot.roomId===room.roomId&&snapshot.players.some(p=>p.id===playerId),abort.signal,JOIN_TIMEOUT_MS,()=>new RankingError('正在确认原房间席位，请重试连接。','JOIN_PENDING',true));}
+    finally{signal.removeEventListener('abort',cancel);ownSignal.removeEventListener('abort',cancel);}
+  }
+  async selectLoadout(data:ClientMessageMap['loadout'],signal:AbortSignal):Promise<void>{
+    const room=this.room,playerId=this.playerId;if(!room||!playerId)throw new RankingError('房间连接已变化，请重试。','JOIN_RETRY',true);
+    this.send('loadout',data);
+    await waitForSnapshot({read:()=>this.room===room?this.view.currentRoom:null,subscribe:fn=>this.subscribe(fn)},snapshot=>{const me=snapshot.players.find(p=>p.id===playerId);return !!me&&(me.primaryWeapon??me.weapon)===data.weapon&&me.avatar===data.avatar&&(data.team===undefined||me.team===data.team);},signal,8000,()=>new RankingError('暂未确认装备，请在房间查看后重试。','LOADOUT_PENDING',true));
   }
   private clearResync() {
     if (this.resyncTimer) clearTimeout(this.resyncTimer);
@@ -949,12 +1001,12 @@ export class OnlineClient {
     this.clearResync();
     const admission = this.queue;
     this.queue = null;
-    if (admission) void this.cancelAdmission(admission);
+    const cancelWork=admission?this.cancelAdmission(admission):Promise.resolve();
     const room = this.room;
     this.room = null;
     this.decoder.reset();
     this.removeResume();
-    if (room) await this.retireRoom(room);
+    await Promise.all([cancelWork,room?this.retireRoom(room):Promise.resolve()]);
     if (this.current(serial))
       this.set({
         currentRoom: null,
@@ -968,6 +1020,7 @@ export class OnlineClient {
   async leave() {
     const serial = ++this.operation;
     await this.releaseCurrent(serial);
+    if(this.pendingAdmission&&!this.disposed)await this.recoverAdmission();
   }
   dispose() {
     void this.leave();

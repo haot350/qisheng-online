@@ -164,6 +164,8 @@
 /outputs/齐盛原生客户端/scripts/*
 !/outputs/齐盛原生客户端/src/
 /outputs/齐盛原生客户端/src/*
+!/outputs/齐盛原生客户端/src/generated/
+/outputs/齐盛原生客户端/src/generated/*
 !/outputs/齐盛原生客户端/src/map/
 /outputs/齐盛原生客户端/src/map/*
 !/outputs/齐盛原生客户端/src/network/
@@ -397,7 +399,7 @@
 !/outputs/校园交互网站/site/scripts/telemetry.test.mjs
 !/outputs/校园交互网站/site/scripts/validate-static-styles.mjs
 !/outputs/校园交互网站/site/tsconfig.json
-!/outputs/校园交互网站/site/vendor/qisheng-shared-0.9.2.tgz
+!/outputs/校园交互网站/site/vendor/qisheng-shared-0.9.4.tgz
 !/outputs/校园交互网站/site/vite.config.ts
 !/outputs/校园交互网站/site/vite.production.config.ts
 !/outputs/校园共享模块/README.md
@@ -432,6 +434,7 @@
 !/outputs/校园共享模块/src/gadgets.ts
 !/outputs/校园共享模块/src/map-client/index.ts
 !/outputs/校园共享模块/src/npc-combat.ts
+!/outputs/校园共享模块/src/operations-observability.ts
 !/outputs/校园共享模块/src/operations.ts
 !/outputs/校园共享模块/src/player-content/FAQContent.tsx
 !/outputs/校园共享模块/src/player-content/assistant-knowledge.ts
@@ -446,6 +449,7 @@
 !/outputs/校园共享模块/src/render-profile.ts
 !/outputs/校园共享模块/src/rules.ts
 !/outputs/校园共享模块/src/types.ts
+!/outputs/校园共享模块/src/weather.ts
 !/outputs/校园共享模块/tests/accounts-client-v080.test.mjs
 !/outputs/校园共享模块/tests/assistant-v090.test.mjs
 !/outputs/校园共享模块/tests/detail-stats.test.mjs
@@ -454,6 +458,7 @@
 !/outputs/校园共享模块/tests/lock-protection.test.mjs
 !/outputs/校园共享模块/tests/pure-boundary.test.mjs
 !/outputs/校园共享模块/tests/render-profile.test.mjs
+!/outputs/校园共享模块/tests/weather-v094.test.mjs
 !/outputs/校园排行榜服务/.npmrc
 !/outputs/校园排行榜服务/README.md
 !/outputs/校园排行榜服务/admin/app.js
@@ -470,7 +475,9 @@
 !/outputs/校园排行榜服务/admin/src/views/Operations.tsx
 !/outputs/校园排行榜服务/admin/src/views/Overview.tsx
 !/outputs/校园排行榜服务/admin/src/views/PlayerAccounts.tsx
+!/outputs/校园排行榜服务/admin/src/views/Presence.tsx
 !/outputs/校园排行榜服务/admin/src/views/Releases.tsx
+!/outputs/校园排行榜服务/admin/src/views/Rooms.tsx
 !/outputs/校园排行榜服务/admin/src/views/Services.tsx
 !/outputs/校园排行榜服务/admin/src/workspace.css
 !/outputs/校园排行榜服务/admin/style.css
@@ -491,6 +498,7 @@
 !/outputs/校园排行榜服务/src/achievements.ts
 !/outputs/校园排行榜服务/src/admin-player-accounts.ts
 !/outputs/校园排行榜服务/src/admin-revision.ts
+!/outputs/校园排行榜服务/src/admin-rooms.ts
 !/outputs/校园排行榜服务/src/admin-workbench.ts
 !/outputs/校园排行榜服务/src/admin.ts
 !/outputs/校园排行榜服务/src/app.ts
@@ -507,7 +515,9 @@
 !/outputs/校园排行榜服务/src/multiplayer.ts
 !/outputs/校园排行榜服务/src/native-updates.ts
 !/outputs/校园排行榜服务/src/operations.ts
+!/outputs/校园排行榜服务/src/presence.ts
 !/outputs/校园排行榜服务/src/retention.ts
+!/outputs/校园排行榜服务/src/room-control.ts
 !/outputs/校园排行榜服务/src/runs.ts
 !/outputs/校园排行榜服务/src/server.ts
 !/outputs/校园排行榜服务/src/shared.ts
@@ -526,6 +536,7 @@
 !/outputs/校园排行榜服务/tests/gadgets-v090.test.ts
 !/outputs/校园排行榜服务/tests/maintenance-v060.test.ts
 !/outputs/校园排行榜服务/tests/mode-rules-v065.test.ts
+!/outputs/校园排行榜服务/tests/operations-live-v093.test.ts
 !/outputs/校园排行榜服务/tests/operations-v069.test.ts
 !/outputs/校园排行榜服务/tests/password-v081.test.ts
 !/outputs/校园排行榜服务/tests/ranking.test.ts
@@ -534,7 +545,7 @@
 !/outputs/校园排行榜服务/tests/security-efficiency-v070.test.ts
 !/outputs/校园排行榜服务/tests/upgrade.test.ts
 !/outputs/校园排行榜服务/tsconfig.json
-!/outputs/校园排行榜服务/vendor/qisheng-shared-0.9.2.tgz
+!/outputs/校园排行榜服务/vendor/qisheng-shared-0.9.4.tgz
 !/outputs/校园服务器部署/README.md
 !/outputs/校园服务器部署/docs/native-distribution.md
 !/outputs/校园服务器部署/scripts/admin-csp-policy.mjs
@@ -566,6 +577,7 @@
 !/outputs/校园服务器部署/tests/html-cache-bridge.test.mjs
 !/outputs/校园服务器部署/tests/html-cache.test.mjs
 !/outputs/校园服务器部署/tests/map-cache.test.mjs
+!/outputs/校园服务器部署/tests/native-cache-header.test.mjs
 !/outputs/校园服务器部署/tests/publish-release.test.mjs
 !/outputs/校园服务器部署/tests/realtime-map-release-v070.test.mjs
 !/outputs/校园服务器部署/tests/release-record-v069.test.mjs
@@ -585,6 +597,7 @@
 !/outputs/校园联机服务/scripts/package-online-v062.mjs
 !/outputs/校园联机服务/scripts/package-release.mjs
 !/outputs/校园联机服务/scripts/typecheck.mjs
+!/outputs/校园联机服务/src/admission-requests.ts
 !/outputs/校园联机服务/src/assets.ts
 !/outputs/校园联机服务/src/authority.ts
 !/outputs/校园联机服务/src/http-guard.ts
@@ -598,6 +611,8 @@
 !/outputs/校园联机服务/src/snapshot-budget.ts
 !/outputs/校园联机服务/src/store.ts
 !/outputs/校园联机服务/src/ttl-rate-limit.ts
+!/outputs/校园联机服务/tests/admin-room-control-v093.test.mjs
+!/outputs/校园联机服务/tests/admission-requests.test.mjs
 !/outputs/校园联机服务/tests/combat-v070.test.mjs
 !/outputs/校园联机服务/tests/connection-budget-v068.test.mjs
 !/outputs/校园联机服务/tests/control-start-v070.test.mjs
@@ -615,7 +630,8 @@
 !/outputs/校园联机服务/tests/simulation.test.mjs
 !/outputs/校园联机服务/tests/snapshot-query-cache-v070.test.mjs
 !/outputs/校园联机服务/tests/support/rejected-snapshot-cache.mjs
-!/outputs/校园联机服务/vendor/qisheng-shared-0.9.2.tgz
+!/outputs/校园联机服务/tests/weather-v094.test.mjs
+!/outputs/校园联机服务/vendor/qisheng-shared-0.9.4.tgz
 !/outputs/校园逃生游戏/README.md
 !/outputs/校园逃生游戏/account/index.html
 !/outputs/校园逃生游戏/copyright/index.html
@@ -667,9 +683,11 @@
 !/outputs/校园逃生游戏/src/FPSCombatHUD.tsx
 !/outputs/校园逃生游戏/src/FeedbackUI.tsx
 !/outputs/校园逃生游戏/src/GadgetHUD.tsx
+!/outputs/校园逃生游戏/src/GameDialog.tsx
 !/outputs/校园逃生游戏/src/MainMenu.tsx
 !/outputs/校园逃生游戏/src/MenuPages.tsx
 !/outputs/校园逃生游戏/src/ModuleBoundary.tsx
+!/outputs/校园逃生游戏/src/NativeDownloads.tsx
 !/outputs/校园逃生游戏/src/NearbyInteractionUI.tsx
 !/outputs/校园逃生游戏/src/OperationsUI.tsx
 !/outputs/校园逃生游戏/src/PhotoUI.tsx
@@ -681,6 +699,7 @@
 !/outputs/校园逃生游戏/src/StoryUI.tsx
 !/outputs/校园逃生游戏/src/TouchControls.tsx
 !/outputs/校园逃生游戏/src/WeaponLoadout.tsx
+!/outputs/校园逃生游戏/src/WeatherChoice.tsx
 !/outputs/校园逃生游戏/src/account-entry.tsx
 !/outputs/校园逃生游戏/src/account-page.css
 !/outputs/校园逃生游戏/src/achievement-icons.ts
@@ -752,8 +771,10 @@
 !/outputs/校园逃生游戏/src/gadget-scene.ts
 !/outputs/校园逃生游戏/src/gadget-touch-gesture.ts
 !/outputs/校园逃生游戏/src/game-config-store.ts
+!/outputs/校园逃生游戏/src/game-dialog.css
 !/outputs/校园逃生游戏/src/game-map.ts
 !/outputs/校园逃生游戏/src/game-operations.ts
+!/outputs/校园逃生游戏/src/game-presence.ts
 !/outputs/校园逃生游戏/src/handbrake.ts
 !/outputs/校园逃生游戏/src/impact-surfaces.ts
 !/outputs/校园逃生游戏/src/input-layout.ts
@@ -810,8 +831,10 @@
 !/outputs/校园逃生游戏/src/multiplayer/shared/tasks.ts
 !/outputs/校园逃生游戏/src/multiplayer/shared/visibility.ts
 !/outputs/校园逃生游戏/src/multiplayer/shared/wire.ts
+!/outputs/校园逃生游戏/src/multiplayer/snapshot-wait.ts
 !/outputs/校园逃生游戏/src/multiplayer/task-map.ts
 !/outputs/校园逃生游戏/src/multiplayer/visual-world.ts
+!/outputs/校园逃生游戏/src/native-downloads.css
 !/outputs/校园逃生游戏/src/navigation/avoidance.ts
 !/outputs/校园逃生游戏/src/navigation/crowd.ts
 !/outputs/校园逃生游戏/src/navigation/stair-flow.ts
@@ -900,6 +923,8 @@
 !/outputs/校园逃生游戏/src/weapon-pickups.ts
 !/outputs/校园逃生游戏/src/weapon-resources.ts
 !/outputs/校园逃生游戏/src/weapons.ts
+!/outputs/校园逃生游戏/src/weather-choice.css
+!/outputs/校园逃生游戏/src/weather-scene.ts
 !/outputs/校园逃生游戏/src/world.ts
 !/outputs/校园逃生游戏/tests/album-media-v024.test.ts
 !/outputs/校园逃生游戏/tests/album-reality-effects-v024.test.ts
@@ -1015,6 +1040,7 @@
 !/outputs/校园逃生游戏/tests/photo-v092.html
 !/outputs/校园逃生游戏/tests/photography-markers.test.ts
 !/outputs/校园逃生游戏/tests/pointer-owner.test.ts
+!/outputs/校园逃生游戏/tests/presence-v093.test.ts
 !/outputs/校园逃生游戏/tests/presentation-v064.fixture.tsx
 !/outputs/校园逃生游戏/tests/preview-proxy.test.mjs
 !/outputs/校园逃生游戏/tests/qa-bridge-trace-v070.test.mjs
@@ -1054,6 +1080,10 @@
 !/outputs/校园逃生游戏/tests/ui-module-resource.test.ts
 !/outputs/校园逃生游戏/tests/ui-v092.fixture.tsx
 !/outputs/校园逃生游戏/tests/ui-v092.html
+!/outputs/校园逃生游戏/tests/ui-v093.fixture.tsx
+!/outputs/校园逃生游戏/tests/ui-v093.html
+!/outputs/校园逃生游戏/tests/ui-v094.fixture.tsx
+!/outputs/校园逃生游戏/tests/ui-v094.html
 !/outputs/校园逃生游戏/tests/v16-integration.check.ts
 !/outputs/校园逃生游戏/tests/vehicle-physics.test.ts
 !/outputs/校园逃生游戏/tests/vehicle-visual.test.ts
@@ -1063,9 +1093,10 @@
 !/outputs/校园逃生游戏/tests/weapon-pickups-v032.test.ts
 !/outputs/校园逃生游戏/tests/weapon-resources-v024.test.ts
 !/outputs/校园逃生游戏/tests/weapons.test.ts
+!/outputs/校园逃生游戏/tests/weather-scene-v094.test.ts
 !/outputs/校园逃生游戏/tests/world-ray.test.ts
 !/outputs/校园逃生游戏/tsconfig.json
-!/outputs/校园逃生游戏/vendor/qisheng-shared-0.9.2.tgz
+!/outputs/校园逃生游戏/vendor/qisheng-shared-0.9.4.tgz
 !/outputs/校园逃生游戏/vite.config.ts
 !/outputs/校园逃生游戏/vite.production.config.ts
 !/outputs/齐盛原生客户端/AGENTS.md
@@ -1073,9 +1104,11 @@
 !/outputs/齐盛原生客户端/README.md
 !/outputs/齐盛原生客户端/content/demo/map.json
 !/outputs/齐盛原生客户端/content/demo/weapons.json
+!/outputs/齐盛原生客户端/docs/ENGINE-DECISION.md
 !/outputs/齐盛原生客户端/docs/LICENSES.md
 !/outputs/齐盛原生客户端/docs/MILESTONE-M1.md
 !/outputs/齐盛原生客户端/docs/PREVIEW-0.1.0.md
+!/outputs/齐盛原生客户端/docs/UI-0.2.0.md
 !/outputs/齐盛原生客户端/docs/android-build.md
 !/outputs/齐盛原生客户端/docs/combat-presentation-0.1.0.md
 !/outputs/齐盛原生客户端/docs/network-compatibility.md
@@ -1115,13 +1148,16 @@
 !/outputs/齐盛原生客户端/scenes/pause.tscn
 !/outputs/齐盛原生客户端/scripts/audit-android-apk.py
 !/outputs/齐盛原生客户端/scripts/build-rust.mjs
+!/outputs/齐盛原生客户端/scripts/capture-windows-crash.ps1
 !/outputs/齐盛原生客户端/scripts/check-native-export.mjs
 !/outputs/齐盛原生客户端/scripts/export-android.ps1
 !/outputs/齐盛原生客户端/scripts/export-campus.mjs
 !/outputs/齐盛原生客户端/scripts/export-combat.mjs
+!/outputs/齐盛原生客户端/scripts/export-menu-audio.mjs
 !/outputs/齐盛原生客户端/scripts/export-movement-fixtures.mjs
 !/outputs/齐盛原生客户端/scripts/export-movement-rules.mjs
 !/outputs/齐盛原生客户端/scripts/export-rules.mjs
+!/outputs/齐盛原生客户端/scripts/export-weather.mjs
 !/outputs/齐盛原生客户端/scripts/export-windows.mjs
 !/outputs/齐盛原生客户端/scripts/inspect-pck.mjs
 !/outputs/齐盛原生客户端/scripts/inspect-windows-export.mjs
@@ -1139,6 +1175,7 @@
 !/outputs/齐盛原生客户端/scripts/rustc-local-wrapper.mjs
 !/outputs/齐盛原生客户端/scripts/set-android-sdk.py
 !/outputs/齐盛原生客户端/scripts/test-network-live.mjs
+!/outputs/齐盛原生客户端/scripts/test-presence.mjs
 !/outputs/齐盛原生客户端/scripts/test-rust-bridge.gd
 !/outputs/齐盛原生客户端/scripts/test-rust-bridge.gd.uid
 !/outputs/齐盛原生客户端/scripts/verify-colyseus-artifact.mjs
@@ -1149,6 +1186,8 @@
 !/outputs/齐盛原生客户端/src/combat_audio.gd.uid
 !/outputs/齐盛原生客户端/src/combat_presenter.gd
 !/outputs/齐盛原生客户端/src/combat_presenter.gd.uid
+!/outputs/齐盛原生客户端/src/generated/weather_profiles.gd
+!/outputs/齐盛原生客户端/src/generated/weather_profiles.gd.uid
 !/outputs/齐盛原生客户端/src/input_bindings.gd
 !/outputs/齐盛原生客户端/src/input_bindings.gd.uid
 !/outputs/齐盛原生客户端/src/main.gd
@@ -1157,8 +1196,12 @@
 !/outputs/齐盛原生客户端/src/map/campus_streamer.gd.uid
 !/outputs/齐盛原生客户端/src/map/local_preview_controller.gd
 !/outputs/齐盛原生客户端/src/map/local_preview_controller.gd.uid
+!/outputs/齐盛原生客户端/src/menu_audio.gd
+!/outputs/齐盛原生客户端/src/menu_audio.gd.uid
 !/outputs/齐盛原生客户端/src/native_recoil.gd
 !/outputs/齐盛原生客户端/src/native_recoil.gd.uid
+!/outputs/齐盛原生客户端/src/network/client_presence.gd
+!/outputs/齐盛原生客户端/src/network/client_presence.gd.uid
 !/outputs/齐盛原生客户端/src/network/native_session.gd
 !/outputs/齐盛原生客户端/src/network/native_session.gd.uid
 !/outputs/齐盛原生客户端/src/network/native_updates.gd
@@ -1175,12 +1218,21 @@
 !/outputs/齐盛原生客户端/src/physics/qs_rapier.gdextension.uid
 !/outputs/齐盛原生客户端/src/render_profile.gd
 !/outputs/齐盛原生客户端/src/render_profile.gd.uid
+!/outputs/齐盛原生客户端/src/runtime_diagnostics.gd
+!/outputs/齐盛原生客户端/src/runtime_diagnostics.gd.uid
 !/outputs/齐盛原生客户端/src/ui/campus_map.gd
 !/outputs/齐盛原生客户端/src/ui/campus_map.gd.uid
 !/outputs/齐盛原生客户端/src/ui/client_shell.gd
 !/outputs/齐盛原生客户端/src/ui/client_shell.gd.uid
 !/outputs/齐盛原生客户端/src/ui/combat_hud.gd
 !/outputs/齐盛原生客户端/src/ui/combat_hud.gd.uid
+!/outputs/齐盛原生客户端/src/ui/settings_panel.gd
+!/outputs/齐盛原生客户端/src/ui/settings_panel.gd.uid
+!/outputs/齐盛原生客户端/src/world_environment.gd
+!/outputs/齐盛原生客户端/src/world_environment.gd.uid
+!/outputs/齐盛原生客户端/tests/campus_cancel_lifecycle.gd
+!/outputs/齐盛原生客户端/tests/campus_load_stress.gd
+!/outputs/齐盛原生客户端/tests/material_profile_probe.gd
 !/outputs/齐盛原生客户端/tests/native_checkpoint_number_types.gd
 !/outputs/齐盛原生客户端/tests/native_combat_presentation_smoke.gd
 !/outputs/齐盛原生客户端/tests/native_crossplay_driver.gd
@@ -1193,10 +1245,14 @@
 !/outputs/齐盛原生客户端/tests/native_network_live.gd.uid
 !/outputs/齐盛原生客户端/tests/native_network_smoke.gd
 !/outputs/齐盛原生客户端/tests/native_network_smoke.gd.uid
+!/outputs/齐盛原生客户端/tests/native_presence_smoke.gd
 !/outputs/齐盛原生客户端/tests/native_production_seat.gd
 !/outputs/齐盛原生客户端/tests/native_render_profile.gd
 !/outputs/齐盛原生客户端/tests/native_secure_session.gd
+!/outputs/齐盛原生客户端/tests/native_settings_weather.gd
 !/outputs/齐盛原生客户端/tests/native_updates_contract.gd
+!/outputs/齐盛原生客户端/tests/render_capabilities_probe.gd
+!/outputs/齐盛原生客户端/tests/weather_material_lifecycle.gd
 !/outputs/齐盛原生客户端/tests/wire_optional_roster.gd
 !/outputs/齐盛原生客户端/themes/campus.tres
 !/outputs/齐盛原生客户端/themes/tactical.tres
@@ -1209,6 +1265,7 @@
 !/outputs/齐盛原生客户端/third_party_licenses/sources.json
 !/outputs/齐盛原生客户端/third_party_licenses/uthash-BSD.txt
 !/outputs/齐盛原生客户端/third_party_licenses/wslay-MIT.txt
+!/scripts/audit-public-source.mjs
 !/scripts/check-demo.mjs
 !/scripts/check-environment.mjs
 !/scripts/collect-third-party-licenses.mjs

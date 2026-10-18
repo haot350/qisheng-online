@@ -1,3 +1,4 @@
+import {GameDialog} from './GameDialog';
 import {useEffect,useRef,useState} from 'react';
 import {mapByteCache,type MapCacheStats} from './map-cache';
 import {downloadCompleteGameMap,cancelCompleteGameMap,gameMapSession} from './game-map';
@@ -32,7 +33,7 @@ export function CacheSettingsUI(){
   {stats.prefetch.pausedBy==='battle'&&!current?.complete&&<p className="map-download-description">下载将为对局让出网络，返回菜单后自动继续。</p>}
   {(operationError||stats.prefetch.error)&&!indexError&&<p className="map-download-message" role="alert">{operationError||stats.prefetch.error}</p>}
   <div className="map-download-actions"><button type="button" className="map-download-primary" disabled={clearing||view.disabled} onClick={start}>{view.action}</button><button type="button" className="map-download-secondary" disabled={clearing||loading||!stats.bytes} onClick={()=>setConfirmClear(true)}>清理缓存</button></div>
-  {confirmClear&&<div className="map-download-confirm" role="group" aria-label="确认清理地图缓存"><strong>清理本机的地图缓存？</strong><p>已下载的地图需要重新加载。照片、存档和设置不会删除。</p><div><button type="button" disabled={clearing} onClick={clear}>{clearing?'正在清理':'确认清理'}</button><button type="button" disabled={clearing} onClick={()=>setConfirmClear(false)}>取消</button></div></div>}
+  {confirmClear&&<GameDialog title="清理地图缓存？" tone="danger" confirmLabel="清理缓存" busy={clearing} busyLabel="正在清理…" onConfirm={clear} onCancel={()=>setConfirmClear(false)}><p>已下载的地图需要重新加载。照片、存档和设置不会删除。</p></GameDialog>}
   {!loading&&!indexError&&stats.available&&current&&<details className="map-download-details"><summary>存储详情</summary><dl><div><dt>当前地图</dt><dd>{current.files} / {current.totalFiles} 个文件 · {size(current.bytes)}</dd></div><div><dt>旧版及其他地图</dt><dd>{size(current.oldBytes)}</dd></div><div><dt>地图总占用</dt><dd>{size(stats.bytes)}</dd></div><div><dt>本机缓存额度</dt><dd>{size(stats.budget)}</dd></div></dl><p>下载可随时暂停，已缓存的部分会保留。浏览器可能自动清理缓存。</p></details>}
  </section>;
 }
