@@ -24,6 +24,6 @@ OpenQS 制作的校园游戏。此仓库包含客户端、校园网站、账号�
 
 上传内容由 `scripts/public-source.mjs` 白名单控制。校园模型、真人及衍生贴图、正式封面和图标、生产配置、数据库、玩家截图、日志和历史发行留在本机。不要强制添加未经审查的文件。详见 [开源边界](docs/OPEN_SOURCE.md)、[第三方许可](docs/THIRD_PARTY.md)。
 
-当前正式发行 **Preview 0.9.2**，两站与香港后端已发布。房间准备、触控道具、战斗信息、摄影快捷键、账号与反馈入口已整理；地图与竞技规则保持。原生Windows/Android独立推进，Rust运动样本、Godot桥、团竞与混战各十分钟跨端及香港正常原生席位检查已通过；独立包已生成，但正式Windows首轮启动崩溃根因未明，Windows与安卓继续内部，未开放下载。验证边界见 [HANDOFF](docs/HANDOFF.md)。游戏 https://game.tianhw.top，校园网站 https://zbqsgz.tianhw.top，公开协作仓库 https://github.com/haot350/qisheng-online。
+当前正式发行 **Preview 0.9.4**，两站与香港后端已发布。0.9.3整理游戏确认、小齐入房与实时后台，0.9.4新增晴/阴/小雨并保持地图与竞技规则。Windows原生 **Preview0.2.0实验性测试版** 已公开，提供校园探索、团竞/混战、独立战术大厅与分组设置；安卓0.2仍为内部包。原生短跨端与继承证据、已知问题及未验证设备见 [HANDOFF](docs/HANDOFF.md)。游戏 https://game.tianhw.top，校园网站 https://zbqsgz.tianhw.top，公开协作仓库 https://github.com/haot350/qisheng-online。
 
 历史建模记录、原 README 与私密运维证据保留在本机 'work/private-project-state' 及原交付目录，不属于公开仓库。

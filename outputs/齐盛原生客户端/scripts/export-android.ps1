@@ -91,7 +91,14 @@ try {
     Write-Output 'APK verified: internal signature, Android 10+, target API 35, arm64-v8a, both native extensions, 16 KiB alignment and runtime licenses.'
     New-Item -ItemType Directory -Force ([IO.Path]::GetDirectoryName($delivery)) | Out-Null
     Copy-Item -LiteralPath $apk -Destination $delivery -Force
-    $hash = (Get-FileHash -LiteralPath $delivery -Algorithm SHA256).Hash.ToLowerInvariant()
+    $hashStream = [IO.File]::OpenRead($delivery)
+    $hashAlgorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = [BitConverter]::ToString($hashAlgorithm.ComputeHash($hashStream)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $hashAlgorithm.Dispose()
+        $hashStream.Dispose()
+    }
     $receipt = @{schema=1;kind='native-package';platform='android';version='0.2.0';profile='production';stage='internal';published=$false;formalAssets=$true;file=[IO.Path]::GetFileName($delivery);bytes=(Get-Item -LiteralPath $delivery).Length;sha256=$hash;artifact=@{file=[IO.Path]::GetFileName($delivery);bytes=(Get-Item -LiteralPath $delivery).Length;sha256=$hash};sourceHash=$preflight.sourceHash;protocolVersion=$preflight.protocolVersion;mapIdentity=$preflight.mapIdentity;physics=$preflight.physics;sdk=$preflight.sdk;signatureVerified=$true;pageAlignmentKiB=16;minimumSdk=29;targetSdk=35;abi='arm64-v8a';deviceVerified=$false;signing='internal-preview';checkedAt=[DateTime]::UtcNow.ToString('o');audit=$audit}
     $receiptJson = $receipt | ConvertTo-Json -Depth 12
     $utf8 = New-Object Text.UTF8Encoding $false
