@@ -1,3 +1,4 @@
+import {nativeUpdateRoutes} from './native-updates.js';
 import Fastify,{type FastifyRequest} from 'fastify';
 import {assistantRoutes,closeAssistant} from './assistant.js';
 import type {AssistantTransport} from './assistant-upstream.js';
@@ -10,7 +11,7 @@ import {openDatabase,type RankingDatabase} from './db.js';import {AppError} from
 export const DAY=86400000;export const hash=(s:string)=>createHash('sha256').update(s).digest('hex');export const random=(n=32)=>randomBytes(n).toString('base64url');
 export interface PlayerRow{id:string;short_id:string;nickname:string;renamed:number;auto_submit:number;restricted:number;}
 export interface RunRow{id:string;player_id:string;client_id:string;credential_hash:string;created:number;expires:number;config:string;status:string;summary:string|null;flags:string|null;submitted:number|null;week:string|null;reason:string|null;acked:number;record_stats:number;publish_board:number;}
-export interface AppOptions{dbPath?:string;origins?:string[];adminPasswordHash?:string;credentialSecret?:string;serviceSecret?:string;telemetrySecret?:string;clock?:()=>number;db?:RankingDatabase;assistantConfigFile?:string;assistantTransport?:AssistantTransport;}
+export interface AppOptions{dbPath?:string;origins?:string[];adminPasswordHash?:string;credentialSecret?:string;serviceSecret?:string;telemetrySecret?:string;clock?:()=>number;db?:RankingDatabase;nativeManifestFile?:string;assistantConfigFile?:string;assistantTransport?:AssistantTransport;}
 export const body=(req:FastifyRequest)=>((req.body??{}) as Record<string,any>);export const params=(req:FastifyRequest)=>(req.params as Record<string,string>);
 export async function createApp(opts:AppOptions={}){
  const db=opts.db??openDatabase(opts.dbPath??'data/ranking.sqlite'),now=opts.clock??Date.now;
@@ -34,7 +35,7 @@ export async function createApp(opts:AppOptions={}){
  function auth(req:FastifyRequest,optional=false):PlayerRow|null{
   const identity=identityFor(req);
   if(identity.problem==='long')throw new AppError('AUTH','登录状态已失效。',401);
-  if(!identity.player){if(optional)return null;throw new AppError('AUTH',identity.problem==='missing'?'请先设置昵称或恢复身份。':'登录状态已失效，请重新恢复身份。',401);}
+  if(!identity.player){if(optional)return null;throw new AppError('AUTH',identity.problem==='missing'?'请先登录账号。':'登录状态已失效，请重新登录。',401);}
   // Renew at most once per day of normal usage, not on every read under FULL WAL.
   if(!identity.renewed&&identity.player.sessionExpires<now()+29*DAY){renewIdentity.run(now()+30*DAY,identity.tokenHash,now());identity.renewed=true;}
   return identity.player;
@@ -45,7 +46,8 @@ export async function createApp(opts:AppOptions={}){
  const audit=(action:string,target:string,detail:unknown={},actor?:string)=>db.prepare('INSERT INTO audit(created,action,target,detail,actor) VALUES (?,?,?,?,?)').run(now(),action,target,JSON.stringify(detail),actor??null);
  app.setErrorHandler((error,req,reply)=>{const e=error as Error&{statusCode?:number};if(e.statusCode===429){if(req.routeOptions.url==='/admin/assistant/test'){const retryAfterSeconds=Math.min(60,Math.max(1,Math.ceil(Number(reply.getHeader('retry-after'))||60)));return reply.header('Retry-After',String(retryAfterSeconds)).code(429).send({error:{code:'ASSISTANT_TEST_LIMIT',message:'测试过于频繁，请在'+retryAfterSeconds+'秒后再试。',retryable:true,retryAfterSeconds}});}return reply.code(429).send({error:{code:'RATE_LIMIT',message:'请求较多，请稍后再试。',retryable:true}});}if(e instanceof AppError)return reply.code(e.status).send({error:{code:e.code,message:e.message,retryable:e.retryable}});if(e.statusCode&&e.statusCode<500)return reply.code(e.statusCode).send({error:{code:'REQUEST',message:'请求格式无效。',retryable:false}});console.error(JSON.stringify({time:now(),level:'error',route:req.routeOptions.url,code:'INTERNAL',name:e.name}));return reply.code(500).send({error:{code:'INTERNAL',message:'服务暂时不可用，请稍后重试。',retryable:true}});});
  app.addHook('onSend',async(req,reply,payload)=>{reply.header('X-Content-Type-Options','nosniff').header('Referrer-Policy','no-referrer').header('Cache-Control','no-store');if(req.url.startsWith('/admin'))reply.header('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");return payload;});
- app.get('/health',()=>({ok:true,version:'0.9.1',ruleVersion:RANKING_RULE_VERSION,ruleVersions:{escape:rankingRuleVersion('escape'),dafei:rankingRuleVersion('dafei')},sqliteVersion:(db.prepare('select sqlite_version() v').get() as {v:string}).v}));
+ app.get('/health',()=>({ok:true,version:'0.9.2',ruleVersion:RANKING_RULE_VERSION,ruleVersions:{escape:rankingRuleVersion('escape'),dafei:rankingRuleVersion('dafei')},sqliteVersion:(db.prepare('select sqlite_version() v').get() as {v:string}).v}));
+ nativeUpdateRoutes(app,opts.nativeManifestFile);
  const ctx={app,db,now,auth,requireAccount,safe,session,loadRun,submission,audit,opts,credential};operationsRoutes(ctx);identityRoutes(ctx);accountRoutes(ctx);accountProfileRoutes(ctx);achievementRoutes(ctx);runRoutes(ctx);boardRoutes(ctx);feedbackRoutes(ctx);multiplayerRoutes(ctx);telemetryRoutes(ctx);assistantRoutes(ctx);adminRoutes(ctx);
  app.addHook('onClose',async()=>{await closeAssistant(ctx);if(!opts.db)db.close();});return {app,db};
 }

@@ -19,6 +19,12 @@ var complete := false
 var collision_wanted: Dictionary = {}
 var collision_resident: Dictionary = {}
 var failed: Dictionary = {}
+var formal_collision := false
+var combat_scope := false
+var collision_used: Dictionary = {}
+var suspended := false
+var last_progress_loaded := -1
+var last_progress_required := -1
 
 func _ready() -> void:
 	var file := "res://content/production/map.json"
@@ -40,6 +46,7 @@ func spawn_position() -> Vector3:
 	return Vector3(float(values[0]), float(values[1]), float(values[2]))
 
 func prepare_at(position: Vector3, force := false) -> void:
+	if suspended: return
 	latest_view = position
 	if profile == "demo":
 		return
@@ -53,7 +60,7 @@ func prepare_at(position: Vector3, force := false) -> void:
 		var center = _vector(row.get("center", [0, 0, 0]))
 		var radius: float = float(row.get("radius", 20))
 		var distance = Vector2(center.x-position.x, center.z-position.z).length()
-		if distance <= prepare_radius + radius:
+		if distance <= prepare_radius + radius or combat_scope and row.get("combatOccluder",false):
 			candidates.append({"row":row, "distance":distance})
 	candidates.sort_custom(func(a, b): return a.distance < b.distance)
 	for candidate in candidates:
@@ -62,12 +69,13 @@ func prepare_at(position: Vector3, force := false) -> void:
 		wanted[id] = row
 		if resident.has(id):
 			resident[id].used = use_clock
-	for tile in manifest.get("collisionTiles", []):
+	for tile in ([] if formal_collision else manifest.get("collisionTiles", [])):
 		var bounds: Dictionary = tile.bounds
 		var center = (_vector(bounds.min)+_vector(bounds.max))*0.5
 		var radius = Vector2(float(bounds.max[0])-float(bounds.min[0]),float(bounds.max[2])-float(bounds.min[2])).length()*0.5
 		if Vector2(center.x-position.x,center.z-position.z).length() <= 52+radius:
 			collision_wanted[str(tile.path)] = tile
+			collision_used[str(tile.path)] = use_clock
 	var all_ready := true
 	for id in wanted:
 		if not resident.has(id):
@@ -79,6 +87,7 @@ func prepare_at(position: Vector3, force := false) -> void:
 	_pump()
 
 func _process(delta: float) -> void:
+	if suspended: return
 	use_clock += minf(delta, 0.2)
 	for id in pending.keys():
 		var progress: Array = []
@@ -93,7 +102,7 @@ func _process(delta: float) -> void:
 				continue
 			var root: Node3D = packed.instantiate()
 			add_child(root)
-			resident[id] = {"root":root,"used":use_clock}
+			resident[id] = {"root":root,"used":use_clock,"row":wanted[id]}
 		elif status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
 			pending.erase(id)
 			failed[id] = true
@@ -111,7 +120,10 @@ func _process(delta: float) -> void:
 	for id in collision_wanted:
 		if not collision_resident.has(id):
 			collision_ready = false
-	progress_changed.emit(loaded, wanted.size())
+	if loaded != last_progress_loaded or wanted.size() != last_progress_required:
+		last_progress_loaded = loaded
+		last_progress_required = wanted.size()
+		progress_changed.emit(loaded, wanted.size())
 	if not complete and loaded == wanted.size() and collision_ready and not wanted.is_empty():
 		complete = true
 		region_ready.emit()
@@ -129,7 +141,7 @@ func _pump() -> void:
 			if packed is PackedScene:
 				var root: Node3D = packed.instantiate()
 				add_child(root)
-				resident[id] = {"root":root,"used":use_clock}
+				resident[id] = {"root":root,"used":use_clock,"row":wanted[id]}
 			else:
 				failed[id] = true
 				region_failed.emit("校园文件未能打开。")
@@ -178,6 +190,55 @@ func _evict() -> void:
 			break
 		resident[id].root.queue_free()
 		resident.erase(id)
+	# Preview collision is a separate, bounded lease. Competitive prediction has
+	# one Rust world and never creates these Godot physics partitions.
+	for id in collision_resident.keys():
+		if not collision_wanted.has(id) and use_clock-float(collision_used.get(id,0.0)) > 2.0:
+			collision_resident[id].queue_free()
+			collision_resident.erase(id)
+			collision_used.erase(id)
+
+func release_all() -> void:
+	suspended = true
+	wanted.clear()
+	collision_wanted.clear()
+	for entry in resident.values(): entry.root.queue_free()
+	for collider in collision_resident.values(): collider.queue_free()
+	resident.clear()
+	collision_resident.clear()
+	collision_used.clear()
+	failed.clear()
+	complete = false
+	# Godot threaded IO cannot be canceled. The node may be released while the
+	# loader finishes; no late result is permitted to instantiate a scene.
+	pending.clear()
+
+func update_camera_visibility(camera: Camera3D) -> void:
+	if not is_instance_valid(camera): return
+	var size := camera.get_viewport().get_visible_rect().size
+	var aspect := size.x/maxf(1.0,size.y)
+	var half_v := deg_to_rad(camera.fov)*0.5
+	if camera.keep_aspect == Camera3D.KEEP_WIDTH: half_v = atan(tan(half_v)/aspect)
+	var half_h := atan(tan(half_v)*aspect)
+	var cos_h := cos(half_h)
+	var sin_h := sin(half_h)
+	var cos_v := cos(half_v)
+	var sin_v := sin(half_v)
+	var inverse := camera.global_transform.affine_inverse()
+	for entry in resident.values():
+		var row: Dictionary = entry.get("row",{})
+		if row.is_empty(): continue
+		var bounds: Dictionary = row.get("bounds",{})
+		if not bounds.has("min"): continue
+		var lower := _vector(bounds.min)
+		var upper := _vector(bounds.max)
+		var point: Vector3 = inverse*((lower+upper)*0.5)
+		# Bounding spheres conservatively enclose complete source chunks. Extra
+		# space preserves nearby shadow casters. Required assets remain ready;
+		# this only skips draw traversal outside the actual camera frustum.
+		var radius := (upper-lower).length()*0.5+24.0
+		var shown := absf(point.x)*cos_h+point.z*sin_h <= radius and absf(point.y)*cos_v+point.z*sin_v <= radius and point.z <= radius-camera.near and -point.z <= camera.far+radius
+		if entry.root.visible != shown: entry.root.visible = shown
 
 func _vector(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), float(value[2]))

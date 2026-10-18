@@ -965,3 +965,5 @@ td button {
 .assistant-usage small,.assistant-usage strong{display:block;overflow-wrap:anywhere}
 .assistant-usage strong{margin-top:8px;font-variant-numeric:tabular-nums;font-size:clamp(16px,1.8vw,24px)}
 @media(max-width:800px){.assistant-admin-grid{grid-template-columns:1fr}.assistant-usage{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.sidebar-group{padding:10px 0;border-bottom:1px solid var(--line,#ddd7cc)}.sidebar-group h2{font-size:11px;letter-spacing:.12em;color:var(--muted,#777);font-weight:600;margin:0 12px 6px}.metric-card.needs-attention{border-color:#a74631;background:#fff7f0}.metric-card.needs-attention strong{color:#963b28}

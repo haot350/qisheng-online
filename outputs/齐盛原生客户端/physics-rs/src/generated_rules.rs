@@ -1,0 +1,20 @@
+// Generated from canonical web movement rules. Run scripts/export-movement-rules.mjs.
+pub const WALK: f64 = 3.4;
+pub const SPRINT: f64 = 6.0;
+pub const STAMINA: f64 = 100.0;
+pub const SPRINT_SECONDS: f64 = 8.0;
+pub const RECOVERY_DELAY: f64 = 1.0;
+pub const RECOVERY_SECONDS: f64 = 5.0;
+pub const SLIDE_COST: f64 = 20.0;
+pub const SLIDE_SECONDS: f64 = 0.7;
+pub const SLIDE_COOLDOWN: f64 = 2.0;
+pub const SLIDE_MIN_SPEED: f64 = 4.5;
+pub const STANDING: f64 = 1.75;
+pub const CROUCHING: f64 = 1.15;
+pub const RADIUS: f64 = 0.3;
+pub const SKIN: f64 = 0.015;
+pub const STEP: f64 = 0.42;
+pub const STEP_DEPTH: f64 = 0.2;
+pub const SNAP: f64 = 0.3;
+pub const GRAVITY: f64 = 14.0;
+pub const JUMP: f64 = 4.1;

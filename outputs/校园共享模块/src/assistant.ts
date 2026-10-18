@@ -1,7 +1,7 @@
 /** Public assistant contracts. Provider addresses, models and secrets never enter public status. */
 export interface AssistantHistoryTurn { question: string; answer: string; }
 export interface AssistantFeedbackDraft { title: string; message: string; category: 'bug'|'suggestion'|'content'|'other'; }
-export interface AssistantStatus { name: '小齐'; enabled: boolean; available: boolean; revision: number; limits: {guestDaily: number; accountDaily: number; questionChars: number; historyTurns: number}; }
+export interface AssistantStatus { name: '小齐'; enabled: boolean; available: boolean; revision: number; noticeRevision: number; limits: {guestDaily: number; accountDaily: number; questionChars: number; historyTurns: number}; }
 export type AssistantPage='home'|'modes'|'settings'|'help'|'about'|'ranking'|'feedback'|'account';
 export type AssistantMode='story'|'escape'|'drive'|'roam';
 export type AssistantDifficulty='easy'|'normal'|'hard';

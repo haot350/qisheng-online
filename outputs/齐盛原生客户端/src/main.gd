@@ -2,434 +2,542 @@ extends Node3D
 
 const Campus = preload("res://src/map/campus_streamer.gd")
 const Controller = preload("res://src/map/local_preview_controller.gd")
+const Shell = preload("res://src/ui/client_shell.gd")
+const Hud = preload("res://src/ui/combat_hud.gd")
+const Session = preload("res://src/network/native_session.gd")
+const Prediction = preload("res://src/physics/native_prediction.gd")
+const Presentation = preload("res://src/combat_presenter.gd")
+const Preferences = preload("res://src/client_settings.gd")
+const Compatibility = preload("res://src/physics/compatibility_gate.gd")
 var campus: QsCampusStreamer
 var player: QsLocalPreviewController
-var menu: Control
-var body: VBoxContainer
-var status_label: Label
-var heading: Label
-var account_label: Label
-var overlay: Control
-var session: Node
+var shell: QsClientShell
+var hud: QsCombatHud
+var session: QsNativeSession
+var prediction: QsNativePrediction
+var presentation: QsCombatPresenter
+var preferences := Preferences.new()
+var metadata: Dictionary = {}
 var scene_camera: Camera3D
-var mobile := false
-var preview := false
-var page_name := "start"
-var reduced_motion := false
-var quality := "自动"
-var remote_nodes: Dictionary = {}
+var world_owner: Node3D
+var sun: DirectionalLight3D
 var loading_cover: ColorRect
 var loading_label: Label
+var mobile := false
+var preview := false
 var network_preview := false
-var quality_index := 0
+var _booting := false
+var _session_epoch := 0
+var _paused := false
+var _controls: Dictionary = {}
+var _hud_left := 0.0
+var _loading_ready := false
+var _confirmation: ConfirmationDialog
+var _confirmation_action := ""
+var updater: Node
+var _offline_actions: Array[String] = []
 
 func _ready() -> void:
 	mobile = OS.get_name() == "Android" or "--mobile-ui" in OS.get_cmdline_user_args()
 	get_tree().auto_accept_quit = false
+	get_viewport().disable_3d = true
+	var file := "res://content/production/map.json"
+	if not FileAccess.file_exists(file): file = "res://content/demo/map.json"
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(file))
+	if parsed is Dictionary: metadata = parsed
+	preferences.load_settings()
+	preferences.apply(get_viewport(),mobile)
 	_apply_ui_scale()
 	get_window().size_changed.connect(_apply_ui_scale)
-	_build_environment()
-	campus = Campus.new()
-	add_child(campus)
-	player = Controller.new()
-	add_child(player)
-	player.position = campus.spawn_position() + Vector3(0, 0.1, 0)
-	player.yaw = float(campus.manifest.get("spawnYaw", 0))
-	player.rotation.y = player.yaw
-	player.paused.connect(_pause_preview)
-	player.controls_sampled.connect(_native_controls)
-	player.action_requested.connect(func(action):
-		if network_preview and session: session.pulse_action(action)
+	var canvas := CanvasLayer.new()
+	add_child(canvas)
+	hud = Hud.new()
+	canvas.add_child(hud)
+	hud.hide()
+	hud.menu_requested.connect(_pause_preview)
+	hud.action_requested.connect(_input_action)
+	hud.spectate_requested.connect(_cycle_spectate)
+	hud.held_changed.connect(func(action,held):
+		if player: player.touch_buttons[action] = held
 	)
-	if "--audit-export" not in OS.get_cmdline_user_args():
-		campus.prepare_at(player.position, true)
-	_build_ui()
-	var script = load("res://src/network/native_session.gd")
-	if script:
-		session = script.new()
-		add_child(session)
-		var api := OS.get_environment("QS_NATIVE_API")
-		var realtime := OS.get_environment("QS_NATIVE_REALTIME")
-		session.configure(api if not api.is_empty() else "http://127.0.0.1:2568", realtime if not realtime.is_empty() else "http://127.0.0.1:2567", campus.manifest.get("mapIdentity", {}))
-		session.status_changed.connect(_network_status)
-		session.snapshot_received.connect(_network_snapshot)
-	_show_page("start")
-	var args = OS.get_cmdline_user_args()
-	if "--preview" in args:
-		_start_preview()
-	if "--smoke" in args:
-		_smoke()
-	if "--capture" in args:
-		_capture()
+	shell = Shell.new()
+	canvas.add_child(shell)
+	shell.settings = preferences.values
+	shell.reduced_motion = bool(preferences.values.reducedMotion)
+	shell.action_requested.connect(_menu_action)
+	_build_loading(canvas)
+	session = Session.new()
+	session.process_physics_priority = 10
+	add_child(session)
+	var api := OS.get_environment("QS_NATIVE_API")
+	var realtime := OS.get_environment("QS_NATIVE_REALTIME")
+	# Only the approved native-preview export with the formal map defaults online.
+	var official_preview: bool = Compatibility.VERIFIED_PREDICTION and OS.has_feature("native-preview") and metadata.get("profile","demo") == "production"
+	if api.is_empty(): api = "https://game.tianhw.top/api" if official_preview else "http://127.0.0.1:2568"
+	if realtime.is_empty(): realtime = "https://game.tianhw.top/realtime" if official_preview else "http://127.0.0.1:2567"
+	session.configure(api,realtime,metadata.get("mapIdentity",{}))
+	session.status_changed.connect(_network_status)
+	session.snapshot_received.connect(_network_snapshot)
+	session.input_sampled.connect(_predict_input)
+	session.game_event.connect(_game_event)
+	session.account_changed.connect(func(value):
+		shell.account = value
+		if shell.page == "account": shell.show_page("account")
+	)
+	session.session_ended.connect(func():
+		if network_preview: _return_home()
+	)
+	session.restore_login()
+	updater = preload("res://src/network/native_updates.gd").new()
+	add_child(updater)
+	updater.status_changed.connect(func(message): shell.set_status(message))
+	updater.update_available.connect(func(entry):
+		_confirmation_action = "update"
+		_confirmation.title = "下载新版本？"
+		_confirmation.dialog_text = "Preview %s · %.1f MB\n下载完成后由你确认安装。" % [entry.get("version",""),float(entry.get("bytes",0))/1000000.0]
+		_confirmation.ok_button_text = "下载"
+		_confirmation.popup_centered(Vector2i(440,200))
+	)
+	var args := OS.get_cmdline_user_args()
+	if "--preview" in args: _start_preview()
+	if "--smoke" in args: _smoke()
+	if "--capture-ui" in args: _capture_ui()
+	if "--capture" in args: _capture()
+	if "--qa-crossplay" in args and FileAccess.file_exists("res://tests/native_crossplay_driver.gd"):
+		var driver = load("res://tests/native_crossplay_driver.gd").new()
+		add_child(driver)
+		driver.run(self)
 	if "--audit-export" in args:
-		print(JSON.stringify({"profile":campus.profile,"formalMap":FileAccess.file_exists("res://content/production/map.json"),"demoMap":FileAccess.file_exists("res://content/demo/map.json"),"sdkInstalled":ClassDB.class_exists("_ColyseusClient"),"productionNetworkAllowed":false}))
+		print(JSON.stringify({"profile":metadata.get("profile","demo"),"formalMap":FileAccess.file_exists("res://content/production/map.json"),"demoMap":FileAccess.file_exists("res://content/demo/map.json"),"sdkInstalled":ClassDB.class_exists("_ColyseusClient"),"physicsInstalled":ClassDB.class_exists("QsRapierWorld"),"productionNetworkAllowed":Compatibility.allows_endpoint("https://game.tianhw.top/realtime"),"menuCreatesWorld":false}))
 		get_tree().quit()
 
-func _build_environment() -> void:
-	var environment := WorldEnvironment.new()
-	var value := Environment.new()
-	value.background_mode = Environment.BG_COLOR
-	value.background_color = Color("a8bec9")
-	value.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	value.ambient_light_color = Color("dbe9ef")
-	value.ambient_light_energy = 0.28
-	value.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.environment = value
-	add_child(environment)
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-48, -35, 0)
-	light.light_color = Color("ffefd6")
-	light.light_energy = 0.8
-	light.shadow_enabled = true
-	add_child(light)
-	scene_camera = Camera3D.new()
-	scene_camera.position = Vector3(1, 5, -3)
-	scene_camera.rotation_degrees = Vector3(-12, 175, 0)
-	scene_camera.far = 270
-	add_child(scene_camera)
-	scene_camera.look_at(Vector3(0, 2, -45))
-	scene_camera.make_current()
-
-func _build_ui() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	menu = Control.new()
-	menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(menu)
-	var theme := Theme.new()
-	var font := SystemFont.new()
-	font.font_names = PackedStringArray(["Noto Sans CJK SC", "Microsoft YaHei", "sans-serif"])
-	theme.default_font = font
-	theme.default_font_size = 18
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color("202e36")
-	normal.border_color = Color("4b5a60")
-	normal.set_border_width_all(1)
-	normal.set_corner_radius_all(6)
-	normal.content_margin_left = 18
-	normal.content_margin_right = 18
-	normal.content_margin_top = 12
-	normal.content_margin_bottom = 12
-	var hover = normal.duplicate()
-	hover.bg_color = Color("35434a")
-	hover.border_color = Color("c7b18e")
-	var pressed = normal.duplicate()
-	pressed.bg_color = Color("965442")
-	theme.set_stylebox("normal", "Button", normal)
-	theme.set_stylebox("hover", "Button", hover)
-	theme.set_stylebox("pressed", "Button", pressed)
-	theme.set_color("font_color", "Button", Color("efece2"))
-	theme.set_color("font_color", "Label", Color("efece2"))
-	menu.theme = theme
-	var shade := ColorRect.new()
-	shade.color = Color(0.045, 0.065, 0.075, 0.92)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	menu.add_child(shade)
-	var margin := MarginContainer.new()
-	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_"+side, 14 if mobile else 40)
-	menu.add_child(margin)
-	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", 18)
-	margin.add_child(layout)
-	var top := HBoxContainer.new()
-	layout.add_child(top)
-	var title := Label.new()
-	title.text = "齐盛Online"
-	title.add_theme_font_size_override("font_size", 32 if mobile else 40)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(title)
-	account_label = Label.new()
-	account_label.text = "OpenQS · 原生技术预览"
-	account_label.add_theme_font_size_override("font_size", 14)
-	top.add_child(account_label)
-	account_label.visible = not mobile or get_viewport().get_visible_rect().size.x >= 700
-	var navigation := GridContainer.new()
-	navigation.columns = 3 if mobile and get_viewport().get_visible_rect().size.x < 600 else 5
-	navigation.add_theme_constant_override("separation", 8)
-	layout.add_child(navigation)
-	for row in [["start","开始"],["network","联机"],["account","账号"],["settings","设置"],["about","关于"]]:
-		var button := Button.new()
-		button.text = row[1]
-		button.custom_minimum_size = Vector2(70, 52)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var id: String = row[0]
-		button.pressed.connect(func(): _show_page(id))
-		navigation.add_child(button)
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	layout.add_child(scroll)
-	body = VBoxContainer.new()
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", 18)
-	scroll.add_child(body)
-	status_label = Label.new()
-	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	status_label.add_theme_font_size_override("font_size", 14)
-	status_label.modulate = Color("b3c2c6")
-	layout.add_child(status_label)
-	var copyright := Label.new()
-	copyright.text = "© 2026 OpenQS · 齐盛Online"
-	copyright.add_theme_font_size_override("font_size", 12)
-	copyright.modulate = Color("829499")
-	layout.add_child(copyright)
-	overlay = Control.new()
-	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(overlay)
-	var pause := Button.new()
-	pause.text = "菜单"
-	pause.position = Vector2(18, 18)
-	pause.custom_minimum_size = Vector2(76, 48)
-	pause.pressed.connect(_pause_preview)
-	overlay.add_child(pause)
-	var guide := Label.new()
-	guide.text = "左侧移动 · 右侧观察" if mobile else "WASD 移动 · 鼠标观察 · 空格跳跃 · Esc 菜单"
-	guide.position = Vector2(108, 29)
-	guide.add_theme_font_size_override("font_size", 14)
-	overlay.add_child(guide)
-	overlay.hide()
+func _build_loading(canvas: CanvasLayer) -> void:
 	loading_cover = ColorRect.new()
-	loading_cover.color = Color("10171c")
+	loading_cover.color = Color("111a1e")
 	loading_cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(loading_cover)
+	canvas.add_child(loading_cover)
 	loading_label = Label.new()
 	loading_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	loading_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	loading_label.text = "正在准备校园…"
+	loading_label.theme = preload("res://themes/tactical.tres")
 	loading_cover.add_child(loading_label)
 	loading_cover.hide()
+	_confirmation = ConfirmationDialog.new()
+	_confirmation.title = "离开当前对局？"
+	_confirmation.dialog_text = "本局仍会继续。离开后将释放席位。"
+	_confirmation.ok_button_text = "确认离开"
+	_confirmation.cancel_button_text = "继续留在这里"
+	_confirmation.confirmed.connect(func():
+		if _confirmation_action == "quit": get_tree().quit()
+		elif _confirmation_action == "update": updater.download()
+		else: _return_home()
+	)
+	canvas.add_child(_confirmation)
 
-func _show_page(id: String) -> void:
-	page_name = id
-	for child in body.get_children():
-		child.queue_free()
-		body.remove_child(child)
-	heading = _label({"start":"新的旅程，从这里出发。","network":"与同伴一起行动","account":"你的校园档案","settings":"按你的方式游玩","about":"原生技术预览"}.get(id,"齐盛Online"), 28)
-	body.add_child(heading)
-	if id == "start":
-		body.add_child(_label("当前提供原生地图预览。联机兼容仍在验证，正式竞技继续使用网页版。"))
-		body.add_child(_button("继续地图预览" if preview else "进入校园", _start_preview, true))
-		body.add_child(_label("完整校园已内置，无需重复下载。" if campus.profile == "production" else "公开演示使用原创场景。完整校园素材单独提供。", 16))
-	elif id == "network":
-		body.add_child(_label("原生联机目前仅连接本机隔离环境。物理一致性确认后再开放正式对局。"))
-		var code := LineEdit.new()
-		code.placeholder_text = "输入房间码"
-		code.custom_minimum_size.y = 52
-		body.add_child(code)
-		body.add_child(_button("加入房间", func():
-			if session: session.join_room(code.text.strip_edges())
-		))
-		body.add_child(_button("创建团队对战房间", func():
-			if session: session.create_room({"mode":"pvp","variant":"tdm","maxPlayers":2,"private":true})
-		))
-		body.add_child(_button("我已准备", func():
-			if session: session.set_ready(true)
-		))
-		body.add_child(_button("开始本机测试对局", func():
-			if session: session.start_match()
-		))
-	elif id == "account":
-		body.add_child(_label("使用同一个账号登录。本技术预览不会保存密码或长期登录状态。"))
-		var username := LineEdit.new()
-		username.placeholder_text = "用户名"
-		username.custom_minimum_size.y = 52
-		body.add_child(username)
-		var password := LineEdit.new()
-		password.placeholder_text = "密码"
-		password.secret = true
-		password.custom_minimum_size.y = 52
-		body.add_child(password)
-		body.add_child(_button("登录", func():
-			if session: session.login(username.text, password.text)
-			password.clear()
-		, true))
-		body.add_child(_button("退出账号", func():
-			if session: session.logout()
-		))
-	elif id == "settings":
-		body.add_child(_label("画质", 20))
-		var options := OptionButton.new()
-		for option in ["自动", "流畅", "高清", "超清"]:
-			options.add_item(option)
-		options.select(quality_index)
-		options.custom_minimum_size.y = 52
-		options.item_selected.connect(func(index): _set_quality(index))
-		body.add_child(options)
-		var motion := CheckButton.new()
-		motion.text = "减少界面动态效果"
-		motion.button_pressed = reduced_motion
-		motion.custom_minimum_size.y = 52
-		motion.toggled.connect(func(value): reduced_motion = value)
-		body.add_child(motion)
-		if not mobile:
-			body.add_child(_button("切换全屏", func(): DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)))
-	else:
-		body.add_child(_label("OpenQS 制作\n\n本预览以独立原生引擎呈现校园，包含平台菜单、分块资源和离线地图预览。竞技物理、预测、正式联机及其余玩法尚未完成兼容验收。\n\n正式校园、人物及音乐不随公开源码分发。第三方软件遵循各自许可。"))
-	if preview:
-		body.add_child(_button("返回校园", _start_preview, true))
-	if not reduced_motion:
-		body.modulate.a = 0
-		create_tween().tween_property(body, "modulate:a", 1.0, 0.18)
-
-func _label(text: String, size := 18) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", size)
-	return label
-
-func _button(text: String, callback: Callable, primary := false) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size.y = 56
-	button.pressed.connect(callback)
-	if primary:
-		button.modulate = Color("f0cc9e")
-	return button
+func _ensure_world(competitive: bool) -> void:
+	if world_owner: return
+	world_owner = Node3D.new()
+	add_child(world_owner)
+	var environment := WorldEnvironment.new()
+	var settings := Environment.new()
+	settings.background_mode = Environment.BG_COLOR
+	settings.background_color = Color("bfd1d8")
+	settings.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	settings.ambient_light_color = Color("dbe9ef")
+	settings.ambient_light_energy = 0.65
+	settings.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.environment = settings
+	world_owner.add_child(environment)
+	sun = DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-48,-35,0)
+	sun.light_color = Color("ffefd6")
+	sun.light_energy = 0.95
+	sun.shadow_enabled = bool(preferences.render_profile.profile().shadows)
+	world_owner.add_child(sun)
+	campus = Campus.new()
+	campus.formal_collision = competitive
+	world_owner.add_child(campus)
+	player = Controller.new()
+	player.authoritative_motion = competitive
+	player.sensitivity = 0.0024*float(preferences.values.sensitivity)
+	player.keybindings = preferences.values.bindings
+	world_owner.add_child(player)
+	player.position = campus.spawn_position()+Vector3(0,0.1,0)
+	player.yaw = float(metadata.get("spawnYaw",0))
+	player.rotation.y = player.yaw
+	player.paused.connect(_pause_preview)
+	player.controls_sampled.connect(_native_controls)
+	player.action_requested.connect(_input_action)
+	player.eye.make_current()
+	scene_camera = player.eye
 
 func _start_preview() -> void:
+	if _booting: return
+	var use_rust: bool = metadata.get("profile","demo") == "production" and ClassDB.class_exists("QsRapierWorld")
+	_ensure_world(use_rust)
+	get_viewport().disable_3d = false
+	if use_rust and not prediction:
+		prediction = Prediction.new()
+		var own := {"position":player.position,"velocity":Vector3.ZERO,"health":100,"stamina":100,"grounded":false,"crouched":false,"sprinting":false,"sliding":false,"generation":0,"movementState":{}}
+		var collision := "res://content/production/"+str(metadata.get("collisionUrl","collision.bin")).get_file()
+		if not prediction.initialize(FileAccess.get_file_as_bytes(collision),"local-roam",own,"none",float(metadata.get("lowestOpenElevation",-4))):
+			_fail_boot("校园移动资料未能打开，请更新客户端。")
+			return
 	preview = true
-	player.authoritative_motion = network_preview
-	menu.hide()
-	overlay.show()
-	player.eye.make_current()
+	network_preview = false
+	_paused = false
+	shell.data["inSession"] = true
+	shell.hide()
+	hud.show()
+	hud.update_snapshot({"self":{},"variant":"tdm"},true)
 	player.activate(true)
-	campus.prepare_at(player.position, true)
+	campus.prepare_at(player.position,true)
+
+func _boot_online(own: Dictionary) -> void:
+	if _booting or network_preview: return
+	_booting = true
+	_session_epoch += 1
+	var epoch := _session_epoch
+	_ensure_world(true)
+	campus.combat_scope = true
+	get_viewport().disable_3d = false
+	network_preview = true
+	_paused = false
+	var entering: bool = session.snapshot.get("phase","lobby") != "lobby"
+	shell.data["inSession"] = entering
+	if entering:
+		shell.hide()
+		loading_cover.show()
+	loading_label.text = "正在准备对局…"
+	player.position = Prediction.vector(own.get("position",[0,0,0]))
+	player.yaw = float(own.get("yaw",0))
+	player.pitch = float(own.get("pitch",0))
+	player.rotation.y = player.yaw
+	player.eye.rotation.x = player.pitch
+	prediction = Prediction.new()
+	var collision_path: String = metadata.get("collisionUrl","/map/collision.bin")
+	collision_path = "res://content/production/"+collision_path.get_file()
+	if not prediction.initialize(FileAccess.get_file_as_bytes(collision_path),session.player_id,own,str(own.get("team","none")),float(metadata.get("lowestOpenElevation",-4))):
+		_fail_boot("校园移动资料未能打开，请更新客户端。")
+		return
+	presentation = Presentation.new()
+	world_owner.add_child(presentation)
+	presentation.feedback_received.connect(hud.show_notice)
+	presentation.preparation_progress.connect(func(done,total): loading_label.text = "正在准备装备  %d / %d" % [done,total])
+	var prepared := await presentation.prepare(player.eye,session.player_id)
+	if epoch != _session_epoch: return
+	if not prepared:
+		_fail_boot("装备未能打开，请重新进入。")
+		return
+	campus.prepare_at(player.position,true)
+	while not campus.complete:
+		if epoch != _session_epoch: return
+		loading_label.text = "正在准备校园  %d / %d" % [campus.resident.size(),campus.wanted.size()]
+		await get_tree().process_frame
+	_booting = false
+	_loading_ready = true
+	loading_cover.hide()
+	hud.show()
+	if session.snapshot.get("phase","lobby") != "lobby":
+		preview = true
+		shell.hide()
+		hud.show()
+		player.activate(true)
+	else:
+		get_viewport().disable_3d = true
+		hud.hide()
+		shell.show_page("room")
+		shell.set_status("资源已就绪，可以准备。")
+	player.authoritative_motion = true
+	session.set_loading(false)
+
+func _fail_boot(message: String) -> void:
+	_booting = false
+	_return_home()
+	shell.set_status(message)
 
 func _pause_preview() -> void:
+	if not preview: return
+	_paused = true
+	get_viewport().disable_3d = true
 	player.activate(false)
-	if session: session.clear_controls()
-	menu.show()
-	overlay.hide()
+	_controls.clear()
+	hud.clear_touch()
+	session.clear_controls()
+	hud.hide()
 	loading_cover.hide()
-	_show_page("start")
+	shell.data["inSession"] = true
+	shell.data["position"] = player.position
+	shell.data["yaw"] = player.yaw
+	shell.show()
+	shell.show_page("pause")
 
-func _set_quality(index: int) -> void:
-	quality_index = index
-	quality = ["自动", "流畅", "高清", "超清"][index]
-	get_viewport().scaling_3d_scale = [0.85 if mobile else 1.0, 0.65, 1.0, 1.25][index]
-	get_viewport().msaa_3d = Viewport.MSAA_DISABLED if index == 1 else Viewport.MSAA_2X
-	status_label.text = "画质已切换为"+quality
+func _resume() -> void:
+	if not preview or not player: return
+	_paused = false
+	get_viewport().disable_3d = false
+	shell.hide()
+	hud.show()
+	player.activate(true)
 
-func _apply_ui_scale() -> void:
-	var scale_factor := clampf(float(DisplayServer.screen_get_dpi())/150.0, 1.0, 2.0) if mobile else 1.0
-	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
-	get_window().content_scale_size = Vector2i(Vector2(get_window().size)/scale_factor)
+func _return_home() -> void:
+	_session_epoch += 1
+	_booting = false
+	preview = false
+	network_preview = false
+	_loading_ready = false
+	get_viewport().disable_3d = true
+	_paused = false
+	_controls.clear()
+	_offline_actions.clear()
+	session.leave_room()
+	if player: player.activate(false)
+	if prediction: prediction.dispose()
+	prediction = null
+	if presentation: presentation.release_all()
+	presentation = null
+	if campus: campus.release_all()
+	if world_owner: world_owner.queue_free()
+	world_owner = null
+	campus = null
+	player = null
+	hud.clear_touch()
+	hud.hide()
+	loading_cover.hide()
+	shell.room = {}
+	shell.data["inSession"] = false
+	shell.show()
+	shell.show_page("lobby")
 
-func _process(_delta: float) -> void:
-	if not campus or not player:
+func _menu_action(name: String, payload: Dictionary) -> void:
+	match name:
+		"roam": _start_preview()
+		"resume": _resume()
+		"create":
+			if await session.create_room(payload): shell.show_page("room")
+		"join":
+			if await session.join_room(str(payload.get("code",""))): shell.show_page("room")
+		"join-id":
+			if await session.join_room_id(str(payload.get("roomId","")),{"mode":"pvp","variant":shell.variant}): shell.show_page("room")
+		"list-rooms": shell.show_rooms(await session.list_rooms())
+		"ready": session.set_loadout(shell.weapon,shell.avatar); session.set_ready(payload.get("ready",true))
+		"start": session.start_match()
+		"loadout": session.set_loadout(str(payload.weapon),str(payload.avatar))
+		"login": await session.login(str(payload.username),str(payload.password))
+		"logout": session.logout(); shell.show_page("account")
+		"check-updates": updater.check()
+		"setting":
+			preferences.change(str(payload.key),payload.value)
+			preferences.apply(get_viewport(),mobile)
+			shell.settings = preferences.values
+			if player:
+				player.sensitivity = 0.0024*float(preferences.values.sensitivity)
+				player.keybindings = preferences.values.bindings
+			if sun: sun.shadow_enabled = bool(preferences.render_profile.profile().shadows)
+		"confirm-home", "confirm-leave":
+			if preview or not session.snapshot.is_empty():
+				_confirmation_action = "home"
+				_confirmation.title = "离开当前对局？"
+				_confirmation.ok_button_text = "离开"
+				_confirmation.dialog_text = "离开后将释放联机席位。" if network_preview else "结束当前探索并返回主菜单？"
+				_confirmation.popup_centered(Vector2i(440,190))
+			else: _return_home()
+		"return-room": _return_home()
+		"web":
+			var path: String = payload.get("path","/")
+			if path in ["/account/","/?help=1","/?feedback=1","/credits/","/copyright/"]: OS.shell_open("https://game.tianhw.top"+path)
+
+func _input_action(action: String) -> void:
+	if network_preview and action == "jump" and session.snapshot.get("self",{}).get("life","alive") != "alive":
+		_cycle_spectate()
 		return
-	if preview and player.enabled:
-		campus.prepare_at(player.position)
-		player.motion_allowed = campus.complete
-		if not campus.complete:
-			player.velocity = Vector3.ZERO
-		if player.position.y < -10:
-			player.position = campus.spawn_position()+Vector3(0,0.2,0)
-			player.velocity = Vector3.ZERO
-		loading_cover.visible = not campus.complete
-		loading_label.text = "正在准备附近校园…\n%d / %d" % [campus.resident.size(), campus.wanted.size()]
-		if network_preview and session:
-			session.set_loading(not campus.complete)
-	if status_label and session == null:
-		status_label.text = "地图已就绪" if campus.complete else "正在准备附近校园…"
-
-func _network_status(status: String, message: String) -> void:
-	status_label.text = message if not message.is_empty() else status
-
-func _network_snapshot(snapshot: Dictionary) -> void:
-	var own: Dictionary = snapshot.get("self", {})
-	if not own.is_empty() and snapshot.get("phase") in ["playing", "paused"]:
-		var at: Array = own.get("position", [0,0,0])
-		player.position = Vector3(float(at[0]),float(at[1]),float(at[2]))
-		if not network_preview:
-			network_preview = true
-			player.yaw = float(own.get("yaw", 0))
-			player.pitch = float(own.get("pitch", 0))
-			player.rotation.y = player.yaw
-			player.eye.rotation.x = player.pitch
-			_start_preview()
-		campus.prepare_at(player.position)
-		session.set_loading(not campus.complete)
-	var seen: Dictionary = {}
-	for row in snapshot.get("players", []):
-		var id := str(row.get("id", ""))
-		if session and id == session.player_id:
-			continue
-		seen[id] = true
-		if not remote_nodes.has(id):
-			var mesh := MeshInstance3D.new()
-			var capsule := CapsuleMesh.new()
-			capsule.radius = 0.3
-			capsule.height = 1.7
-			mesh.mesh = capsule
-			var material := StandardMaterial3D.new()
-			var team := str(row.get("team", ""))
-			for member in snapshot.get("roster", []):
-				if member.get("id") == id: team = str(member.get("team", team))
-			material.albedo_color = Color("8b4941") if team == "red" else Color("507c91")
-			mesh.material_override = material
-			add_child(mesh)
-			remote_nodes[id] = mesh
-		var point: Array = row.get("position", [0,0,0])
-		remote_nodes[id].position = Vector3(float(point[0]), float(point[1])+0.85, float(point[2]))
-		remote_nodes[id].visible = row.get("life", "alive") == "alive"
-	for id in remote_nodes.keys():
-		if not seen.has(id):
-			remote_nodes[id].queue_free()
-			remote_nodes.erase(id)
+	if action == "map":
+		_pause_preview()
+		shell.show_page("map")
+	elif network_preview: session.pulse_action(action)
+	elif action in ["jump","slide"]: _offline_actions.append(action)
 
 func _native_controls(controls: Dictionary) -> void:
-	if network_preview and session:
-		# Godot local -Z motion uses negative Y; wire controls use positive forward.
-		session.submit_controls(Vector2(controls.move.x,-controls.move.y),controls.yaw,controls.pitch,controls.fire,controls.aim,controls.sprint,controls.crouch)
+	_controls = {"moveX":controls.move.x,"moveY":-controls.move.y,"yaw":controls.yaw,"pitch":controls.pitch,"fire":controls.fire,"aim":controls.aim,"sprint":controls.sprint,"crouch":controls.crouch}
+	if network_preview:
+		var yaw: float = controls.yaw+(presentation.recoil.yaw if presentation else 0.0)
+		var pitch: float = controls.pitch-(presentation.recoil.pitch if presentation else 0.0)
+		session.submit_controls(Vector2(controls.move.x,-controls.move.y),yaw,pitch,controls.fire,controls.aim,controls.sprint,controls.crouch)
+	elif prediction:
+		var command := _controls.duplicate(true)
+		command["actions"] = _offline_actions.duplicate()
+		_offline_actions.clear()
+		prediction.advance_offline(command)
+
+func _predict_input(command: Dictionary) -> void:
+	if prediction and _loading_ready and not _paused and session.snapshot.get("self",{}).get("life","alive") == "alive":
+		prediction.predict(command)
+		if prediction.pending.size() >= 85 or prediction.replay_overflow: session.request_rebase("prediction-overflow")
+
+func _network_status(status: String, message: String) -> void:
+	shell.set_status(message)
+	if status == "reconnecting" and player:
+		player.activate(false)
+		_loading_ready = false
+		loading_cover.show()
+		loading_label.text = "正在恢复原房间连接…"
+
+func _network_snapshot(snapshot: Dictionary) -> void:
+	shell.update_room(snapshot)
+	var own: Dictionary = snapshot.get("self",{})
+	if snapshot.get("phase") in ["lobby","preparing","playing","paused"] and not own.is_empty():
+		if not network_preview and not _booting: _boot_online(own)
+		if prediction:
+			prediction.remember_entities(int(snapshot.get("tick",0)),snapshot.get("players",[]),snapshot.get("roster",[]))
+			var previous_generation := prediction.generation
+			prediction.reconcile(own,int(snapshot.get("tick",0)),not _paused and not own.get("loading",false))
+			if previous_generation != int(own.get("generation",0)):
+				player.position = Prediction.vector(own.position)
+				player.yaw = float(own.get("yaw",player.yaw))
+				player.pitch = float(own.get("pitch",player.pitch))
+				player.rotation.y = player.yaw
+				player.eye.rotation.x = player.pitch
+				if presentation: presentation.recoil.reset()
+		if presentation and presentation.prepared: presentation.apply_snapshot(snapshot)
+		if _loading_ready and not _paused and player and not player.enabled and snapshot.get("phase") != "lobby":
+			preview = true
+			get_viewport().disable_3d = false
+			shell.data["inSession"] = true
+			shell.hide()
+			hud.show()
+			player.activate(true)
+		if not _loading_ready and not _booting and campus and campus.complete and presentation and presentation.prepared:
+			_loading_ready = true
+			session.set_loading(false)
+			if not _paused and snapshot.get("phase") != "lobby": player.activate(true)
+	elif snapshot.get("phase") == "ended":
+		if player: player.activate(false)
+		preview = false
+		_paused = true
+		get_viewport().disable_3d = true
+		hud.clear_touch()
+		session.clear_controls()
+		hud.hide()
+		loading_cover.hide()
+		shell.show()
+		if shell.page != "result": shell.show_page("result")
+
+func _game_event(event: Dictionary) -> void:
+	if presentation: presentation.apply_event(event)
+	if event.get("type") == "hit" and event.get("actorId") == session.player_id:
+		hud.hit_feedback()
+		if presentation and presentation.audio: presentation.audio.hit_marker()
+
+func _cycle_spectate() -> void:
+	if not network_preview or session.snapshot.get("variant","tdm") != "tdm": return
+	var own: Dictionary = session.snapshot.get("self",{})
+	if own.get("life","alive") == "alive": return
+	var candidates: Array[String] = []
+	for member in session.snapshot.get("roster",[]):
+		if member.get("id") != session.player_id and member.get("team") == own.get("team") and member.get("life") == "alive" and member.get("connected",false) and not member.get("loading",true): candidates.append(str(member.id))
+	if candidates.is_empty(): return
+	var current := str(session.snapshot.get("spectatingId",""))
+	session.request_spectate(candidates[(candidates.find(current)+1)%candidates.size()])
+
+func _spectate_pose() -> Dictionary:
+	if session.snapshot.get("variant","tdm") == "ffa": return {}
+	var id: Variant = session.snapshot.get("spectatingId")
+	if not id is String: return {}
+	for row in session.snapshot.get("players",[]):
+		if row.get("id") == id and row.get("life") == "alive": return row
+	return {}
+
+func _process(delta: float) -> void:
+	if not preview or not campus or not player: return
+	if not _paused:
+		var alive: bool = not network_preview or session.snapshot.get("self",{}).get("life","alive") == "alive"
+		player.observation_allowed = alive
+		var spectating: Dictionary = _spectate_pose() if not alive else {}
+		if not spectating.is_empty():
+			player.position = Prediction.vector(spectating.position)
+			player.yaw = float(spectating.get("yaw",player.yaw))
+			player.pitch = float(spectating.get("pitch",player.pitch))
+			player.rotation.y = player.yaw
+			player.eye.rotation.x = player.pitch
+		elif prediction and not prediction.motion.is_empty(): player.position = prediction.render_position(delta)
+		if prediction: player.eye.position.y = 1.04 if prediction.motion.get("crouched",false) else 1.62
+		campus.prepare_at(player.position)
+		campus.update_camera_visibility(player.eye)
+		player.motion_allowed = campus.complete and not _booting and alive
+		if not campus.complete:
+			player.velocity = Vector3.ZERO
+			loading_cover.show()
+			loading_label.text = "正在准备附近校园…"
+		elif not _booting: loading_cover.hide()
+		if network_preview:
+			session.set_loading(not campus.complete or _booting)
+			if presentation:
+				presentation.network_rtt_ms = session.rtt_ms
+				presentation.update_view(delta,_controls)
+				session.set_render_tick(presentation.render_tick())
+				player.rotation.y = player.yaw+presentation.recoil.yaw
+				player.eye.rotation.x = player.pitch-presentation.recoil.pitch
+		else:
+			if player.position.y < float(metadata.get("lowestOpenElevation",-4))-2:
+				player.position = campus.spawn_position()+Vector3(0,0.2,0)
+				player.velocity = Vector3.ZERO
+	_hud_left += delta
+	if _hud_left >= 0.1:
+		_hud_left = 0
+		if network_preview: hud.update_snapshot(session.snapshot)
+	var eligible: bool = not _paused and not _booting and campus.complete and not loading_cover.visible and get_window().has_focus()
+	if preferences.render_profile.observe_frame(Performance.get_monitor(Performance.TIME_PROCESS)*1000.0,eligible,delta*1000.0):
+		preferences.apply_render(get_viewport())
+		if sun: sun.shadow_enabled = bool(preferences.render_profile.profile().shadows)
+
+func _apply_ui_scale() -> void:
+	var factor := clampf(float(DisplayServer.screen_get_dpi())/160,1.0,1.8) if mobile else 1.0
+	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+	get_window().content_scale_size = Vector2i(Vector2(get_window().size)/factor)
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
-		if player:
-			_pause_preview()
+	if what in [NOTIFICATION_APPLICATION_PAUSED,NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
+		if player: _pause_preview()
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		get_tree().quit()
-	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if preview and player.enabled:
+		if preview:
 			_pause_preview()
-		elif page_name != "start":
-			_show_page("start")
-		else:
-			get_tree().quit()
+			_confirmation_action = "quit"
+			_confirmation.popup_centered(Vector2i(440,190))
+		else: get_tree().quit()
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if preview and not _paused: _pause_preview()
+		elif shell and shell.page != "lobby": shell.show_page("pause" if preview else "lobby")
+		else: get_tree().quit()
 
 func _smoke() -> void:
-	var deadline := Time.get_ticks_msec()+30000
-	while not campus.complete and Time.get_ticks_msec() < deadline:
-		await get_tree().process_frame
-	var status := "ready" if campus.complete else "failed"
-	print(JSON.stringify({"native":"Godot","profile":campus.profile,"chunks":campus.manifest.get("chunks",[]).size(),"resident":campus.resident.size(),"collisionTiles":campus.collision_resident.size(),"renderer":RenderingServer.get_current_rendering_method(),"platform":OS.get_name(),"status":status}))
+	_start_preview()
+	var deadline := Time.get_ticks_msec()+45000
+	while not campus.complete and Time.get_ticks_msec() < deadline: await get_tree().process_frame
+	print(JSON.stringify({"native":"Godot","profile":campus.profile,"chunks":metadata.get("chunks",[]).size(),"resident":campus.resident.size(),"collisionTiles":campus.collision_resident.size(),"renderer":RenderingServer.get_current_rendering_method(),"platform":OS.get_name(),"status":"ready" if campus.complete else "failed"}))
 	get_tree().quit(0 if campus.complete else 1)
 
-func _capture() -> void:
-	var deadline := Time.get_ticks_msec()+45000
-	while not campus.complete and Time.get_ticks_msec() < deadline:
-		await get_tree().process_frame
-	if not campus.complete:
-		push_error("Native map capture timed out")
-		get_tree().quit(1)
-		return
+func _capture_ui() -> void:
 	var directory := OS.get_environment("QS_NATIVE_CAPTURE_DIR")
-	if directory.is_empty():
-		directory = "user://captures"
+	if directory.is_empty(): directory = "user://captures"
+	DirAccess.make_dir_recursive_absolute(directory)
+	for page in ["lobby","loadout","pause"]:
+		shell.show_page(page)
+		for i in range(5): await get_tree().process_frame
+		await get_tree().create_timer(0.2).timeout
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(directory.path_join("native-"+page+"-0.1.0.png"))
+	print(JSON.stringify({"status":"captured","screens":["lobby","loadout","pause"],"worldCreated":world_owner != null,"viewport":[get_window().size.x,get_window().size.y]}))
+	get_tree().quit()
+
+func _capture() -> void:
+	_start_preview()
+	var deadline := Time.get_ticks_msec()+45000
+	while not campus.complete and Time.get_ticks_msec() < deadline: await get_tree().process_frame
+	var directory := OS.get_environment("QS_NATIVE_CAPTURE_DIR")
+	if directory.is_empty(): directory = "user://captures"
 	DirAccess.make_dir_recursive_absolute(directory)
 	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(directory.path_join("native-menu.png"))
-	menu.hide()
-	overlay.show()
-	player.eye.make_current()
-	for i in range(5):
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	get_viewport().get_texture().get_image().save_png(directory.path_join("native-campus.png"))
+	get_viewport().get_texture().get_image().save_png(directory.path_join("native-campus-0.1.0.png"))
 	print(JSON.stringify({"status":"captured","profile":campus.profile,"resident":campus.resident.size(),"drawCalls":Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),"texturesBytes":Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED),"fps":Engine.get_frames_per_second()}))
 	get_tree().quit()

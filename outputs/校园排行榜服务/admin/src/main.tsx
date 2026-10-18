@@ -32,22 +32,28 @@ const Overview = lazy(() =>
   PlayerAccounts = lazy(() => import("./views/PlayerAccounts")),
   Appeals = lazy(() => import("./views/PlayerAccounts").then(m=>({default:m.Appeals}))),
   Services = lazy(() => import("./views/Services"));
+const workspaceGroups = [
+  {label:"日常运营",ids:["overview","feedback","issues","operations"]},
+  {label:"版本与AI",ids:["releases","assistant"]},
+  {label:"竞技与玩家",ids:["rankings","players","player-accounts","account-appeals","rooms"]},
+  {label:"系统与审计",ids:["services","stats","accounts","audit"]},
+];
 const sections = [
-  { id: "overview", label: "工作台", symbol: "01" },
-  { id: "feedback", label: "反馈", scope: "feedback", symbol: "02" },
-  { id: "issues", label: "议题", scope: "feedback", symbol: "03" },
-  { id: "releases", label: "版本与发布", scope: "publish", symbol: "04" },
-  { id: "operations", label: "玩法与通知", scope: "operations", symbol: "05" },
-  { id: "assistant", label: "小齐助手", scope: "assistant", symbol: "05A" },
-  { id: "rankings", label: "成绩审核", scope: "ranking", symbol: "06" },
-  { id: "players", label: "玩家", scope: "players", symbol: "07" },
-  { id: "player-accounts", label: "玩家账号", scope: "player-accounts", symbol: "07A" },
-  { id: "account-appeals", label: "找回申诉", owner: true, symbol: "07B" },
-  { id: "rooms", label: "房间", scope: "rooms", symbol: "08" },
-  { id: "services", label: "服务状态", scope: "rooms", symbol: "08A" },
-  { id: "stats", label: "访问与故障", scope: "stats", symbol: "09" },
-  { id: "accounts", label: "账号与权限", symbol: "10" },
-  { id: "audit", label: "审计记录", owner: true, symbol: "11" },
+  { id: "overview", label: "工作台" },
+  { id: "feedback", label: "反馈", scope: "feedback" },
+  { id: "issues", label: "议题", scope: "feedback" },
+  { id: "releases", label: "版本与发布", scope: "publish" },
+  { id: "operations", label: "玩法与通知", scope: "operations" },
+  { id: "assistant", label: "小齐助手", scope: "assistant" },
+  { id: "rankings", label: "成绩审核", scope: "ranking" },
+  { id: "players", label: "玩家", scope: "players" },
+  { id: "player-accounts", label: "玩家账号", scope: "player-accounts" },
+  { id: "account-appeals", label: "找回申诉", owner: true },
+  { id: "rooms", label: "房间", scope: "rooms" },
+  { id: "services", label: "服务状态", scope: "rooms" },
+  { id: "stats", label: "访问与故障", scope: "stats" },
+  { id: "accounts", label: "账号与权限" },
+  { id: "audit", label: "审计记录", owner: true },
 ];
 class WorkspaceBoundary extends Component<{children:ReactNode},{failed:boolean}> {
   state={failed:false};
@@ -216,16 +222,16 @@ function App() {
             工作区 <span>{nav ? "收起" : "展开"}</span>
           </button>
           <nav aria-label="工作区">
-            {allowed.map((s) => (
+            {workspaceGroups.map(group=>{const visible=group.ids.flatMap(id=>allowed.filter(s=>s.id===id));return visible.length?<section className="sidebar-group" key={group.label}><h2>{group.label}</h2>{visible.map((s) => (
               <a
                 href={"#" + s.id}
                 aria-current={route === s.id ? "page" : undefined}
                 key={s.id}
               >
-                <small>{s.symbol}</small>
+
                 {s.label}
               </a>
-            ))}
+            ))}</section>:null;})}
           </nav>
           <a className="back-game" href="/" target="_blank" rel="noreferrer">
             打开游戏 ↗

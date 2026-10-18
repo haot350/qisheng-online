@@ -1,4 +1,5 @@
 import type {AssistantMenuAction, AssistantMenuContext} from '@qisheng/shared/assistant';
+import {readRecentPlay,saveRecentPlay,type RecentPlay} from './recent-mode';
 import {GadgetHUD} from './GadgetHUD';
 import {WeaponLoadout} from './WeaponLoadout';
 import {Crosshair} from './Crosshair';
@@ -30,7 +31,7 @@ import {
   EscapeTouchControls,
   EscapeTouchEditor,
 } from "./EscapeUI";
-import FeedbackUI from "./FeedbackUI";
+
 import {
   MainMenu,
   MenuAbout,
@@ -52,13 +53,8 @@ import { primaryTouchInput, resolveTouchControls } from "./input-layout.ts";
 import "./mobile-refinement.css";
 import { pausePolicy } from "./mode-policy";
 import { ConnectionDetails, ConnectionHUD } from "./multiplayer/ConnectionUI";
-import MultiplayerUI, {
-  OnlineHelp,
-  OnlineHUD,
-  OnlinePause,
-  OnlineResult,
-  type OnlineUIAction,
-} from "./multiplayer/MultiplayerUI";
+import {OnlineHelp,OnlineHUD,OnlinePause,OnlineResult} from "./multiplayer/OnlineBattleUI";
+import type {OnlineUIAction} from "./multiplayer/online-ui-actions";
 import { OnlineMap } from "./multiplayer/OnlineMap";
 import { OnlineClient } from "./multiplayer/client";
 import "./multiplayer/online-runtime.css";
@@ -83,6 +79,8 @@ import {
   type TransmissionMode,
 } from "./types";
 import {
+  loadFeedbackUI,
+  loadMultiplayerUI,
   loadArchiveUI,
   loadPhotoUI,
   loadRealityUI,
@@ -113,6 +111,9 @@ const StoryHUD = storyComponent(),
   RealityUI = realityComponent();
 const rankingComponent = () => lazy(() => import("./RankingUI"));
 const RankingUI = rankingComponent();
+const FeedbackUI = lazy(()=>loadFeedbackUI());
+const multiplayerComponent=()=>lazy(()=>loadMultiplayerUI());
+const MultiplayerUI=multiplayerComponent();
 const AssistantUI = lazy(()=>import('./AssistantUI'));
 const CreditsPlayer = lazy(()=>import('./CreditsPlayer').then(m=>({default:m.CreditsPlayer})));
 const CopyrightPage = lazy(()=>import('./CopyrightPage').then(m=>({default:m.CopyrightPage})));
@@ -402,6 +403,8 @@ export default function App() {
     ),
     [escapeEntry, setEscapeEntry] = useState<EscapeEntry>("single"),
     [pvpVariant, setPvpVariant] = useState<"tdm" | "ffa">("tdm");
+  const [recentPlay,setRecentPlay]=useState<RecentPlay|null>(readRecentPlay);
+  const prepareRecentPlay=(value:RecentPlay)=>{if(!guardEntry(entryFor(value.mode,value.entry,value.variant)))return;setSelectedMode(value.mode);setEscapeEntry(value.entry);setPvpVariant(value.variant);setMenuScreen('prepare');};
   const [accountBusy,setAccountBusy] = useState(false);
   const pages = useMenuPages(new URLSearchParams(location.search).get("panel")==="leaderboard"?"ranking":null,accountBusy);
   const [requestedRankPanel,setRequestedRankPanel] = useState<"board"|"recent">("board");
@@ -1233,6 +1236,7 @@ export default function App() {
 
   const [assistantReturnScreen,setAssistantReturnScreen]=useState<'home'|'modes'|'prepare'|null>(null);
   const assistantScope=useRef({key:'',token:crypto.randomUUID()});
+  useEffect(()=>{if(snapshot.phase!=='playing')return;const room=onlineView.currentRoom;const value:RecentPlay={mode:snapshot.mode,entry:room?(room.mode==='coop'?'coop':'pvp'):'single',variant:room?.variant==='ffa'?'ffa':'tdm'};setRecentPlay(previous=>{if(previous&&JSON.stringify(previous)===JSON.stringify(value))return previous;saveRecentPlay(value);return value;});},[snapshot.phase,snapshot.mode,onlineView.currentRoom?.mode,onlineView.currentRoom?.variant]);
   const assistantInBattle=['playing','paused','won','lost'].includes(snapshot.phase)||!!(onlineView.currentRoom&&onlineView.currentRoom.phase!=='lobby');
   const assistantKey=(rankingPlayer?.id??'guest')+':'+(pages.active==='assistant')+':'+assistantInBattle;
   if(assistantScope.current.key!==assistantKey)assistantScope.current={key:assistantKey,token:crypto.randomUUID()};
@@ -1402,6 +1406,9 @@ export default function App() {
       {upgradePrompt&&isMenu&&!rankingPanel&&<MenuReadingPanel title="保留记录，升级账号" onClose={deferUpgrade}><p>设置用户名和密码，保存新的恢复码，即可继续使用原来的成绩、反馈和联机身份。</p><p>升级后可以跨设备登录，查看竞技档案与成就。照片、故事进度和本机成绩仍留在当前浏览器。</p><div className="upgrade-prompt-actions"><button className="primary" onClick={()=>{setUpgradePrompt(false);openRanking("identity");}}>升级账号</button><button className="secondary" onClick={deferUpgrade}>稍后再说</button></div></MenuReadingPanel>}
       {isMenu && (
         <MainMenu
+          recent={recentPlay}
+          onRecent={()=>{if(recentPlay)prepareRecentPlay(recentPlay);}}
+          onStoryPrepare={()=>prepareRecentPlay({mode:'story',entry:'single',variant:'tdm'})}
           active={!pages.active&&!onlineOpen}
           unavailable={menuUnavailable}
           announcement={<AnnouncementBanner items={announcements.list} onOpen={openNotices}/>}
@@ -1552,7 +1559,7 @@ export default function App() {
         page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
-        page==='feedback'?<FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/>:
+        page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
@@ -2127,7 +2134,7 @@ export default function App() {
             onlineView.status === "reconnecting"))) &&
         !onlineReadingOpen && (
           <MenuPage id="lobby" title={onlineView.currentRoom?(onlineView.currentRoom.mode==='coop'?'合作准备':onlineView.currentRoom.variant==='tdm'?'团队对战准备':'个人混战准备'):'联机大厅'} active tactical showNavigation={false} onBack={returnMenu} backLabel="返回主菜单" onRoot={returnMenu} rootLabel="主菜单" onNavigate={openMenuPage} feedbackUnread={feedbackUnread} wide>
-          <MultiplayerUI embedded
+          <Suspense fallback={<p role="status">正在打开联机大厅…</p>}><ModuleBoundary label="联机大厅" retry={multiplayerComponent} onClose={returnMenu}><MultiplayerUI embedded
             initialMode={escapeEntry === "pvp" ? "pvp" : "coop"}
             initialVariant={pvpVariant}
             view={onlineView}
@@ -2135,7 +2142,7 @@ export default function App() {
             onAction={onlineAction}
             onIdentity={() => openRanking("identity")}
             onClose={()=>{if(onlineRoomKey&&onlineView.currentRoom?.phase==='playing'&&onlineTransportReady){game.current?.pause();setOnlineOpen(false);}else returnMenu();}}
-          />
+          /></ModuleBoundary></Suspense>
           </MenuPage>
         )}
       {online && snapshot.phase === "error" && !onlineReadingOpen && (
@@ -2178,6 +2185,7 @@ export default function App() {
             />
             {snapshot.gadgets&&<GadgetHUD view={snapshot.gadgets} smokes={snapshot.smokes} touch={touchLayout} api={game.current}/>}
           <OnlineHUD
+              stairGuide={snapshot.onlineStairGuide}
               interactionScreen={snapshot.interactionScreen}
               selectedTaskId={snapshot.onlineTrackingTaskId}
               interaction={snapshot.interaction}
@@ -2248,6 +2256,7 @@ export default function App() {
         !onlineReadingOpen &&
         onlineTransportReady && (
           <OnlineMap
+            stairGuide={snapshot.onlineStairGuide}
             selectedTaskId={snapshot.onlineTrackingTaskId}
             onSelectTask={(id) => game.current?.selectEscapeTask?.(id)}
             room={snapshot.online}

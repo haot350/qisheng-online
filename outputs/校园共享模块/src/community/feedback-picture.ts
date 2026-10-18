@@ -1,0 +1,6 @@
+export type FeedbackPicture={name:string;dataUrl:string};
+export async function prepareFeedbackPicture(file:File):Promise<FeedbackPicture>{
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('请选择 PNG、JPEG 或 WebP 图片。');
+ if(file.size>5*1024*1024)throw new Error('每张原图不能超过 5 MB。');
+ const bitmap=await createImageBitmap(file);try{const scale=Math.min(1,1920/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d');if(!ctx)throw new Error('图片暂时无法处理，请换一张试试。');ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);let quality=.86;let blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/jpeg',quality));while(blob&&blob.size>1024*1024&&quality>.35){quality-=.12;blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/jpeg',quality));}if(!blob||blob.size>1024*1024)throw new Error('这张图片较复杂，请缩小后再添加。');const dataUrl=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result));r.onerror=()=>reject(new Error('图片无法读取。'));r.readAsDataURL(blob!);});return {name:file.name,dataUrl};}finally{bitmap.close();}
+}

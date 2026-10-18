@@ -4,9 +4,9 @@ const Controller = preload("res://src/map/local_preview_controller.gd")
 const Main = preload("res://src/main.gd")
 var checks := 0
 
-class SessionProbe extends Node:
+class SessionProbe extends QsNativeSession:
 	var move := Vector2.ZERO
-	func submit_controls(value: Vector2, _yaw: float, _pitch: float, _fire: bool, _aim: bool, _sprint: bool, _crouch: bool) -> void:
+	func submit_controls(value: Vector2, _yaw: float, _pitch: float, _fire := false, _aim := false, _sprint := false, _crouch := false) -> void:
 		move = value
 
 func _initialize() -> void:

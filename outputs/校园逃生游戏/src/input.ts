@@ -318,7 +318,6 @@ export function createInput(
       Space: "jump",
       KeyR: "reload",
       KeyG: "useGadget",
-      KeyB: "cycleGadget",
       KeyQ: "switch",
       KeyE: "interact",
       Digit1: "switch",

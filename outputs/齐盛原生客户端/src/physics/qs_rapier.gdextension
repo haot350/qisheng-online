@@ -1,0 +1,10 @@
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+windows.debug.x86_64 = "res://bin/qs_native_physics.dll"
+windows.release.x86_64 = "res://bin/qs_native_physics.dll"
+android.debug.arm64 = "res://bin/libqs_native_physics.arm64.so"
+android.release.arm64 = "res://bin/libqs_native_physics.arm64.so"

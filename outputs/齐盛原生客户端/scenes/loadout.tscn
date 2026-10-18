@@ -1,0 +1,20 @@
+[gd_scene format=3]
+
+[node name="Loadout" type="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 20
+
+[node name="WeaponCards" type="GridContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+columns = 3
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
+
+[node name="WeaponDetail" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Detail" type="VBoxContainer" parent="WeaponDetail"]
+layout_mode = 2

@@ -1,3 +1,4 @@
+import {stairGuideForRoute,type StairGuide} from './escape-stair-guidance';
 import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGadget,cycleGadget,helmetDamage,grenadeDamage,useCards,confiscatedHealth,type GadgetId,type GadgetLoot,type GrenadeState} from '@qisheng/shared/gadgets';
 import {GadgetScene} from './gadget-scene';
 import {selectEscapeRoster as orderedEscapeRoster} from './npc-roster';
@@ -582,7 +583,9 @@ export async function createGame(
       plan: EscapePlan;
     } | null = null,
     retryEscapePlan: EscapePlan | null = null,
-    escapeBest: number | null = null;
+    escapeBest: number | null = null,
+    escapeBestBeforeResult: number | null = null;
+  let escapeStairGuide: StairGuide | null = null;
   let best: number | null = null;
   try {
     const b = Number(localStorage.getItem("qisheng-game-best"));
@@ -1019,6 +1022,8 @@ export async function createGame(
         used: p.collected,
       })),
       best: escapeBest,
+      bestBeforeResult: escapeBestBeforeResult,
+      stairGuide: escapeStairGuide,
     };
   }
   function escapeFloor(point: THREE.Vector3): number {
@@ -1059,6 +1064,7 @@ export async function createGame(
       if (escapeRouteClock <= 0) {
         escapeRouteClock = 0.5;
         escapeRoute = world.path(position, target);
+        escapeStairGuide = stairGuideForRoute(position.toArray() as Vec3,escapeRoute.map(p=>p.toArray() as Vec3),world.manifest.stairRoutes,escapeFloor(position),escapeFloor(target));
       }
       while (escapeRoute.length && escapeRoute[0].distanceTo(position) < 0.28)
         escapeRoute.shift();
@@ -2168,6 +2174,8 @@ export async function createGame(
         plan: escapePlan,
       };
       escapeBest = null;
+      escapeBestBeforeResult = null;
+      escapeStairGuide = null;
       try {
         const stored = Number(
           localStorage.getItem(
@@ -3510,6 +3518,7 @@ export async function createGame(
     if (mode === "escape" && escapeRound) {
       if (!won && escapeRound.phase !== "failed") escapeRound.fail("health");
       const result = escapeRound.snapshot().result;
+      escapeBestBeforeResult = escapeBest;
       if (won && result && (escapeBest === null || result.score > escapeBest)) {
         escapeBest = result.score;
         try {

@@ -50,7 +50,7 @@ export class AssistantService {
     private complete(c: AssistantConfig, messages: Parameters<AssistantTransport>[1], maxTokens: number, signal: AbortSignal) { if (signal.aborted)
         return Promise.reject(unavailable()); return new Promise<Awaited<ReturnType<AssistantTransport>>>((resolve, reject) => { const abort = () => reject(unavailable()); signal.addEventListener('abort', abort, { once: true }); this.transport(c, messages, maxTokens, signal).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort)); }); }
     private h(value: string) { return createHmac('sha256', this.secret).update(value).digest('hex'); }
-    status() { const c = this.store.read(); return { name: '小齐' as const, enabled: c.enabled, available: c.enabled && c.tested && !!c.apiKey, revision: c.revision, limits: { guestDaily: c.guestDaily, accountDaily: c.accountDaily, questionChars: 1500, historyTurns: 6 } }; }
+    status() { const c = this.store.read(); return { name: '小齐' as const, enabled: c.enabled, available: c.enabled && c.tested && !!c.apiKey, revision: c.revision, noticeRevision: 1, limits: { guestDaily: c.guestDaily, accountDaily: c.accountDaily, questionChars: 1500, historyTurns: 6 } }; }
     visitor(network: string) { this.clean(); const day = assistantDay(this.now()); this.takeLimit(day, 'visitor-issue', this.h(network), 240); const expiresAt = this.now() + 86400000, value = randomBytes(24).toString('base64url') + '.' + expiresAt; return { visitorToken: value + '.' + this.h('visitor:' + value), expiresAt }; }
     principal(accountId: string | null, token: unknown) { if (accountId)
         return { id: this.h('account:' + accountId), account: true }; if (typeof token !== 'string' || token.length > 180)

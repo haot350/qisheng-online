@@ -1,0 +1,106 @@
+[gd_resource type="Theme" load_steps=9 format=3]
+
+[sub_resource type="SystemFont" id="Font"]
+font_names = PackedStringArray("Microsoft YaHei", "Noto Sans CJK SC", "sans-serif")
+font_weight = 500
+
+[sub_resource type="StyleBoxFlat" id="Button"]
+bg_color = Color(0.115, 0.137, 0.145, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.27, 0.29, 0.285, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_left = 2
+corner_radius_bottom_right = 2
+content_margin_left = 20.0
+content_margin_right = 20.0
+content_margin_top = 13.0
+content_margin_bottom = 13.0
+
+[sub_resource type="StyleBoxFlat" id="Hover"]
+bg_color = Color(0.19, 0.205, 0.20, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.80, 0.76, 0.64, 1)
+content_margin_left = 20.0
+content_margin_right = 20.0
+content_margin_top = 13.0
+content_margin_bottom = 13.0
+
+[sub_resource type="StyleBoxFlat" id="Selected"]
+bg_color = Color(0.44, 0.19, 0.13, 1)
+border_width_left = 3
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.85, 0.42, 0.28, 1)
+content_margin_left = 20.0
+content_margin_right = 20.0
+content_margin_top = 13.0
+content_margin_bottom = 13.0
+
+[sub_resource type="StyleBoxFlat" id="Card"]
+bg_color = Color(0.09, 0.11, 0.115, 0.97)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.25, 0.275, 0.265, 1)
+content_margin_left = 24.0
+content_margin_right = 24.0
+content_margin_top = 24.0
+content_margin_bottom = 24.0
+
+[sub_resource type="StyleBoxFlat" id="Input"]
+bg_color = Color(0.055, 0.07, 0.073, 1)
+border_width_bottom = 2
+border_color = Color(0.51, 0.51, 0.44, 1)
+content_margin_left = 16.0
+content_margin_right = 16.0
+content_margin_top = 13.0
+content_margin_bottom = 13.0
+
+[sub_resource type="StyleBoxFlat" id="Focus"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.65, 0.68, 0.63, 1)
+
+[sub_resource type="StyleBoxFlat" id="Empty"]
+bg_color = Color(0, 0, 0, 0)
+
+[resource]
+default_font = SubResource("Font")
+default_font_size = 18
+Button/colors/font_color = Color(0.93, 0.925, 0.875, 1)
+Button/colors/font_hover_color = Color(1, 0.98, 0.90, 1)
+Button/colors/font_pressed_color = Color(1, 0.96, 0.87, 1)
+Button/colors/font_disabled_color = Color(0.48, 0.50, 0.47, 1)
+Button/styles/normal = SubResource("Button")
+Button/styles/hover = SubResource("Hover")
+Button/styles/pressed = SubResource("Selected")
+Button/styles/disabled = SubResource("Button")
+Button/styles/focus = SubResource("Focus")
+Label/colors/font_color = Color(0.93, 0.925, 0.875, 1)
+LineEdit/colors/font_color = Color(0.96, 0.95, 0.90, 1)
+LineEdit/colors/font_placeholder_color = Color(0.57, 0.60, 0.56, 1)
+LineEdit/styles/normal = SubResource("Input")
+LineEdit/styles/focus = SubResource("Focus")
+PanelContainer/styles/panel = SubResource("Card")
+PopupMenu/styles/panel = SubResource("Card")
+OptionButton/styles/normal = SubResource("Button")
+OptionButton/styles/hover = SubResource("Hover")
+OptionButton/styles/pressed = SubResource("Selected")
+OptionButton/styles/focus = SubResource("Focus")
+ProgressBar/styles/background = SubResource("Button")
+ProgressBar/styles/fill = SubResource("Selected")
+HSeparator/styles/separator = SubResource("Empty")
+VBoxContainer/constants/separation = 16
+HBoxContainer/constants/separation = 16

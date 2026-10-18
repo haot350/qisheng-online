@@ -1,0 +1,15 @@
+{
+  "javascriptRapier": "0.19.3",
+  "rustRapier": "0.30.1",
+  "parry": "0.25.3",
+  "nalgebra": "0.34.1",
+  "wasmSha256": "1ce1c8c4036b4dcd3bde86c6efdb0f270cf5e274979b1de6ab8052947ef166c5",
+  "fixedHz": 60,
+  "sources": {
+    "src/escape/config.ts": "a0367c1db567aba4dadc7381770f4a5ce95733c35019097954aefdd85ba50f76",
+    "src/escape/movement.ts": "9f29fe51d2fc4f09c81b2069702e10131f5f078a2cf399bd2e1216e2425238e0",
+    "src/multiplayer/shared/movement.ts": "2de254a3e56bdd60030da8ffa59133512744d9cc43e0707fd27ca425b01509c7",
+    "src/multiplayer/shared/sim-world.ts": "b75380dcd97545c7d72bb51ee1837f07f8614bbe0f62b9f1d40abcf50ae76a08",
+    "src/story-curb.ts": "be4db2ecb406e5e69c9503ff7da02202f2d064df847d380367062869e40bba34"
+  }
+}

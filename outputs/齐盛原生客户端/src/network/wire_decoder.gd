@@ -36,10 +36,14 @@ func accept(message: Dictionary) -> Dictionary:
 			return _reject("entities")
 		_state.room = _patch(_state.room, message.get("room", {}))
 		_state.self = _patch(_state.self, message.get("self", {}))
-		if message.get("roster") != null:
-			if not message.roster is Array:
+		var roster: Variant = message.get("roster")
+		# msgpackr represents JavaScript undefined as extension type 0/[0].
+		# The pinned native SDK exposes extensions as PackedByteArray and drops
+		# their type. Only this optional, non-binary field accepts that sentinel.
+		if roster != null and not _undefined(roster):
+			if not roster is Array:
 				return _reject("roster")
-			_state.roster = message.roster.duplicate(true)
+			_state.roster = roster.duplicate(true)
 		_state.players = _merge_entities(_state.players, message.players)
 		_state.npcs = _merge_entities(_state.npcs, message.npcs)
 		_state.spectatingId = message.get("spectatingId")
@@ -95,6 +99,9 @@ func _merge_entities(previous: Array, delta: Dictionary) -> Array:
 
 func _integer(value: Variant) -> bool:
 	return (value is int or value is float) and is_finite(float(value)) and float(value) == floor(float(value)) and abs(float(value)) < 9007199254740992.0
+
+func _undefined(value: Variant) -> bool:
+	return value is PackedByteArray and value.size() == 1 and value[0] == 0
 
 func _reject(reason: String) -> Dictionary:
 	last_error = reason

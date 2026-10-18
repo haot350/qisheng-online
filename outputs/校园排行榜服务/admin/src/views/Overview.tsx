@@ -35,14 +35,14 @@ export function Overview({ administrator }: { administrator: Administrator }) {
               {cards
                 .filter((x) => has(administrator, x[3]))
                 .map(([key, label, path]) => (
-                  <a className="metric-card" href={"#" + path} key={key}>
+                  <a className={"metric-card"+(["feedback","awaitingVerification","review","recentErrors"].includes(key)&&Number(r.data![key])>0?" needs-attention":"")} href={"#" + path} key={key}>
                     <span>{label}</span>
                     <strong>
                       {Array.isArray(r.data![key])
                         ? r.data![key].length
                         : (r.data![key] ?? "—")}
                     </strong>
-                    <small>查看并处理 →</small>
+                    <small>{["feedback","awaitingVerification","review","recentErrors"].includes(key)?"查看并处理 →":"查看详情 →"}</small>
                   </a>
                 ))}
             </div>

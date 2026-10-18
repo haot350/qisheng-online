@@ -1,7 +1,8 @@
 class_name QsLocalPreviewController
 extends CharacterBody3D
 
-## Offline map-preview controller only. Never used as equivalent competitive Rapier physics.
+## Input and observation adapter. Competitive movement uses only the Rust world;
+## the Godot collision fallback remains limited to the anonymous local demo.
 signal paused
 signal controls_sampled(controls: Dictionary)
 signal action_requested(action: String)
@@ -17,6 +18,12 @@ var move_origin := Vector2.ZERO
 var sensitivity := 0.0024
 var jump_requested := false
 var authoritative_motion := false
+var observation_allowed := true
+var touch_buttons := {"fire":false,"aim":false,"sprint":false,"crouch":false}
+var aim_toggle := true
+var external_controls: Dictionary = {}
+var keybindings: Dictionary = {}
+const DEFAULT_KEYS = preload("res://src/input_bindings.gd").DEFAULT_KEYS
 
 func _ready() -> void:
 	var collider := CollisionShape3D.new()
@@ -25,6 +32,7 @@ func _ready() -> void:
 	capsule.height = 1.75
 	collider.shape = capsule
 	collider.position.y = 0.88
+	collider.disabled = authoritative_motion
 	add_child(collider)
 	eye = Camera3D.new()
 	eye.position.y = 1.62
@@ -39,6 +47,7 @@ func activate(value: bool) -> void:
 	look_touch = -1
 	jump_requested = false
 	velocity = Vector3.ZERO
+	for key in touch_buttons: touch_buttons[key] = false
 	if not DisplayServer.is_touchscreen_available():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if value else Input.MOUSE_MODE_VISIBLE
 
@@ -63,7 +72,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		paused.emit()
 		get_viewport().set_input_as_handled()
 	if event is InputEventKey and event.pressed and not event.echo:
-		var action: String = {KEY_SPACE:"jump",KEY_R:"reload",KEY_E:"interact",KEY_G:"use-gadget",KEY_B:"cycle-gadget",KEY_Q:"switch"}.get(event.physical_keycode, "")
+		var action := ""
+		for key in ["jump","reload","interact","gadget","cycle","switch","slide","map"]:
+			if int(event.physical_keycode) == int(keybindings.get(key,DEFAULT_KEYS[key])):
+				action = {"gadget":"use-gadget","cycle":"cycle-gadget"}.get(key,key)
+				break
 		if not action.is_empty():
 			action_requested.emit(action)
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -83,6 +96,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			look(event.relative)
 
 func look(relative: Vector2) -> void:
+	if not observation_allowed: return
 	yaw -= relative.x*sensitivity
 	pitch = clampf(pitch-relative.y*sensitivity, -1.35, 1.35)
 	rotation.y = yaw
@@ -95,9 +109,16 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		return
 	var direction := touch_move
+	if not external_controls.is_empty():
+		yaw = float(external_controls.get("yaw",yaw))
+		pitch = float(external_controls.get("pitch",pitch))
+		rotation.y = yaw
+		eye.rotation.x = pitch
+		controls_sampled.emit({"move":Vector2(float(external_controls.get("moveX",0)),-float(external_controls.get("moveY",0))),"yaw":yaw,"pitch":pitch,"fire":external_controls.get("fire",false),"aim":external_controls.get("aim",false),"sprint":external_controls.get("sprint",false),"crouch":external_controls.get("crouch",false)})
+		return
 	if not DisplayServer.is_touchscreen_available():
-		direction = Vector2(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
-	controls_sampled.emit({"move":direction.limit_length(),"yaw":yaw,"pitch":pitch,"fire":Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT),"aim":Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT),"sprint":Input.is_physical_key_pressed(KEY_SHIFT),"crouch":Input.is_physical_key_pressed(KEY_CTRL)})
+		direction = Vector2(float(_pressed("right"))-float(_pressed("left")),float(_pressed("back"))-float(_pressed("forward")))
+	controls_sampled.emit({"move":direction.limit_length(),"yaw":yaw,"pitch":pitch,"fire":Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or touch_buttons.fire,"aim":Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) or touch_buttons.aim,"sprint":_pressed("sprint") or touch_buttons.sprint,"crouch":_pressed("crouch") or touch_buttons.crouch})
 	# Godot preview collision is not treated as equivalent Rapier prediction.
 	if authoritative_motion:
 		velocity = Vector3.ZERO
@@ -108,9 +129,12 @@ func _physics_process(delta: float) -> void:
 	velocity.z = horizontal.z*speed
 	if not is_on_floor():
 		velocity.y -= 18*delta
-	elif jump_requested or Input.is_physical_key_pressed(KEY_SPACE):
+	elif jump_requested or _pressed("jump"):
 		velocity.y = 6.0
 	else:
 		velocity.y = -0.1
 	jump_requested = false
 	move_and_slide()
+
+func _pressed(action: String) -> bool:
+	return Input.is_physical_key_pressed(int(keybindings.get(action,DEFAULT_KEYS[action])))

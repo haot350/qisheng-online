@@ -1,0 +1,78 @@
+import {useEffect,useState} from 'react';
+import {OnlineAchievements} from './OnlineAchievements';
+import {roomRoster} from './shared/wire';
+import {gameMapManifest} from '../game-map';
+import type {RoomSnapshot,AvatarId,Vec3,PlayerState} from './shared/protocol';
+import type {OnlineUIAction} from './online-ui-actions';
+import {weapons,avatars,modeName,clock} from './online-ui-format';
+import type {OnlineContact} from './contacts';
+import {useDialogFocus} from '../dialog-focus';
+import {escapeFloorAt} from '../escape-floor';
+import type {MapManifest,Snapshot} from '../types';
+import {onlineMapSnapshot} from './task-map';
+import {EscapeMapCanvas} from '../EscapeMapCanvas';
+import {FPSVitals,FPSAmmo,type FPSWeaponAction} from '../FPSCombatHUD';
+import {WeaponLoadout} from '../WeaponLoadout';
+import {NearbyInteractionUI} from '../NearbyInteractionUI';
+import type {NearbyInteraction} from '../nearby-interaction';
+import {spectateCandidates,onlineMembers,playerPrimaryWeapon} from './runtime-state';
+import {onlineResultStats} from './hud-state';
+import './online.css';
+export function onlineTaskGuidance(room:RoomSnapshot,me:PlayerState|undefined,_touch:boolean,selectedTaskId?:string){
+ const remaining=room.tasks.filter(t=>t.status!=='complete'),task=remaining.find(t=>t.id===selectedTaskId)??remaining[0];
+ const near=(p:Vec3|undefined,radius=2.4)=>!!(me&&p&&me.life==='alive'&&Math.abs(me.position[1]-p[1])<1.2&&Math.hypot(me.position[0]-p[0],me.position[1]-p[1],me.position[2]-p[2])<=radius);
+ if(!task){const ex=room.extraction;return {task:undefined,action:ex.available?(ex.progress>0||ex.blocked?'守住校门撤离区':'前往校门撤离区'):'等待行动任务',reason:ex.blocked==='contested'?'清除撤离区内的追兵':ex.blocked==='outside'?(near(ex.position,4.5)?'等候同伴进入撤离区':'回到校门撤离区继续'):undefined};}
+ let action:string;
+ if(task.kind==='take')action='到目标地点取得物资';
+ else if(task.kind==='activate')action='接通两处设备 · '+task.visited.length+'/'+task.positions.length;
+ else if(task.kind==='hold')action=task.status==='pending'?'到目标地点开始守点':'守住任务区域';
+ else if(task.carrierId===me?.id)action='将物资送到目的地';
+ else if(task.carrierId){const carrier=roomRoster(room).find(p=>p.id===task.carrierId);action='掩护'+(carrier?.nickname??'同伴')+'送达物资';}
+ else action=task.drop?'取回掉落的任务物资':'到领取点取得物资';
+ return {task,action,reason:task.blocked==='contested'?'清除区域内的追兵':task.blocked==='outside'?'回到任务区域继续':undefined};
+}
+const gadgetLabels={helmet:'头盔',grenade:'手榴弹',cards:'扑克牌'};
+export function onlineInteractionLabel(room:RoomSnapshot,interaction:NearbyInteraction){
+ if(interaction.kind==='revive')return roomRoster(room).find(p=>p.id===interaction.id)?.nickname??'倒下的同伴';
+ if(interaction.kind==='task')return room.tasks.find(t=>t.id===interaction.taskId)?.label??'校门撤离';
+ if(interaction.kind==='gadget')return gadgetLabels[interaction.action as keyof typeof gadgetLabels]??'道具';
+ if(interaction.kind==='weapon')return weapons[interaction.weapon??'glock'];
+ return '补给箱';
+}
+export function OnlineHUD({room,playerId,onMenu,onAction,touch=false,contacts=[],notice='',spectatingId,displayAmmo,displayAction,displayStamina,pickup,onPickup,selectedTaskId,interaction,onInteract,interactionScreen,stairGuide}:{room:RoomSnapshot;playerId:string|null;onMenu:()=>void;onAction:(action:OnlineUIAction)=>void;touch?:boolean;contacts?:OnlineContact[];notice?:string;spectatingId?:string;displayAmmo?:number;displayAction?:FPSWeaponAction;displayStamina?:number;pickup?:Snapshot['pickup'];onPickup?:()=>void;selectedTaskId?:string;interaction?:NearbyInteraction|null;onInteract?:(pressed:boolean)=>void;interactionScreen?:{x:number;y:number}|null;stairGuide?:Snapshot['onlineStairGuide']}){
+ const [wheel,setWheel]=useState(false),me=room.players.find(p=>p.id===playerId),guide=onlineTaskGuidance(room,me,touch,selectedTaskId),task=guide.task,carried=room.tasks.find(t=>t.id===me?.carryingTask),nearby=interaction===undefined?(me?.interaction??null):interaction;
+ const mates=spectateCandidates(room,playerId??''),spectating=me?.life==='alive'?undefined:mates.find(p=>p.id===spectatingId)??mates[0];
+ const pickupAction=pickup?.weapon==='glock'||!!me&&pickup?.weapon===playerPrimaryWeapon(me)?'补充弹药':'替换主枪';
+ const heard=contacts.filter((c):c is Extract<OnlineContact,{kind:'heard'}>=>c.kind==='heard'&&c.left>0).slice(-6);
+ return <div className={'online-combat-hud'+(room.pauseVote?' has-vote':'')+(touch?' is-touch':'')}><div className="online-hud-top"><section><strong>{modeName(room)}</strong>{room.mode==='coop'?<><span>{task?.label??'校门撤离'}</span><span className="online-task-action">{guide.action}</span>{stairGuide&&<small className="online-stair-guide">{Math.round(stairGuide.distance)}米 · 经{stairGuide.label}{stairGuide.direction==='up'?'上':'下'}{stairGuide.floor}层</small>}{task?.kind==='hold'&&task.status==='active'&&task.duration>0&&<progress value={task.progress} max={task.duration}/>}{!task&&room.extraction.available&&<progress value={room.extraction.progress} max={room.extraction.duration}/>}{guide.reason&&<small>{guide.reason}</small>}</>:<span>{room.variant==='tdm'?room.teamScores.blue+' : '+room.teamScores.red:'击倒 '+(me?.kills??0)}</span>}</section><div><strong>{clock(room.remaining)}</strong><button aria-label="打开联机菜单" onClick={onMenu}>Ⅱ</button></div></div>{notice&&<div className="online-message-toast" role="status">{notice}</div>}<OnlineMinimap room={room} playerId={playerId} contacts={contacts} selectedTaskId={task?.id} stairGuide={stairGuide} spectatingId={spectating?.id} onOpen={()=>onAction({type:'map'})}/>{me&&heard.length>0&&<div className="online-shot-directions" aria-label="附近枪声方向"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="32" fill="none" stroke="#19221f66" strokeWidth="1"/>{heard.map(c=><path key={c.id} d="M 34 22 A 32 32 0 0 1 66 22" fill="none" stroke="#e5bc7f" strokeWidth="5" strokeLinecap="round" opacity={Math.min(1,c.left/1.5)} transform={'rotate('+(-Math.round(Math.atan2(Math.sin(c.bearing-me.yaw),Math.cos(c.bearing-me.yaw))/(Math.PI/4))*45)+' 50 50)'}/>)}<text x="50" y="54" textAnchor="middle">枪声</text></svg></div>}<FPSVitals health={me?.health??0} stamina={displayStamina??me?.stamina??0} touch={touch}/><div className="online-team-hud">{onlineMembers(room).filter(p=>p.id!==playerId&&(room.mode==='coop'||room.variant==='tdm'&&p.team===me?.team)).map(p=><span key={p.id} className={p.life==='downed'?'is-downed':p.life==='alive'?'is-alive':'is-inactive'}><strong>{p.nickname}</strong><small>{p.life==='downed'?'需要救援':!p.connected?'重连中':p.life==='respawning'?'等待复活':p.life==='eliminated'?'等待任务复活':Math.round(p.health??0)+' HP'}</small><i aria-hidden="true"><b style={{width:Math.max(0,Math.min(100,p.health??0))+'%'}}/></i></span>)}</div><FPSAmmo weapon={me?.weapon??'m4a1'} ammo={displayAmmo??me?.ammo??0} reserve={me?.reserve??0} action={displayAction??me?.weaponAction} touch={touch}/><div className="online-signal-controls">{carried&&<button onClick={()=>onAction({type:'dropTask'})}>放下任务物品</button>}<button onClick={()=>onAction({type:'ping'})}>标记</button><button aria-expanded={wheel} onClick={()=>setWheel(v=>!v)}>快捷交流</button></div>{wheel&&<div className="online-preset-wheel">{([['help','需要帮助'],['go','出发'],['thanks','谢谢'],['wait','等一下']] as const).map(([id,label])=><button key={id} onClick={()=>{onAction({type:'preset',id});setWheel(false);}}>{label}</button>)}</div>}{nearby&&me?.life==='alive'&&<NearbyInteractionUI interaction={nearby} screen={interactionScreen} label={onlineInteractionLabel(room,nearby)} touch={touch} onPress={pressed=>onInteract?.(pressed)} loading={nearby.kind==='weapon'&&pickup?.loading} error={nearby.kind==='weapon'&&pickup?.error}/>}
+{interaction===undefined&&!me?.interaction&&pickup&&me?.life==='alive'&&<div className="online-pickup" role="status"><span>{pickup.label}</span>{touch?<button onClick={onPickup}>{pickupAction}</button>:<small><kbd>E</kbd> {pickupAction}</small>}</div>}
+{me?.revivingTarget&&<div className="online-rescue-hint" role="status"><span>正在救援同伴</span><progress value={me.reviveProgress??0} max={1}/></div>}{me&&me.life!=='alive'&&<div className="online-life-message" role="status"><strong>{me.life==='downed'?'等待同伴救援':me.life==='respawning'?'等待复活':room.mode==='coop'?'观战同伴':'本局已离场'}</strong>{me.life==='downed'&&<span>{Math.ceil(me.reviveLeft)} 秒内可被救援</span>}{me.life==='respawning'&&<span>{Math.ceil(me.respawnLeft)} 秒</span>}{me.life==='eliminated'&&room.mode==='coop'&&<span>{room.extraction.available?'等待同伴撤离':'下一项任务完成后重新入场'}</span>}{spectating&&<span>正在观战：{spectating.nickname}</span>}{mates.length>1&&<button onClick={()=>onAction({type:'spectateNext'})}>{touch?'切换同伴':'空格切换同伴'}</button>}</div>}{room.pauseVote&&<div className="online-vote-toast"><span>同伴申请暂停 · {room.pauseVote.yes.length}/{room.pauseVote.eligible.length} 同意</span><button onClick={()=>onAction({type:'pauseVote',agree:true})}>同意</button></div>}{room.phase==='paused'&&<div className="online-life-message"><strong>全员暂停</strong><span>{Math.ceil(room.pauseLeft)} 秒</span><button onClick={()=>onAction({type:'resume'})}>继续本局</button></div>}</div>;
+}
+export function OnlinePause({room,playerId,onAction,onClose,onBoard,onFeedback,onSettings,onConnection,onLeave,embedded=false}:{room:RoomSnapshot;playerId:string|null;onAction:(action:OnlineUIAction)=>void;onClose:()=>void;onBoard?:()=>void;onFeedback?:()=>void;onSettings?:()=>void;onConnection?:()=>void;onLeave?:()=>void;embedded?:boolean}){
+ const shell=useDialogFocus(!embedded,onClose,true),me=room.players.find(p=>p.id===playerId);
+ return <div className="online-shade"><section ref={shell} className="online-panel online-small tactical-menu" role={embedded?undefined:'dialog'} aria-modal={embedded?undefined:true} aria-labelledby="online-menu-title">
+ {!embedded&&<header className="online-header"><h2 id="online-menu-title">本局菜单</h2><button aria-label="关闭菜单" onClick={onClose}>×</button></header>}
+ <div className="online-body"><p className="online-pause-state">{room.phase==='paused'?'全员暂停': '其他玩家仍在继续'}</p>
+ <button className="online-primary online-continue" onClick={onClose}>继续游玩</button>
+ {room.mode==='pvp'&&me?.life==='respawning'&&<div className="online-respawn-loadout"><WeaponLoadout value={playerPrimaryWeapon(me)} mode={room.variant} onChange={weapon=>onAction({type:'loadout',weapon,avatar:me.avatar,team:me.team})}/><label>复活后角色<select aria-label="复活后角色" value={me.avatar} onChange={e=>onAction({type:'loadout',weapon:playerPrimaryWeapon(me),avatar:e.target.value as AvatarId,team:me.team})}>{Object.entries(avatars).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label></div>}
+ <div className="online-menu-actions">{room.mode==='coop'&&room.phase==='playing'&&room.pauseUses<2&&!room.pauseVote&&<button onClick={()=>onAction({type:'pauseVote'})}>申请全员暂停</button>}{room.pauseVote&&!room.pauseVote.yes.includes(playerId??'')&&<button onClick={()=>onAction({type:'pauseVote',agree:true})}>同意暂停</button>}{room.phase==='paused'&&<button onClick={()=>onAction({type:'resume'})}>恢复全员对局</button>}{!embedded&&onBoard&&<button onClick={onBoard}>排行榜</button>}{!embedded&&onFeedback&&<button onClick={onFeedback}>反馈与进展</button>}{!embedded&&onSettings&&<button onClick={onSettings}>设置</button>}{onConnection&&<button className="online-tertiary" onClick={onConnection}>连接详情</button>}</div>
+ <button className="online-leave" onClick={()=>onLeave?onLeave():onAction({type:'leave'})}>离开房间</button></div></section></div>;
+}
+export function OnlineResult({room,playerId,onAction,onClose,inline=false,onBoard,onFeedback}:{room:RoomSnapshot;playerId:string|null;onAction:(action:OnlineUIAction)=>void;onClose:()=>void;inline?:boolean;onBoard?:()=>void;onFeedback?:()=>void}){const shell=useDialogFocus(!inline,onClose,true);const result=room.result;if(!result)return <p>正在整理本局成绩…</p>;const content=<section className="online-results"><p className="online-result-kicker">{modeName(room)}</p><h3>{room.mode==='coop'?(result.won?'一起走出了校园':'这次，还差一步'):(result.players.find(p=>p.id===playerId)?.won?'本局获胜':'本局结束')}</h3>{result.team&&<div className="online-team-score"><strong>{result.team.score.toFixed(1)}</strong><span>{result.team.rating} · {clock(result.elapsed)}</span><p>{result.team.eligible?'本局符合参榜条件，可查看合作榜。':result.team.reason||'本局不参加合作排行榜。'}</p></div>}<OnlineAchievements resultId={result.resultId}/><div className="online-result-list">{[...result.players].sort((a,b)=>a.rank-b.rank).map(p=><article key={p.id} className={p.id===playerId?'is-self':''}><strong><small>#{p.rank}</small> {p.nickname}</strong>{onlineResultStats(room.mode,p).map(stat=><span key={stat.label}>{stat.value===null?stat.label+'未记录':stat.value+' '+stat.label}</span>)}</article>)}</div><div className="online-actions"><button className="online-primary" onClick={()=>onAction({type:'leave'})}>返回大厅</button>{onBoard&&<button onClick={onBoard}>排行榜</button>}{onFeedback&&<button onClick={onFeedback}>反馈与进展</button>}<button onClick={onClose}>完成</button></div></section>;return inline?content:<div className="online-shade"><section ref={shell} className="online-panel tactical-menu" role="dialog" aria-modal="true" aria-label="联机结算"><div className="online-body">{content}</div></section></div>;}
+
+export function OnlineMinimap({room,playerId,onOpen,contacts=[],selectedTaskId,spectatingId,stairGuide}:{room:RoomSnapshot;playerId:string|null;onOpen:()=>void;contacts?:OnlineContact[];selectedTaskId?:string;spectatingId?:string;stairGuide?:Snapshot['onlineStairGuide']}){
+ const [floors,setFloors]=useState<MapManifest['floors']>([]);useEffect(()=>{const c=new AbortController();void gameMapManifest(c.signal).then(m=>setFloors(m.floors??[])).catch(()=>{});return()=>c.abort();},[]);
+ const owner=room.players.find(p=>p.id===playerId),authorized=spectateCandidates(room,playerId??''),me=owner?.life==='alive'?owner:authorized.find(p=>p.id===spectatingId)??owner;if(!me)return null;
+ const floor=escapeFloorAt(me.position,floors),snapshot=onlineMapSnapshot(room,me.id,selectedTaskId,floors),markers=room.players.filter(p=>!p.departed&&p.id!==playerId&&(room.mode==='coop'||room.variant==='tdm'&&p.team===me.team)).map(p=>({id:p.id,position:p.position,floor:escapeFloorAt(p.position,floors),label:p.nickname,down:p.life==='downed'}));
+ snapshot.escape!.stairGuide=stairGuide;
+ snapshot.escape!.enemyContacts=contacts.filter((c):c is Extract<OnlineContact,{kind:'seen'}>=>c.kind==='seen'&&c.left>0).filter(c=>(floors?.length??0)>0||Math.abs(c.position[1]-me.position[1])<1.5).map(c=>({id:c.id,position:c.position,floor:escapeFloorAt(c.position,floors),kind:'seen',remaining:c.left}));
+ return <button className="online-minimap" aria-label="打开校园地图" onClick={onOpen}><EscapeMapCanvas snapshot={snapshot} floor={floor} minimap markers={markers}/><span>{floor?floor+' 层':'室外'} · 地图</span></button>;
+}
+export function OnlineHelp({mode='coop',variant='tdm',touch=false}:{mode?:'coop'|'pvp';variant?:'tdm'|'ffa';touch?:boolean}={}){
+ return <div className="online-help">
+  <h3>{mode==='coop'?'一起完成任务，守住撤离':variant==='tdm'?'与队友配合，争取更多击倒':'各自为战，争取更高名次'}</h3>
+  {mode==='coop'?<><p>按任意顺序完成三项任务，再回到校门共同撤离。靠近任务即可互动，不必先切换追踪目标。</p><p>队友倒下后三十秒内可以救援：走近并持续互动五秒，移动或开枪会中断。未获救的队友观战，下一项任务完成后重新加入；任务全部完成后不再复活。</p><p>附近同伴需要救援时优先救援，之后依次处理任务、武器和补给。看画面中的互动提示，确认这次动作。</p></>:<><p>{variant==='tdm'?'两队比拼击倒数，十分钟结束时击倒更多的一方获胜。同队没有友伤。':'十分钟内按个人击倒数排名，同分时死亡更少者优先；完全相同则并列。'}</p><p>倒下后等待五秒，在安全位置复活。复活保护最多两秒，主动开枪即结束。可以在个人菜单选择下一次复活使用的主枪。</p></>}
+  <h3>{touch?'手机操作':'电脑操作'}</h3><p>{touch?'左侧摇杆移动，右侧拖动观察。使用射击、开镜、换弹和互动按钮；地图与交流按钮在画面边缘。':'WASD 移动、鼠标观察，左键射击、右键瞄准，R 换弹、Q 切枪、E 互动。M 地图，T 快捷交流，中键标记。'}{mode==='coop'?(touch?'任务栏可以切换追踪目标。':'Tab 切换追踪任务。'):''}</p>
+  <h3>菜单与断线</h3><p>{mode==='coop'?'个人菜单和地图只停止你的操作，不暂停整局。合作可申请全员暂停，所有在线同伴同意后生效。':'个人菜单和地图只停止你的操作，对战不会暂停；先找掩护再打开。'}意外断线后优先使用“重试连接”回到原席位，不必重新加入满员房间。</p>
+ </div>;
+}

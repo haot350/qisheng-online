@@ -1,0 +1,1 @@
+.touch-layer .touch-left,.touch-layer .touch-movement{transition:opacity 160ms ease}.touch-layer.touch-idle .touch-left,.touch-layer.touch-idle .touch-movement{opacity:.35}.touch-layer.touch-idle .touch-button.active{opacity:1}@media(prefers-reduced-motion:reduce){.touch-layer .touch-left,.touch-layer .touch-movement{transition:none}}

@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.9.2',sequence:40,date:'2026-10-18',version:'Preview 0.9.2',
+ overview:'准备更直接，交战信息更清楚，常用操作更顺手。',
+ summary:['房间内收起装备清单，准备与开始始终容易找到。','队友状态与战斗提示更清楚，手机可长按切换道具。','账号找回入口收纳，小齐记住本机的使用确认。'],
+ items:['调整：主菜单分组显示入口，可从最近玩法进入准备页。','调整：房间默认显示装备摘要，准备操作固定在下方。','调整：队友状态增加底衬与生命条，暂停投票避让枪声方向提示。','新增：手机道具按钮支持长按或拖出切选，松手只选择，短按使用。','新增：摄影时按P打开参数，按V打开相册。','调整：结算可展开真实评分构成，任务跨层指引优先显示已确认的楼梯路线。','调整：账号登录与反馈查询更简洁，南楼室内查看有独立入口。','调整：小齐确认按本机身份保存，点击示例即可继续提问。']
+},
+{
   "id": "preview-0.9.1",
   "sequence": 39,
   "date": "2026-10-17",

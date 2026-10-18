@@ -9,7 +9,9 @@ const publicRoot=path.resolve('public');
 const allowed=['assets/map','assets/media','credits','licenses','branding','audio','avatars','images','map','story','characters/billboards','characters/players','weapons','weapon-cards','vehicles','_headers','404.html','favicon.svg','robots.txt'];
 function runtimeAssets():Plugin{
   let output=path.resolve('dist');
-  return {name:'runtime-assets-only',async buildStart(){await buildGameMapIndex();await buildStaticAssets(path.resolve('.'),'game');},async transformIndexHtml(html,context){
+  let preparing:Promise<void>|undefined;
+  const prepareAssets=()=>{if(!preparing){const job=(async()=>{await buildGameMapIndex();await buildStaticAssets(path.resolve('.'),'game');})();preparing=job;void job.catch(()=>{if(preparing===job)preparing=undefined;});}return preparing;};
+  return {name:'runtime-assets-only',async buildStart(){await prepareAssets();},async transformIndexHtml(html,context){
       const urls=JSON.parse(await readFile(path.resolve('src/generated/static-assets.json'),'utf8'));
       const shareImage=urls['/images/qisheng-online-share-v070.webp'];
       if(typeof shareImage!=='string'||!/^\/assets\/media\/[a-f0-9]{64}\.webp$/.test(shareImage))throw Error('Game share image is missing its content-hash address');
@@ -35,7 +37,7 @@ function runtimeAssets():Plugin{
       }
       for(const name of allowed){const src=path.join(publicRoot,name);try{await stat(src);}catch{continue;}await cp(src,path.join(output,name),{recursive:true});}
     },
-    async configureServer(server){await buildGameMapIndex();await buildStaticAssets(path.resolve('.'),'game');server.middlewares.use(async(req,res,next)=>{
+    async configureServer(server){await prepareAssets();server.middlewares.use(async(req,res,next)=>{
       let pathname:string;try{pathname=decodeURIComponent(new URL(req.url??'/', 'http://localhost').pathname).replace(/^\/+/, '');}catch{res.statusCode=400;res.end();return;}
       // The comparison assets are served only by the development server.
       // Production builds and upload packages keep the accepted campus chunks.
