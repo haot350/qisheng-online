@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {MapDecodeQueue} from './map-decode.ts';
 import {withDeadline} from './network.ts';
+import {warmScreenPixel} from './screen-gpu-warmup';
 
 export type MapRenderContext={renderer:THREE.WebGLRenderer;camera:THREE.PerspectiveCamera};
 const cancelled=()=>new DOMException('Cancelled','AbortError');
@@ -69,8 +70,8 @@ export class MapScenePreparer{
     for(const mesh of meshes)for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])for(const value of Object.values(m))if(value instanceof THREE.Texture&&!this.textureReady.has(value))textures.add(value);
     for(const texture of textures){valid();started=performance.now();renderer.initTexture(texture);this.textureReady.add(texture);this.stats.textures++;this.stats.uploadMs+=performance.now()-started;await yieldTask();}
     valid();started=performance.now();try{await compileMapShaders(renderer,root,camera,this.scene,signal);}catch(error){valid();throw error;}this.stats.compileMs+=performance.now()-started;valid();
-    const target=new THREE.WebGLRenderTarget(2,2),warm=new THREE.Scene();
-    warm.environment=this.scene.environment;warm.fog=this.scene.fog;
+    const warm=new THREE.Scene();
+    warm.environment=this.scene.environment;warm.environmentIntensity=this.scene.environmentIntensity;warm.fog=this.scene.fog;
     this.scene.traverse(o=>{if(o instanceof THREE.Light){const light=o.clone();light.position.copy(o.getWorldPosition(new THREE.Vector3()));warm.add(light);}});
     root.updateMatrixWorld(true);
     try{
@@ -79,13 +80,12 @@ export class MapScenePreparer{
        const proxy=new THREE.Mesh(mesh.geometry,mesh.material);proxy.matrixAutoUpdate=false;proxy.matrix.copy(mesh.matrixWorld);proxy.frustumCulled=false;proxy.receiveShadow=mesh.receiveShadow;warm.add(proxy);return proxy;
       });
       // State changes are synchronous and fully restored before yielding to RAF.
-      const oldTarget=renderer.getRenderTarget(),viewport=renderer.getViewport(new THREE.Vector4()),scissor=renderer.getScissor(new THREE.Vector4()),scissorTest=renderer.getScissorTest(),autoClear=renderer.autoClear,shadowAuto=renderer.shadowMap.autoUpdate,shadowNeeds=renderer.shadowMap.needsUpdate;
       started=performance.now();
-      try{renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=false;renderer.autoClear=true;renderer.setRenderTarget(target);renderer.setScissorTest(false);renderer.setViewport(0,0,2,2);renderer.render(warm,camera);}
-      finally{renderer.setRenderTarget(oldTarget);renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);renderer.autoClear=autoClear;renderer.shadowMap.autoUpdate=shadowAuto;renderer.shadowMap.needsUpdate=shadowNeeds;for(const mesh of batch)warm.remove(mesh);}
+      try{warmScreenPixel(renderer,()=>renderer.render(warm,camera));}
+      finally{for(const mesh of batch)warm.remove(mesh);}
       this.stats.uploadMs+=performance.now()-started;await yieldTask();
      }
-    }finally{target.dispose();}
+    }finally{warm.clear();}
    }
    // Map nodes are immutable. Compute their final world matrices once instead of
    // recomposing several thousand transforms on every rendered frame.

@@ -36,7 +36,7 @@ test('0.9.0 rejects stale protocol/rules, missing assets, unsafe assistant and w
  ]){const report=evidence();mutate(report);assert.throws(()=>verifiedDeploymentEvidence(report,id,now));}
 });
 
-for(const [version,protocol,rollback] of [['0.9.3','campus-mp-0.9.0','0.9.2'],['0.9.4','campus-mp-0.9.4','0.9.3']]){
+for(const [version,protocol,rollback] of [['0.9.3','campus-mp-0.9.0','0.9.2'],['0.9.4','campus-mp-0.9.4','0.9.3'],['0.9.5','campus-mp-0.9.4','0.9.4']]){
  test(version+' registration retains privacy/data checks and enforces its exact protocol and rollback',()=>{
   const releaseId=id.replace('0.9.0',version);
   const report=JSON.parse(JSON.stringify(evidence()).replaceAll(id,releaseId));

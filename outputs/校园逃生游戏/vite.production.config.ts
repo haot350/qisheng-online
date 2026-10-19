@@ -12,6 +12,9 @@ function runtimeAssets():Plugin{
   let preparing:Promise<void>|undefined;
   const prepareAssets=()=>{if(!preparing){const job=(async()=>{await buildGameMapIndex();await buildStaticAssets(path.resolve('.'),'game');})();preparing=job;void job.catch(()=>{if(preparing===job)preparing=undefined;});}return preparing;};
   return {name:'runtime-assets-only',async buildStart(){await prepareAssets();},async transformIndexHtml(html,context){
+      const metadata=JSON.parse(await readFile(new URL('./package.json',import.meta.url),'utf8'));
+      if(!/^\d+\.\d+\.\d+$/.test(metadata.version))throw Error('A numeric release version is required for game metadata');
+      html=html.replaceAll('__GAME_RELEASE_LABEL__','Preview '+metadata.version);
       const urls=JSON.parse(await readFile(path.resolve('src/generated/static-assets.json'),'utf8'));
       const shareImage=urls['/images/qisheng-online-share-v070.webp'];
       if(typeof shareImage!=='string'||!/^\/assets\/media\/[a-f0-9]{64}\.webp$/.test(shareImage))throw Error('Game share image is missing its content-hash address');

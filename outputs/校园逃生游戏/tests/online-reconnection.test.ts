@@ -25,3 +25,21 @@ test('leaving a room gives the lobby refresh a fresh, non-aborted request signal
  try{(client as any).bind(room);await client.leave();await client.refresh();assert.equal(requested,true);assert.equal(client.view.status,'lobby');assert.equal(client.view.error,undefined);assert.deepEqual(client.view.rooms,rooms);assert.equal(client.room,null);}
  finally{client.dispose();globalThis.fetch=originalFetch;}
 });
+
+test('refreshing room listings cannot erase a recoverable reserved-seat state',async()=>{
+ const storage=new Map<string,string>(),client=new OnlineClient(),room=fakeRoom(),originalFetch=globalThis.fetch;
+ Object.defineProperty(globalThis,'sessionStorage',{configurable:true,value:{getItem:(key:string)=>storage.get(key),setItem:(key:string,value:string)=>storage.set(key,value),removeItem:(key:string)=>storage.delete(key)}});
+ globalThis.fetch=async()=>new Response(JSON.stringify({rooms:[]}));
+ try{client.playerId='p0';(client as any).bind(room);room.callbacks.get('leave')!(1006);assert.equal(client.view.errorCode,'RECONNECT_RETRY');assert.equal(client.hasResumeSession(),true);
+  await client.refresh();assert.equal(client.view.status,'error');assert.equal(client.view.errorCode,'RECONNECT_RETRY');assert.equal(client.hasResumeSession(),true);assert.deepEqual(client.view.rooms,[]);
+ }finally{client.dispose();globalThis.fetch=originalFetch;delete (globalThis as any).sessionStorage;}
+});
+
+test('refreshing room listings cannot turn an uncertain admission into a fresh-create state',async()=>{
+ const client=new OnlineClient(),originalFetch=globalThis.fetch;
+ (client as any).pendingAdmission={id:'12345678-1234-1234-1234-123456789012',playerId:'synthetic',mode:'pvp',variant:'tdm'};
+ client.view={status:'error',rooms:[],currentRoom:null,error:'正在确认原加入请求',errorCode:'ADMISSION_UNCERTAIN'};
+ globalThis.fetch=async()=>new Response(JSON.stringify({rooms:[]}));
+ try{await client.refresh();assert.equal(client.view.status,'error');assert.equal(client.view.errorCode,'ADMISSION_UNCERTAIN');assert.equal(client.hasUncertainAdmission(),true);}
+ finally{(client as any).pendingAdmission=null;client.dispose();globalThis.fetch=originalFetch;}
+});

@@ -236,13 +236,18 @@ export class OnlineClient {
       const { rooms } = await this.request<{ rooms: LobbyView["rooms"] }>(
         "/v1/rooms",
       );
-      if (serial === this.operation)
+      if (serial === this.operation) {
+        // Browsing fresh listings does not release an uncertain admission or a reserved seat.
+        const recovering=!this.room&&(this.hasUncertainAdmission()||this.hasResumeSession())&&['error','reconnecting'].includes(this.view.status);
         this.set({
           rooms,
+          ...(recovering?{}:{
           status: this.room ? this.view.status : "lobby",
           error: undefined,
           errorCode: undefined,
+          }),
         });
+      }
     } catch (e) {
       if (serial === this.operation && !this.disposed)
         this.set({
@@ -702,6 +707,7 @@ export class OnlineClient {
         room.send("latency-ack", { nonce: e.nonce });
       }
     });
+    room.send("client-capabilities", {rematch:true});
     room.send("latency", { id: Date.now(), sentAt: performance.now() });
     room.onMessage("loading-retry", (e: { epoch: number; retryAfterMs: number }) => {
       if (this.room !== room || this.disposed || !Number.isSafeInteger(e?.epoch) ||
@@ -756,6 +762,7 @@ export class OnlineClient {
       this.clearResync();
       this.lastSerial = 0;
       this.saveResume(room, true);
+      room.send("client-capabilities", {rematch:true});
       this.requestResync(room);
       this.set({
         status:
@@ -969,7 +976,7 @@ export class OnlineClient {
       (this.view.status === "playing" || this.view.status === "lobby")
     ) {
       if (
-        ["start", "ready", "loadout", "consent", "pause", "resume"].includes(
+        ["start", "ready", "loadout", "consent", "pause", "resume", "rematch"].includes(
           type,
         )
       )

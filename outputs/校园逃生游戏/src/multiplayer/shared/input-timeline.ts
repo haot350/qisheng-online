@@ -79,6 +79,12 @@ export class InputTimeline {
  }
  receipt(tick:number):InputReceipt{return{epoch:this.inputEpoch,appliedSeq:this.acknowledgement,acceptedSeq:this.acceptedSeq,cancelledThrough:this.cancelledThrough,serverTick:tick,appliedTargetTick:this.appliedTargetTick,queueDepth:this.pending.length,inputAgeTicks:Number.isFinite(this.lastReceived)?Math.max(0,tick-this.lastReceived):0,reason:this.timedOut?'input-timeout':tick-this.reasonAt<=1?this.reason:'none',lastReason:this.reason,lastReasonTick:Number.isFinite(this.reasonAt)?this.reasonAt:0};}
  get epoch(){return this.inputEpoch;}
+ /** Trusted round boundary: expire every old control/action without rewinding connection counters. */
+ nextRound(tick:number,yaw:number,pitch:number){
+  const seq=Math.max(this.acceptedSeq,this.acknowledgement),actionAck=Math.max(this.lastActionId,this.actionAcknowledgement);
+  this.inputEpoch++;this.reset(seq,actionAck,tick,yaw,pitch);this.held.inputEpoch=this.inputEpoch;this.mark('input-reset',tick);
+  return {seq,actionAck,epoch:this.inputEpoch};
+ }
  get depth(){return this.pending.length;}
  get ack(){return this.acknowledgement;}
 }

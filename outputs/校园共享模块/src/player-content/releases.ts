@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.9.5',sequence:43,date:'2026-10-19',version:'Preview 0.9.5',
+ overview:'先熟悉操作，再与同伴继续下一局。',
+ summary:['新增本机操作练习，逐步熟悉观察、移动、射击和互动。','支持的客户端可在结算后保留队伍，再来一局。','准星和文字可调整，重试连接时保留原席位状态。'],
+ items:['新增：校园突围操作练习，不参加排行榜，也不影响故事和本机纪录。','新增：结算后可返回原房间准备，保留装备与队伍；所有成员需要使用支持续局的客户端。','新增：界面文字大小、准星大小与描边设置，队伍标识增加文字与形状。','修复：刷新房间列表时，重连提示可能消失，导致误走普通入房。','调整：减少地图画面准备中的重复处理。']
+},
+{
  id:'preview-0.9.4',sequence:42,date:'2026-10-18',version:'Preview 0.9.4',
  overview:'晴天、阴天和小雨，为校园带来不同的光影。',
  summary:['创建联机房间时可以选择晴天、阴天或小雨。','漫游、突围和大飞可在设置中选择天气，故事保留原有氛围。','Windows 测试版更新战术大厅与分组设置。'],

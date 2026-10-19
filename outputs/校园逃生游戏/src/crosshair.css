@@ -1,12 +1,12 @@
 /* A zero-size point keeps every aiming mark centred on the render canvas. */
 .combat-crosshair-layer{position:fixed;inset:0;pointer-events:none;z-index:3}
 .reticle.escape-reticle.combat-crosshair{position:absolute;left:50%;top:50%;width:0;height:0;transform:none;display:block;overflow:visible;pointer-events:none}
-.reticle.escape-reticle.combat-crosshair>.combat-crosshair-dot{position:absolute;left:0;top:0;display:block;width:4px;height:4px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #111b,0 0 3px #0009;transform:translate(-50%,-50%)}
-.reticle.escape-reticle.combat-crosshair>.reticle-line{position:absolute;display:block;background:#fff;box-shadow:0 0 0 1px #1118,0 1px 2px #0009;pointer-events:none}
-.reticle.escape-reticle.combat-crosshair>.reticle-line.top{left:-1px;top:calc(-1 * var(--spread-gap) - 7px);width:2px;height:7px}
-.reticle.escape-reticle.combat-crosshair>.reticle-line.bottom{left:-1px;top:var(--spread-gap);width:2px;height:7px}
-.reticle.escape-reticle.combat-crosshair>.reticle-line.left{left:calc(-1 * var(--spread-gap) - 7px);top:-1px;width:7px;height:2px}
-.reticle.escape-reticle.combat-crosshair>.reticle-line.right{left:var(--spread-gap);top:-1px;width:7px;height:2px}
+.reticle.escape-reticle.combat-crosshair>.combat-crosshair-dot{position:absolute;left:0;top:0;display:block;width:var(--crosshair-dot-size,4px);height:var(--crosshair-dot-size,4px);border-radius:50%;background:#fff;box-shadow:var(--crosshair-shadow,0 0 0 1px #111b,0 0 3px #0009);transform:translate(-50%,-50%)}
+.reticle.escape-reticle.combat-crosshair>.reticle-line{position:absolute;display:block;background:#fff;box-shadow:var(--crosshair-shadow,0 0 0 1px #1118,0 1px 2px #0009);pointer-events:none}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.top{left:var(--crosshair-half-thickness,-1px);top:calc(-1 * var(--spread-gap) - var(--crosshair-length,7px));width:var(--crosshair-thickness,2px);height:var(--crosshair-length,7px)}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.bottom{left:var(--crosshair-half-thickness,-1px);top:var(--spread-gap);width:var(--crosshair-thickness,2px);height:var(--crosshair-length,7px)}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.left{left:calc(-1 * var(--spread-gap) - var(--crosshair-length,7px));top:var(--crosshair-half-thickness,-1px);width:var(--crosshair-length,7px);height:var(--crosshair-thickness,2px)}
+.reticle.escape-reticle.combat-crosshair>.reticle-line.right{left:var(--spread-gap);top:var(--crosshair-half-thickness,-1px);width:var(--crosshair-length,7px);height:var(--crosshair-thickness,2px)}
 .reticle.escape-reticle.combat-crosshair.is-aiming>.reticle-line{display:none}
 .reticle.escape-reticle.combat-crosshair>.combat-crosshair-hit{position:absolute;left:0;top:0;width:38px;height:38px;transform:translate(-50%,-50%);font-style:normal;line-height:1;color:#f3dbab}
 .reticle.escape-reticle.combat-crosshair>.combat-crosshair-hit.hit-head{color:#fff0b6}

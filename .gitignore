@@ -399,7 +399,7 @@
 !/outputs/校园交互网站/site/scripts/telemetry.test.mjs
 !/outputs/校园交互网站/site/scripts/validate-static-styles.mjs
 !/outputs/校园交互网站/site/tsconfig.json
-!/outputs/校园交互网站/site/vendor/qisheng-shared-0.9.4.tgz
+!/outputs/校园交互网站/site/vendor/qisheng-shared-0.9.5.tgz
 !/outputs/校园交互网站/site/vite.config.ts
 !/outputs/校园交互网站/site/vite.production.config.ts
 !/outputs/校园共享模块/README.md
@@ -545,7 +545,7 @@
 !/outputs/校园排行榜服务/tests/security-efficiency-v070.test.ts
 !/outputs/校园排行榜服务/tests/upgrade.test.ts
 !/outputs/校园排行榜服务/tsconfig.json
-!/outputs/校园排行榜服务/vendor/qisheng-shared-0.9.4.tgz
+!/outputs/校园排行榜服务/vendor/qisheng-shared-0.9.5.tgz
 !/outputs/校园服务器部署/README.md
 !/outputs/校园服务器部署/docs/native-distribution.md
 !/outputs/校园服务器部署/scripts/admin-csp-policy.mjs
@@ -606,6 +606,8 @@
 !/outputs/校园联机服务/src/queue-poll.ts
 !/outputs/校园联机服务/src/queue-room.ts
 !/outputs/校园联机服务/src/queue.ts
+!/outputs/校园联机服务/src/rematch-gate.ts
+!/outputs/校园联机服务/src/result-outbox.ts
 !/outputs/校园联机服务/src/room.ts
 !/outputs/校园联机服务/src/server.ts
 !/outputs/校园联机服务/src/snapshot-budget.ts
@@ -625,13 +627,16 @@
 !/outputs/校园联机服务/tests/queue-room.test.mjs
 !/outputs/校园联机服务/tests/queue.test.mjs
 !/outputs/校园联机服务/tests/recipient-wire.test.mjs
+!/outputs/校园联机服务/tests/rematch-control.test.mjs
+!/outputs/校园联机服务/tests/rematch-round.test.mjs
+!/outputs/校园联机服务/tests/result-outbox.test.mjs
 !/outputs/校园联机服务/tests/security-room-v070.test.mjs
 !/outputs/校园联机服务/tests/security-v070.test.mjs
 !/outputs/校园联机服务/tests/simulation.test.mjs
 !/outputs/校园联机服务/tests/snapshot-query-cache-v070.test.mjs
 !/outputs/校园联机服务/tests/support/rejected-snapshot-cache.mjs
 !/outputs/校园联机服务/tests/weather-v094.test.mjs
-!/outputs/校园联机服务/vendor/qisheng-shared-0.9.4.tgz
+!/outputs/校园联机服务/vendor/qisheng-shared-0.9.5.tgz
 !/outputs/校园逃生游戏/README.md
 !/outputs/校园逃生游戏/account/index.html
 !/outputs/校园逃生游戏/copyright/index.html
@@ -697,9 +702,12 @@
 !/outputs/校园逃生游戏/src/SessionMenuActions.tsx
 !/outputs/校园逃生游戏/src/SettingsPanel.tsx
 !/outputs/校园逃生游戏/src/StoryUI.tsx
+!/outputs/校园逃生游戏/src/TeamIdentity.tsx
 !/outputs/校园逃生游戏/src/TouchControls.tsx
+!/outputs/校园逃生游戏/src/TrainingUI.tsx
 !/outputs/校园逃生游戏/src/WeaponLoadout.tsx
 !/outputs/校园逃生游戏/src/WeatherChoice.tsx
+!/outputs/校园逃生游戏/src/accessibility.css
 !/outputs/校园逃生游戏/src/account-entry.tsx
 !/outputs/校园逃生游戏/src/account-page.css
 !/outputs/校园逃生游戏/src/achievement-icons.ts
@@ -886,6 +894,7 @@
 !/outputs/校园逃生游戏/src/resource-leases.ts
 !/outputs/校园逃生游戏/src/resources.ts
 !/outputs/校园逃生游戏/src/rules.ts
+!/outputs/校园逃生游戏/src/screen-gpu-warmup.ts
 !/outputs/校园逃生游戏/src/session-flow.ts
 !/outputs/校园逃生游戏/src/settings-page.css
 !/outputs/校园逃生游戏/src/static-assets.ts
@@ -906,8 +915,11 @@
 !/outputs/校园逃生游戏/src/story/types.ts
 !/outputs/校园逃生游戏/src/streaming.ts
 !/outputs/校园逃生游戏/src/styles.css
+!/outputs/校园逃生游戏/src/team-identity.css
 !/outputs/校园逃生游戏/src/telemetry.ts
 !/outputs/校园逃生游戏/src/touch-idle.css
+!/outputs/校园逃生游戏/src/training.css
+!/outputs/校园逃生游戏/src/training.ts
 !/outputs/校园逃生游戏/src/transmission.ts
 !/outputs/校园逃生游戏/src/triangle-blocker.ts
 !/outputs/校园逃生游戏/src/types.ts
@@ -1073,6 +1085,7 @@
 !/outputs/校园逃生游戏/tests/streaming-v071.test.ts
 !/outputs/校园逃生游戏/tests/streaming.test.ts
 !/outputs/校园逃生游戏/tests/touch-lifecycle.test.ts
+!/outputs/校园逃生游戏/tests/training-accessibility.test.ts
 !/outputs/校园逃生游戏/tests/transmission.test.ts
 !/outputs/校园逃生游戏/tests/triangle-blocker-070.test.ts
 !/outputs/校园逃生游戏/tests/ui-guidance-v033.test.ts
@@ -1096,7 +1109,7 @@
 !/outputs/校园逃生游戏/tests/weather-scene-v094.test.ts
 !/outputs/校园逃生游戏/tests/world-ray.test.ts
 !/outputs/校园逃生游戏/tsconfig.json
-!/outputs/校园逃生游戏/vendor/qisheng-shared-0.9.4.tgz
+!/outputs/校园逃生游戏/vendor/qisheng-shared-0.9.5.tgz
 !/outputs/校园逃生游戏/vite.config.ts
 !/outputs/校园逃生游戏/vite.production.config.ts
 !/outputs/齐盛原生客户端/AGENTS.md

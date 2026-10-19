@@ -11,6 +11,7 @@ import './settings-page.css';
 const sections = [
   {id:'controls', name:'操作', detail:'观察与按键'},
   {id:'graphics', name:'画面', detail:'清晰度与视野'},
+  {id:'accessibility', name:'可读性', detail:'文字与准星'},
   {id:'audio', name:'声音', detail:'音乐与音效'},
   {id:'gameplay', name:'游玩', detail:'当前玩法偏好'},
   {id:'storage', name:'地图下载', detail:'本机资源与存储'},
@@ -25,9 +26,9 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
   const nav=useRef<HTMLElement>(null);
   const field=(title:string,description:string|undefined,content:ReactNode)=>
     <div className="settings-field"><div className="settings-field-copy"><span>{title}</span>{description&&<p>{description}</p>}</div>{content}</div>;
-  const range=(key:'sensitivity'|'fov'|'music'|'sfx',label:string,min:number,max:number,step:number,display:string)=>
-    <label className="settings-slider"><span>{label}<output>{display}</output></span><input type="range" min={min} max={max} step={step} value={settings[key]} onChange={e=>onChange({...settings,[key]:Number(e.target.value)})}/></label>;
-  const toggle=(key:'headBob'|'recoilShake'|'aimAssist'|'realityHints'|'onlinePing'|'reducedMotion',label:string,description?:string)=>
+  const range=(key:'sensitivity'|'fov'|'music'|'sfx'|'crosshairSize'|'uiTextScale',label:string,min:number,max:number,step:number,display:string)=>
+    <label className="settings-slider"><span>{label}<output>{display}</output></span><input type="range" aria-label={label} min={min} max={max} step={step} value={settings[key]??1} onChange={e=>onChange({...settings,[key]:Number(e.target.value)})}/></label>;
+  const toggle=(key:'headBob'|'recoilShake'|'aimAssist'|'realityHints'|'onlinePing'|'reducedMotion'|'crosshairOutline',label:string,description?:string)=>
     <label className="settings-toggle"><span><strong>{label}</strong>{description&&<small>{description}</small>}</span><input type="checkbox" role="switch" checked={!!settings[key]} onChange={e=>onChange({...settings,[key]:e.target.checked})}/></label>;
   const current=sections.find(s=>s.id===section)!;
   return <div className="settings-workspace">
@@ -53,7 +54,14 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
           {mode!=='dafei'&&toggle('headBob','轻微行走晃动')}
           {modeCapabilities(mode).enemies&&toggle('recoilShake',mode==='dafei'?'碰撞镜头震动':'射击镜头震动')}
         </>}
-        {section==='audio'&&<>
+        {section==='accessibility'&&<>
+          {range('uiTextScale','界面文字',1,1.3,.05,Math.round((settings.uiTextScale??1)*100)+'%')}
+          {range('crosshairSize','准星大小',.75,1.75,.05,Math.round((settings.crosshairSize??1)*100)+'%')}
+          {toggle('crosshairOutline','准星描边','在明暗背景上更容易看清准星。')}
+          <div className="settings-reticle-preview" aria-label="准星预览"><svg viewBox="0 0 72 72" aria-hidden="true"><g stroke="#fff" strokeWidth={2*(settings.crosshairSize??1)} style={{filter:settings.crosshairOutline!==false?'drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000)':'none'}}><path d="M36 15V25M36 47V57M15 36H25M47 36H57"/><circle cx="36" cy="36" r={2*(settings.crosshairSize??1)} fill="#fff" stroke="none"/></g></svg></div>
+          <p className="settings-accessibility-note">队伍同时用文字与符号区分：◆ 蓝队 · ▲ 红队。</p>
+        </>}
+        {section==='audio' &&<>
           {range('music','音乐音量',0,1,.01,Math.round(settings.music*100)+'%')}
           {range('sfx','环境与动作音效',0,1,.01,Math.round(settings.sfx*100)+'%')}
           {mode==='escape'&&<div className="settings-choice-block"><h3>突围配乐</h3><EscapeMusicChoice settings={settings} onChange={onChange}/></div>}

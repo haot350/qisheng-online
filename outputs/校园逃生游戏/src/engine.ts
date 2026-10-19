@@ -1,3 +1,4 @@
+import {CombatTraining,trainingPlan} from './training';
 import {WeatherScene} from './weather-scene';
 import {stairGuideForRoute,type StairGuide} from './escape-stair-guidance';
 import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGadget,cycleGadget,helmetDamage,grenadeDamage,useCards,confiscatedHealth,type GadgetId,type GadgetLoot,type GrenadeState} from '@qisheng/shared/gadgets';
@@ -562,6 +563,7 @@ export async function createGame(
     escapeContacts = new EscapeContacts();
   let escapeTacticalAgents: TacticalAgent[] = [],
     contactProbe = 0;
+  let training:CombatTraining|null=null;
   let escapeRound: EscapeRound | null = null,
     escapePlan: EscapePlan | null = null,
     escapeMapOpen = false,
@@ -686,6 +688,7 @@ export async function createGame(
     return {
       gadgets:mode==='escape'?{...gadgetInventory,cardsLeft:Math.max(0,gadgetInventory.cardsUntil-elapsed),confiscating:cardsPursuit.windup>0,canUseCards:true,loot:gadgetLoot,projectiles:grenades}:undefined,
       ranking: ranked?.snapshot(),
+      training:training?.read(),
       phase,
       mode,
       mouseLocked: document.pointerLockElement === canvas,
@@ -769,6 +772,7 @@ export async function createGame(
     data: Record<string, unknown>,
     time = elapsed,
   ) {
+    training?.record(type,data);
     ranked?.append(time, type, data);
   }
   function rankSpawn(n: NPC, initial = false) {
@@ -782,6 +786,7 @@ export async function createGame(
     });
   }
   async function prepareRankedRound(token: number, signal: AbortSignal) {
+    if(training)return;
     if (mode !== "escape" && mode !== "dafei") return;
     input.resetControlMethod?.();
     const recorder = new RankingRecorder(() => {
@@ -1131,6 +1136,7 @@ export async function createGame(
     accumulator = 0;
     if (open) {
       escapeMapOpen = true;
+      training?.map(true);
       input.setEnabled(false);
       audio.update(0, true);
       input.freePointerLock?.();
@@ -1173,6 +1179,7 @@ export async function createGame(
         return;
       escapeMapClosing = false;
       escapeMapOpen = false;
+      training?.map(false);
       escapeMapClosing = false;
       input.setEnabled(true);
       last = performance.now();
@@ -1204,6 +1211,7 @@ export async function createGame(
     escapeTacticalAgents = [];
     contactProbe = 0;
     escapeRound = null;
+    training = null;
     escapePlan = null;
     escapeMapOpen = false;
     escapeMapClosing = false;
@@ -1608,7 +1616,7 @@ export async function createGame(
         const item=gadgetLoot.find(g=>g.id===interaction.id);if(item&&collectGadget(gadgetInventory,item.kind)){item.usedBy.push('local');rankEvent('gadget',{action:'pickup',kind:item.kind,id:item.id});audio.cue('pickup');info(({helmet:'已装备头盔。',grenade:'手榴弹已拾取。',cards:'扑克牌已拾取。'})[item.kind],2);}
       } else if (interaction.kind === "supply") interact(interaction.id);
     }
-    const events = escapeRound.update(dt, {
+    const events = escapeRound.update(training ? 0 : dt, {
       position: position.toArray() as Vec3,
       interactPressed:
         interactPressed &&
@@ -1630,7 +1638,7 @@ export async function createGame(
       contested: (task) => escapeThreat(task.sites[0], task.radius),
       extractionClear: !escapeThreat(escapePlan.extraction, 6),
     });
-    elapsed = escapeRound.elapsed;
+    if(!training)elapsed = escapeRound.elapsed;
     extraction = escapeRound.extractionProgress;
     for (const event of events) {
       if (event.type === "ammo-reward") {
@@ -2160,6 +2168,18 @@ export async function createGame(
           fallbackTasks: validatedEscapeFallback(),
         });
       retryEscapePlan = null;
+      if(training){
+        const site=VALIDATED_ESCAPE_SITES.find(s=>s.id==='sports-road')!;
+        const target=v(site.position),offsets:Vec3[]=[[0,0,6],[6,0,0],[0,0,-6],[-6,0,0]];
+        const spawn=offsets.map(offset=>target.clone().add(v(offset))).find(candidate=>{
+          const support=world.supportAt(candidate,1.75);if(!support?.clear||Math.abs(support.height-candidate.y)>1)return false;
+          candidate.y=support.height;const route=escapeRouteValid(candidate.toArray() as Vec3,site.position);return route.complete&&route.length<16;
+        });
+        if(!spawn)throw new Error('练习区域暂时未能准备好，请重试。');
+        escapePlan=trainingPlan(site,spawn.toArray() as Vec3,roundSeed);
+        position.copy(spawn);lastSafe.copy(position);world.restorePlayer(position,false);
+        yaw=Math.atan2(-(target.x-position.x),-(target.z-position.z));pitch=0;
+      }
       escapeRound = new EscapeRound({
         difficulty: escapeSelectedDifficulty,
         plan: escapePlan,
@@ -2170,7 +2190,7 @@ export async function createGame(
       escapeRecovery.reset();
       escapeRouteClock = 0;
       footstepSerial = 0;
-      lastEscapeSession = {
+      if(!training)lastEscapeSession = {
         seed: roundSeed,
         ids: [...roundRoster],
         difficulty: escapeSelectedDifficulty,
@@ -2214,9 +2234,9 @@ export async function createGame(
         "exit",
       );
       gate.visible = false;
-      info("三项行动已公布。", 2);
+      if(!training)info("三项行动已公布。", 2);
       try {
-        if (!localStorage.getItem("qisheng-escape-controls-v031")) {
+        if (!training && !localStorage.getItem("qisheng-escape-controls-v031")) {
           info(
             touchControls()
               ? settings.escapeAimMode === "hold"
@@ -2384,6 +2404,7 @@ export async function createGame(
         : "",
       renderProfile().mobileTextures ? "mobile-textures" : "full-textures",
       settings.quality,
+      next === "escape" && loadout?.training ? "practice" : "round",
     ].join(":");
   }
   function releasePrepared(value: PreparedMode | null) {
@@ -2462,7 +2483,7 @@ export async function createGame(
     const value: PreparedMode = {
       key,
       mode: next,
-      roster: { ...pendingRoster, ids: [...pendingRoster.ids] },
+      roster: { ...pendingRoster, ids: next === "escape" && loadout?.training ? [] : [...pendingRoster.ids] },
       mobile: renderProfile().mobileTextures,
     };
     let committed = false;
@@ -2776,7 +2797,7 @@ export async function createGame(
       await pointer;
       if (dead || token !== enterToken || controller.signal.aborted) return;
       if (!modePrepared(next, loadout)) throw Error("本局准备已更改。");
-      if (!rankingRetryStarted) {
+      if (!loadout?.training && !rankingRetryStarted) {
         rankingRetryStarted = true;
         void rankingClient
           .me()
@@ -2787,6 +2808,7 @@ export async function createGame(
       preparedMode = null;
       const selected = value!.roster;
       mode = next;
+      training = next === "escape" && loadout?.training ? new CombatTraining() : null;
       roundRoster = [...selected.ids];
       roundSeed = selected.seed;
       roundMobile = value!.mobile;
@@ -3519,7 +3541,7 @@ export async function createGame(
     driving?.stop();
     driveChallenge?.finish();
     audio.finish(won);
-    if (mode === "escape" && escapeRound) {
+    if (!training && mode === "escape" && escapeRound) {
       if (!won && escapeRound.phase !== "failed") escapeRound.fail("health");
       const result = escapeRound.snapshot().result;
       escapeBestBeforeResult = escapeBest;
@@ -5708,6 +5730,10 @@ export async function createGame(
         footstepSerial++;
         footstepPoint.copy(position);
       }
+    }
+    if(training){
+      training.observe({position:position.toArray() as Vec3,yaw,pitch,aiming,ammo:magazine().ammo,weapon,reloading:magazine().reloadLeft>0,active:phaseActive()&&!buffering});
+      if(training.read().complete){pause();return;}
     }
     if (mode !== "escape") updateGoal();
     if (story && storyWorld) {

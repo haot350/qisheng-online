@@ -4,6 +4,8 @@ import {readRecentPlay,saveRecentPlay,type RecentPlay} from './recent-mode';
 import {GadgetHUD} from './GadgetHUD';
 import {WeaponLoadout} from './WeaponLoadout';
 import {Crosshair} from './Crosshair';
+import {TrainingHUD,TrainingComplete} from './TrainingUI';
+import './accessibility.css';
 import {
   lazy,
   Suspense,
@@ -406,8 +408,9 @@ export default function App() {
     ),
     [escapeEntry, setEscapeEntry] = useState<EscapeEntry>("single"),
     [pvpVariant, setPvpVariant] = useState<"tdm" | "ffa">("tdm");
+  const [practice,setPractice]=useState(()=>new URLSearchParams(location.search).get('practice')==='1');
   const [recentPlay,setRecentPlay]=useState<RecentPlay|null>(readRecentPlay);
-  const prepareRecentPlay=(value:RecentPlay)=>{if(!guardEntry(entryFor(value.mode,value.entry,value.variant)))return;setSelectedMode(value.mode);setEscapeEntry(value.entry);setPvpVariant(value.variant);setMenuScreen('prepare');};
+  const prepareRecentPlay=(value:RecentPlay)=>{if(!guardEntry(entryFor(value.mode,value.entry,value.variant)))return;setPractice(false);setSelectedMode(value.mode);setEscapeEntry(value.entry);setPvpVariant(value.variant);setMenuScreen('prepare');};
   const [accountBusy,setAccountBusy] = useState(false);
   const pages = useMenuPages(new URLSearchParams(location.search).get("panel")==="leaderboard"?"ranking":null,accountBusy);
   const [requestedRankPanel,setRequestedRankPanel] = useState<"board"|"recent">("board");
@@ -444,6 +447,7 @@ export default function App() {
       () => new URLSearchParams(location.search).get("panel") === "online",
     ),
     [onlineRoomKey, setOnlineRoomKey] = useState<string | null>(null);
+  const previousOnlinePhase=useRef<{roomId:string;phase:string}|null>(null);
   useEffect(() => {
     const client = onlineClient.current!;
     const off = client.subscribeMenu(() => {
@@ -453,9 +457,19 @@ export default function App() {
         setOnlineOpen(true);
       } else if (client.view.currentRoom) {
         const room = client.view.currentRoom;
+        const previous=previousOnlinePhase.current;
+        if(room.phase==='ended' && (previous?.roomId!==room.roomId || previous.phase!=='ended'))game.current?.pause();
+        if(previous?.roomId===room.roomId && previous.phase==='ended' && room.phase==='lobby'){
+          game.current?.clearInput?.();
+          pages.clear();
+          setConnectionDetails(false);
+          setOnlineOpen(true);
+          setAttempt(n=>n+1);
+        }
         const available = gameOperations.available(entryFor('escape', room.mode==='coop'?'coop':'pvp', room.variant==='ffa'?'ffa':'tdm'));
         setOnlineRoomKey(room.phase==='lobby' && !available ? null : room.roomId);
       }
+      previousOnlinePhase.current=client.view.currentRoom?{roomId:client.view.currentRoom.roomId,phase:client.view.currentRoom.phase}:null;
       if (client.view.currentRoom?.phase === "playing") setOnlineOpen(false);
     });
     return off;
@@ -540,6 +554,9 @@ export default function App() {
       case "start":
         if (client.view.currentRoom && !guardEntry(entryFor('escape',client.view.currentRoom.mode==='coop'?'coop':'pvp',client.view.currentRoom.variant==='ffa'?'ffa':'tdm'))) break;
         client.send("start", {});
+        break;
+      case "rematch":
+        if(client.view.currentRoom && guardEntry(entryFor('escape',client.view.currentRoom.mode==='coop'?'coop':'pvp',client.view.currentRoom.variant==='ffa'?'ffa':'tdm')))client.send('rematch',{resultId:a.resultId});
         break;
       case "spectateNext":
         game.current?.onlineSpectateNext?.();
@@ -834,8 +851,9 @@ export default function App() {
           selectedMode,
           selectedMode === "escape"
             ? {
-                primary,
-                difficulty: settingsRef.current.escapeDifficulty ?? "standard",
+                primary: practice ? "m4a1" : primary,
+                difficulty: practice ? "easy" : settingsRef.current.escapeDifficulty ?? "standard",
+                training: practice,
               }
             : undefined,
           { signal: abort.signal, onProgress },
@@ -870,6 +888,7 @@ export default function App() {
     escapeEntry,
     primary,
     settings.quality,
+    practice,
     settings.escapeDifficulty,
     touchLayout,
     saveData,
@@ -951,8 +970,9 @@ export default function App() {
           mode,
           mode === "escape"
             ? {
-                primary,
-                difficulty: settingsRef.current.escapeDifficulty ?? "standard",
+                primary: practice ? "m4a1" : primary,
+                difficulty: practice ? "easy" : settingsRef.current.escapeDifficulty ?? "standard",
+                training: practice,
               }
             : undefined,
         );
@@ -982,7 +1002,7 @@ export default function App() {
     if (!game.current || operations.current.busy || snapshot.phase !== "menu")
       return;
     if (selectedMode === "dafei") prepareIntro();
-    else if (selectedMode === "escape")
+    else if (selectedMode === "escape" && !practice)
       withBriefing("solo", () => start("escape"));
     else start(selectedMode);
   };
@@ -1049,6 +1069,7 @@ export default function App() {
     setModeBlocked(null);
     setBriefing(null);
     setConnectionDetails(false);
+    setPractice(false);
     setMenuScreen("home");
     setReplayGuidanceOnContinue(false);
     setMenuReading(null);
@@ -1248,7 +1269,7 @@ export default function App() {
 
   const [assistantReturnScreen,setAssistantReturnScreen]=useState<'home'|'modes'|'prepare'|null>(null);
   const assistantScope=useRef({key:'',token:crypto.randomUUID()});
-  useEffect(()=>{if(snapshot.phase!=='playing')return;const room=onlineView.currentRoom;const value:RecentPlay={mode:snapshot.mode,entry:room?(room.mode==='coop'?'coop':'pvp'):'single',variant:room?.variant==='ffa'?'ffa':'tdm'};setRecentPlay(previous=>{if(previous&&JSON.stringify(previous)===JSON.stringify(value))return previous;saveRecentPlay(value);return value;});},[snapshot.phase,snapshot.mode,onlineView.currentRoom?.mode,onlineView.currentRoom?.variant]);
+  useEffect(()=>{if(snapshot.phase!=='playing'||snapshot.training)return;const room=onlineView.currentRoom;const value:RecentPlay={mode:snapshot.mode,entry:room?(room.mode==='coop'?'coop':'pvp'):'single',variant:room?.variant==='ffa'?'ffa':'tdm'};setRecentPlay(previous=>{if(previous&&JSON.stringify(previous)===JSON.stringify(value))return previous;saveRecentPlay(value);return value;});},[snapshot.phase,snapshot.mode,!!snapshot.training,onlineView.currentRoom?.mode,onlineView.currentRoom?.variant]);
   const assistantInBattle=onlineView.currentRoom?onlineView.currentRoom.phase!=='lobby':['playing','paused','won','lost'].includes(snapshot.phase);
   const assistantKey=(rankingPlayer?.id??'guest')+':'+(pages.active==='assistant')+':'+assistantInBattle;
   if(assistantScope.current.key!==assistantKey)assistantScope.current={key:assistantKey,token:crypto.randomUUID()};
@@ -1270,7 +1291,7 @@ export default function App() {
         if(onlineClient.current?.view.currentRoom)throw Error('请先离开房间，再选择其他玩法。');
         const mode=action.mode==='drive'?'dafei':action.mode;
         if(!guardEntry(entryFor(mode,mode==='escape'?'single':undefined)))throw Error('该玩法暂时不可用。');
-        setSelectedMode(mode);setEscapeEntry('single');setMenuScreen('prepare');setAssistantReturnScreen('prepare');return '玩法已选好。';
+        setPractice(false);setSelectedMode(mode);setEscapeEntry('single');setMenuScreen('prepare');setAssistantReturnScreen('prepare');return '玩法已选好。';
       }
       case'select_difficulty':if(onlineClient.current?.view.currentRoom)throw Error('房间难度已经确定，请在创建房间时选择。');changeSettings({...settingsRef.current,escapeDifficulty:difficulty(action.difficulty)});return '难度已选好。';
       case'select_weapon':{
@@ -1393,6 +1414,7 @@ export default function App() {
   );
   return (
     <main
+      style={{"--ui-text-scale":settings.uiTextScale??1} as React.CSSProperties}
       data-reduced-motion={(!settings.headBob&&!settings.recoilShake)||matchMedia("(prefers-reduced-motion: reduce)").matches}
       className={
         "game-shell" +
@@ -1427,6 +1449,8 @@ export default function App() {
       {upgradePrompt&&isMenu&&!rankingPanel&&<GameDialog title="保留记录，升级账号" onCancel={deferUpgrade} cancelLabel="稍后再说" confirmLabel="升级账号" onConfirm={()=>{setUpgradePrompt(false);openRanking("identity");}}><p>设置用户名和密码，保存新的恢复码，即可继续使用原来的成绩、反馈和联机身份。</p><p>照片、故事进度和本机成绩仍留在当前浏览器。</p></GameDialog>}
       {isMenu && (
         <MainMenu
+          practice={practice}
+          onTraining={()=>{if(!guardEntry('escape-solo'))return;setPractice(true);setSelectedMode('escape');setEscapeEntry('single');setPrepareRequested(false);setMenuScreen('prepare');}}
           recent={recentPlay}
           onRecent={()=>{if(recentPlay)prepareRecentPlay(recentPlay);}}
           onStoryPrepare={()=>prepareRecentPlay({mode:'story',entry:'single',variant:'tdm'})}
@@ -1438,6 +1462,7 @@ export default function App() {
           entry={escapeEntry}
           variant={pvpVariant}
           onMode={(mode) => {
+            setPractice(false);
             if (mode==='escape' && menuUnavailable.escape) { guardEntry('escape-solo'); return; }
             if (mode!=='escape' && !guardEntry(entryFor(mode))) return;
             if (mode==='escape') {
@@ -1451,11 +1476,12 @@ export default function App() {
           onHome={() => {
             game.current?.cancelModePreparation?.();
             setPrepareRequested(false);
+            setPractice(false);
             setMenuScreen("home");
           }}
           onModes={() => setMenuScreen("modes")}
           onAbout={() => setMenuReading("about")}
-          onEntry={(entry)=>{const variant=entry==='pvp'&&!availability[entryFor('escape','pvp',pvpVariant)].enabled?(availability['escape-tdm'].enabled?'tdm':'ffa'):pvpVariant;if(guardEntry(entryFor('escape',entry,variant))){setEscapeEntry(entry);setPvpVariant(variant);}}}
+          onEntry={(entry)=>{setPractice(false);const variant=entry==='pvp'&&!availability[entryFor('escape','pvp',pvpVariant)].enabled?(availability['escape-tdm'].enabled?'tdm':'ffa'):pvpVariant;if(guardEntry(entryFor('escape',entry,variant))){setEscapeEntry(entry);setPvpVariant(variant);}}}
           onVariant={(variant)=>{if(guardEntry(entryFor('escape','pvp',variant)))setPvpVariant(variant);}}
           onStart={() => {
             if (!guardEntry(selectedEntry)) return;
@@ -1704,7 +1730,7 @@ export default function App() {
         snapshot.escape &&
         !snapshot.escape.mapOpen && (
           <>
-            <EscapeHUD
+            {snapshot.training?<TrainingHUD snapshot={snapshot} api={game.current} touch={touchLayout} onExit={returnMenu}><Crosshair weapon={snapshot.weapon} aiming={snapshot.aiming} spread={snapshot.weaponSpread} fov={settings.fov} hit={snapshot.hit} hitType={snapshot.hitType} canvasHost={host} size={settings.crosshairSize} outline={settings.crosshairOutline}/></TrainingHUD>:<EscapeHUD
               snapshot={snapshot}
               api={game.current}
               onPause={() => game.current?.pause()}
@@ -1712,8 +1738,8 @@ export default function App() {
               touch={touchLayout}
             >
               <DamageDirections incoming={snapshot.incoming} />
-              <Crosshair weapon={snapshot.weapon} aiming={snapshot.aiming} spread={snapshot.weaponSpread} fov={settings.fov} hit={snapshot.hit} hitType={snapshot.hitType} canvasHost={host} />
-            </EscapeHUD>
+              <Crosshair weapon={snapshot.weapon} aiming={snapshot.aiming} spread={snapshot.weaponSpread} fov={settings.fov} hit={snapshot.hit} hitType={snapshot.hitType} canvasHost={host} size={settings.crosshairSize} outline={settings.crosshairOutline} />
+            </EscapeHUD>}
             {touchLayout && (
               <EscapeTouchControls
                 api={game.current}
@@ -2037,7 +2063,9 @@ export default function App() {
             <DrivingQA api={game.current} />
           </Suspense>
         )}
+      {snapshot.training?.complete&&!pages.active&&<TrainingComplete onExit={()=>void finishReturnMenu()} onPrepare={()=>void finishReturnMenu().then(()=>{setSelectedMode('escape');setEscapeEntry('single');setMenuScreen('prepare');})}/>}
       {pausePolicy(online ? "online" : "local") === "world" &&
+        !snapshot.training?.complete &&
         snapshot.phase === "paused" &&
         !snapshot.escape?.mapOpen &&
         !photoPanelOpen &&
@@ -2082,7 +2110,7 @@ export default function App() {
       {!online &&
         result &&
         snapshot.mode === "escape" &&
-        snapshot.escape?.result && (
+        !snapshot.training && snapshot.escape?.result && (
           <EscapeResult
             snapshot={snapshot}
             onRetry={retryEscape}
@@ -2154,6 +2182,7 @@ export default function App() {
           (onlineView.currentRoom?.phase === "lobby" ||
             onlineView.currentRoom?.phase === "preparing" ||
             onlineView.status === "reconnecting"))) &&
+        !(onlineView.currentRoom?.phase === 'ended' && onlineTransportReady) &&
         !onlineReadingOpen && (
           <MenuPage id="lobby" title={onlineView.currentRoom?(onlineView.currentRoom.mode==='coop'?'合作准备':onlineView.currentRoom.variant==='tdm'?'团队对战准备':'个人混战准备'):'联机大厅'} active tactical showNavigation={false} onBack={returnMenu} backLabel="返回主菜单" onRoot={returnMenu} rootLabel="主菜单" onNavigate={openMenuPage} feedbackUnread={feedbackUnread} wide>
           <Suspense fallback={<p role="status">正在打开联机大厅…</p>}><ModuleBoundary label="联机大厅" retry={multiplayerComponent} onClose={returnMenu}><MultiplayerUI embedded
@@ -2232,7 +2261,7 @@ export default function App() {
               onMenu={() => game.current?.pause()}
               onAction={onlineAction}
             />
-            <Crosshair weapon={snapshot.weapon} aiming={snapshot.aiming} spread={snapshot.weaponSpread} fov={settings.fov} hit={snapshot.hit} hitType={snapshot.hitType} canvasHost={host} />
+            <Crosshair weapon={snapshot.weapon} aiming={snapshot.aiming} spread={snapshot.weaponSpread} fov={settings.fov} hit={snapshot.hit} hitType={snapshot.hitType} canvasHost={host} size={settings.crosshairSize} outline={settings.crosshairOutline} />
             <DamageDirections incoming={snapshot.incoming} />
             {touchLayout && (
               <EscapeTouchControls
@@ -2304,13 +2333,13 @@ export default function App() {
             <button onClick={resume}>返回对局</button>
           </div>
         )}
-      {online &&
-        snapshot.online?.result &&
+      {onlineView.currentRoom?.phase === 'ended' &&
+        onlineView.currentRoom.result &&
         !onlineReadingOpen &&
         onlineTransportReady && (
           <>
             <OnlineResult
-              room={snapshot.online}
+              room={onlineView.currentRoom}
               playerId={onlineClient.current!.playerId}
               onAction={onlineAction}
               onClose={() => onlineAction({ type: "leave" })}
