@@ -45,6 +45,7 @@ import { RESPAWN_RULES, chooseDrivingRespawn } from "./driving-respawn.ts";
 import { DRIVE_RULES } from "./driving-rules.ts";
 import { escapeFloorAt } from "./escape-floor";
 import { EscapeContacts } from "./escape/contacts.ts";
+import { ExtractionDefense } from "./escape/extraction-defense.ts";
 import {
   ESCAPE_DIFFICULTIES,
   ESCAPE_RULES,
@@ -148,7 +149,8 @@ import {
   type WeaponId,
 } from "./types";
 import { loadPhotoUI, preloadModeUI } from "./ui-modules";
-import VEHICLE from "./vehicle-definition.json" with { type: "json" };
+import {vehicleDefinition,drivingVehicleId,type DrivingVehicleId} from "./vehicles.ts";
+import {DrivingCannon,CANNON} from "./driving-cannon.ts";
 import type { DriveMap, DrivingPhysics } from "./vehicle-physics.ts";
 import type { createVehicleVisual } from "./vehicle-visual.ts";
 import {
@@ -459,6 +461,7 @@ export async function createGame(
     cpuNpcs = 0,
     cpuRender = 0,
     profile = { updateMs: 0, npcMs: 0, renderMs: 0 };
+  let activeVehicleId:DrivingVehicleId="bao5",cannon:DrivingCannon|null=null,cannonShots=0;
   let driving: DrivingPhysics | null = null,
     driveMap: DriveMap | null = null,
     driveChallenge: DrivingChallenge | null = null,
@@ -469,6 +472,7 @@ export async function createGame(
   let preparation: AbortController | null = null,
     introCarReady = false;
   type PreparedMode = {
+    vehicleId?:DrivingVehicleId;
     key: string;
     mode: Mode;
     roster: {
@@ -560,6 +564,7 @@ export async function createGame(
     pickupController: AbortController | null = null;
   const callouts: NPC[] = [];
   const escapeTactics = new EscapeTactics(),
+    extractionDefense = new ExtractionDefense(),
     escapeContacts = new EscapeContacts();
   let escapeTacticalAgents: TacticalAgent[] = [],
     contactProbe = 0;
@@ -674,7 +679,7 @@ export async function createGame(
       );
     return snap
       ? {
-          ...snap,
+          ...snap,cannonAmmo:cannon?.ammo,cannonCooldown:cannon?.cooldown,
           areas: drivingAreaHints(
             driveMap?.npcRegions ?? [],
             position.toArray() as Vec3,
@@ -796,6 +801,7 @@ export async function createGame(
     await recorder.begin(
       {
         mode,
+        ...(mode==="dafei"?{vehicleId:activeVehicleId}:{}),
         difficulty: mode === "escape" ? escapeSelectedDifficulty : undefined,
         ruleVersion: rankingRuleVersion(mode),
         seed: roundSeed,
@@ -807,7 +813,7 @@ export async function createGame(
             : [],
         controls: touchControls() ? "touch" : "keyboard",
         transmission:
-          mode === "dafei" ? (settings.transmission ?? "auto") : undefined,
+          mode === "dafei" ? (activeVehicleId==="bao5"?(settings.transmission ?? "auto"):"auto") : undefined,
       },
       signal,
     );
@@ -1207,6 +1213,7 @@ export async function createGame(
     rankGeneration.clear();
     clearDrops();
     escapeTactics.reset();
+    extractionDefense.reset();
     escapeContacts.reset();
     escapeTacticalAgents = [];
     contactProbe = 0;
@@ -1261,6 +1268,7 @@ export async function createGame(
     sun.color.set(0xffefcf);
     sun.intensity = 2.7;
     applyQuality();
+    cannon?.dispose();cannon=null;cannonShots=0;
     driving?.dispose();
     driving = null;
     car?.dispose();
@@ -1661,11 +1669,6 @@ export async function createGame(
         info("三名增援加入追逐。", 2.5);
       } else if (event.type === "extraction-available") {
         if (gate) gate.visible = true;
-        for (const n of npcs)
-          if (n.escapeActive && !n.sees) {
-            n.team.receive(world.manifest.extraction, 8);
-            n.repath = 0;
-          }
         info("校门已开放，返回撤离点。", 3);
       } else if (event.type === "won") finish(true, "行动完成，成功撤离。");
       else if (event.type === "failed")
@@ -1886,6 +1889,7 @@ export async function createGame(
     else n.stuck = 0;
     if (n.stuck > 1.2) {
       escapeTactics.blocked(n.id);
+      extractionDefense.blocked(n.id);
       n.path = [];
       n.repath = 0;
       n.stuck = 0;
@@ -2128,9 +2132,10 @@ export async function createGame(
     yaw = world.manifest.spawnYaw;
     pitch = 0;
     if (mode === "dafei" && driveMap) {
-      driving = world.startDriving(driveMap);
+      driving = world.startDriving(driveMap,activeVehicleId);
       driving.setTransmission(settings.transmission ?? "auto");
-      driveChallenge = new DrivingChallenge(driveMap.repairs);
+      driveChallenge = new DrivingChallenge(driveMap.repairs,activeVehicleId);
+      if(activeVehicleId==="tank"){cannon=new DrivingCannon();scene.add(cannon.root);cannonShots=0;}
       position.copy(driving.read().position);
       lastSafe.copy(position);
       orbit = 0;
@@ -2145,6 +2150,7 @@ export async function createGame(
     }
     if (mode === "escape") {
       escapeTactics.reset();
+      extractionDefense.reset();
       escapeContacts.reset();
       escapeTacticalAgents = [];
       contactProbe = 0;
@@ -2398,6 +2404,7 @@ export async function createGame(
   function preparationKey(next: Mode, loadout?: Loadout) {
     return [
       next,
+      next === "dafei"?drivingVehicleId(settings.drivingVehicle):"",
       next === "escape" ? (loadout?.primary ?? selectedPrimary) : "",
       next === "escape"
         ? (loadout?.difficulty ?? settings.escapeDifficulty ?? "standard")
@@ -2483,6 +2490,7 @@ export async function createGame(
     const value: PreparedMode = {
       key,
       mode: next,
+      vehicleId:next==="dafei"?drivingVehicleId(settings.drivingVehicle):undefined,
       roster: { ...pendingRoster, ids: next === "escape" && loadout?.training ? [] : [...pendingRoster.ids] },
       mobile: renderProfile().mobileTextures,
     };
@@ -2542,7 +2550,7 @@ export async function createGame(
             : Promise.resolve(update(1, 1, "准备画面")),
           (async () => {
             if (next === "dafei") {
-              const car = await prepareCar(token, signal);
+              const car = await prepareCar(token, signal, value.vehicleId);
               if (car) {
                 if (signal.aborted || token !== enterToken) {
                   car.dispose();
@@ -2583,7 +2591,7 @@ export async function createGame(
           throw new DOMException("Cancelled", "AbortError");
         if (next === "dafei" && driveMap && !qaSpawn)
           driveMap = configureDrivingStart(driveMap, (point, viewYaw) =>
-            world.validateDrivingSpawn(driveMap!, point, viewYaw),
+            world.validateDrivingSpawn(driveMap!, point, viewYaw, value.vehicleId),
           );
         const views: PhotoView[] = [];
         if (next === "story") {
@@ -2639,7 +2647,7 @@ export async function createGame(
     modePreparation = { key, controller, work };
     return work;
   }
-  async function prepareCar(token: number, signal: AbortSignal) {
+  async function prepareCar(token: number, signal: AbortSignal,vehicleId:DrivingVehicleId="bao5") {
     if (!driveMap) {
       const map: DriveMap = await withDeadline(
         gameMapSession
@@ -2674,7 +2682,7 @@ export async function createGame(
     const module = await import("./vehicle-visual.ts");
     if (dead || token !== enterToken || signal.aborted) return null;
     const value = await withDeadline(
-      module.createVehicleVisual(scene, signal),
+      module.createVehicleVisual(scene, signal,vehicleId),
       30000,
       { signal, onLate: (car) => car.dispose() },
     );
@@ -2693,11 +2701,11 @@ export async function createGame(
     car.root.updateMatrixWorld(true);
     const target = position
         .clone()
-        .add(new THREE.Vector3(0, VEHICLE.camera.targetHeight, 0)),
+        .add(new THREE.Vector3(0, vehicleDefinition(activeVehicleId).camera.targetHeight, 0)),
       offset = new THREE.Vector3(
         0,
-        VEHICLE.camera.height + Math.sin(0.28) * 3,
-        VEHICLE.camera.distance,
+        vehicleDefinition(activeVehicleId).camera.height + Math.sin(0.28) * 3,
+        vehicleDefinition(activeVehicleId).camera.distance,
       ).applyAxisAngle(UP, driveMap.spawnYaw),
       distance = offset.length(),
       direction = offset.divideScalar(distance),
@@ -2720,6 +2728,7 @@ export async function createGame(
     if (dead || !modePrepared("dafei")) return;
     const value = preparedMode!;
     mode = "dafei";
+    activeVehicleId=value.vehicleId??"bao5";
     phase = "intro";
     input.setEnabled(false);
     input.setMode("dafei");
@@ -2808,6 +2817,7 @@ export async function createGame(
       preparedMode = null;
       const selected = value!.roster;
       mode = next;
+      activeVehicleId=value!.vehicleId??"bao5";
       training = next === "escape" && loadout?.training ? new CombatTraining() : null;
       roundRoster = [...selected.ids];
       roundSeed = selected.seed;
@@ -2826,6 +2836,7 @@ export async function createGame(
       }
       if (car) car.root.visible = true;
       setupRound();
+      if(next==='dafei'&&car){const gpu=new CombatGpuPreparer(renderer,scene,camera);try{await gpu.prepare(car.root,controller.signal);if(cannon)await gpu.prepare(cannon.root,controller.signal);}finally{gpu.dispose();}}
       if(next==='escape'){
         const gpu=new CombatGpuPreparer(renderer,scene,camera);
         try{await gpu.prepare(effects.root,controller.signal);const restoreShell=effects.prepareGeometryVariants();try{await gpu.prepare(effects.root,controller.signal);}finally{restoreShell();}for(const root of gadgetScene.prepareRoots)await gpu.prepare(root,controller.signal);for(const npc of npcs){await gpu.prepareTextures(npc.rig.preparationTextures,controller.signal);await gpu.prepare(npc.rig.root,controller.signal);}}
@@ -3575,9 +3586,10 @@ export async function createGame(
         elapsed: driveChallenge.elapsed,
         score: driveChallenge.score.score,
         hits: driveChallenge.score.hits,
+        vehicleId:activeVehicleId,cannonShots,cannonHits:driveChallenge.score.cannonHits,totalHits:driveChallenge.score.totalHits,
         bestCombo: driveChallenge.score.bestCombo,
         controls: touchControls() ? "touch" : "keyboard",
-        transmission: settings.transmission ?? "auto",
+        transmission: activeVehicleId==="bao5"?(settings.transmission ?? "auto"):"auto",
         reason,
       });
     }
@@ -4227,13 +4239,20 @@ export async function createGame(
       }
     }
     if (mode === "escape") {
+      extractionDefense.update(dt, !!escapeRound?.extractionAvailable, escapePlan?.extraction.position ?? world.manifest.extraction, escapeSelectedDifficulty,
+        npcs.map(n => ({ id: n.id, position: n.position.toArray() as Vec3, active: !!n.escapeActive && n.disabled === 0 && elapsed >= ESCAPE_RULES.grace,
+          sees: n.sees, known: n.lastKnown ? n.lastKnown.toArray() as Vec3 : n.team.target, busy: !!n.skill?.busy || n.gun.reloadLeft > 0 })), {
+          project: point => { const q = world.nearest(v(point)), support = world.supportAt(q, ESCAPE_RULES.npcHeight);
+            if (!support?.clear || support.normalY < .94 || Math.abs(support.height - q.y) > .18) return null;
+            q.y = support.height; return q.toArray() as Vec3; },
+          route: (id, from, to) => world.actorPath(id, v(from), v(to), false).map(p => p.toArray() as Vec3),
+          safe: points => world.npcRouteSafe(points.map(v), points.slice(1).reduce((length, p, i) => length + v(p).distanceTo(v(points[i])), 0) + .05),
+        });
       escapeTacticalAgents = npcs.map((n) => {
         const sites = escapePlan?.tasks.flatMap((t) => t.sites) ?? [],
-          patrol = escapeRound?.extractionAvailable
-            ? world.manifest.extraction
-            : sites.length
+          patrol = extractionDefense.goal(n.id) ?? (sites.length
               ? sites[(n.patrol + n.role) % sites.length].position
-              : (n.position.toArray() as Vec3);
+              : (n.position.toArray() as Vec3));
         if (
           !n.lastKnown &&
           !n.team.target &&
@@ -4727,7 +4746,7 @@ export async function createGame(
             weapon: n.gun.id,
             durability: driveChallenge!.durability,
           });
-          health = (driveChallenge!.durability / DRIVE_RULES.durability) * 100;
+          health = (driveChallenge!.durability / driveChallenge!.vehicle.durability) * 100;
           hurt = 0.5;
           directions.add(n.id, muzzle, damage);
           audio.cue("hurt");
@@ -5041,7 +5060,7 @@ export async function createGame(
       if (damage > 0) {
         if (mode === "dafei") {
           driveChallenge!.damage(damage);
-          health = (driveChallenge!.durability / DRIVE_RULES.durability) * 100;
+          health = (driveChallenge!.durability / driveChallenge!.vehicle.durability) * 100;
         } else health = Math.max(0, health - damage);
         hurt = 0.5;
         directions.add(n.id, muzzle, damage);
@@ -5130,15 +5149,15 @@ export async function createGame(
       ),
       target = state.position
         .clone()
-        .add(new THREE.Vector3(0, VEHICLE.camera.targetHeight, 0)),
+        .add(new THREE.Vector3(0, vehicleDefinition(activeVehicleId).camera.targetHeight, 0)),
       angle = state.yaw + orbit;
     const desired = target
         .clone()
         .add(
           new THREE.Vector3(
-            Math.sin(angle) * (VEHICLE.camera.distance + speedGain),
-            VEHICLE.camera.height + Math.sin(orbitPitch) * 3,
-            Math.cos(angle) * (VEHICLE.camera.distance + speedGain),
+            Math.sin(angle) * (vehicleDefinition(activeVehicleId).camera.distance + speedGain),
+            vehicleDefinition(activeVehicleId).camera.height + Math.sin(orbitPitch) * 3,
+            Math.cos(angle) * (vehicleDefinition(activeVehicleId).camera.distance + speedGain),
           ),
         ),
       direction = desired.clone().sub(target),
@@ -5158,7 +5177,8 @@ export async function createGame(
           .copy(target)
           .addScaledVector(check, Math.max(0.25, allowed - 0.12));
     }
-    camera.lookAt(target);
+    const viewTarget=activeVehicleId==='tank'?target.clone().add(new THREE.Vector3(0,0,-25).applyAxisAngle(UP,angle)):target;
+    camera.lookAt(viewTarget);
     if (settings.recoilShake && impactShake > 0)
       camera.rotation.z = Math.sin(elapsed * 45) * impactShake * 0.018;
     else camera.rotation.z = 0;
@@ -5166,6 +5186,33 @@ export async function createGame(
     const wanted = settings.fov + speedGain * 4;
     camera.fov = THREE.MathUtils.damp(camera.fov, wanted, 8, dt || 1);
     camera.updateProjectionMatrix();
+  }
+  function registerDrivingKnockdown(n:NPC,source:'collision'|'cannon',speed=0,shotId?:number) {
+    if(!driveChallenge)return;
+    n.disabled=.001;n.path=[];n.sees=false;n.attack.cancel("suppressed");n.driveAttack?.cancel("suppressed");n.skill?.interrupt();n.team.clear();driveFire.release(n.id);
+    const data={npcId:n.id,generation:rankGeneration.get(n.id)??0,identity:n.identity,speed};
+    if(source==='collision')rankEvent('hit',data);else rankEvent('cannon',{...data,action:'hit',shotId});
+    const gained=driveChallenge.hit(n.id,source);impactShake=source==='collision'?.6:.2;audio.vehicleCue('impact');info(`${NPC_IDENTITY[n.identity].name}${source==='collision'?'被撞飞':'被击倒'}　+${gained}`,1.8);
+  }
+  function drivingProjectileHit(origin:THREE.Vector3,direction:THREE.Vector3,length:number){
+    const fixed=world.rayImpact(origin,direction,length);let best=fixed&&fixed.distance<=length?{distance:fixed.distance,normal:new THREE.Vector3(fixed.normal.x,fixed.normal.y,fixed.normal.z)}:null;
+    for(const n of npcs){if(n.disabled>0||driving?.npc(n.id))continue;const hit=characterHit(origin,direction,n.position,false);if(hit!==null&&hit<=length&&(!best||hit<best.distance))best={distance:hit,normal:direction.clone().negate()};}
+    return best;
+  }
+  function fireDrivingCannon(){
+    if(!cannon||!car?.muzzle||!driving)return;
+    if(cannon.ammo===0){info('炮弹已用尽。',1.5);return;}
+    if(cannon.cooldown>0)return;
+    const muzzle=car.muzzle(),pivot=driving.read().position.clone().add(new THREE.Vector3(0,1.55,0)),delta=muzzle.position.clone().sub(pivot),length=delta.length(),dir=delta.clone().normalize(),wall=world.rayDistance(pivot,dir,length+.04);
+    if(wall<length){info('炮口受阻，调整位置后再开火。',1.5);return;}
+    const id=cannon.fire(muzzle.position,muzzle.direction);if(id===null)return;cannonShots++;
+    rankEvent('cannon',{action:'fire',shotId:id,position:muzzle.position.toArray(),direction:muzzle.direction.toArray()});audio.shot('awm',0,muzzle.position);impactShake=.35;
+  }
+  function explodeDrivingCannon(id:number,point:THREE.Vector3){
+    if(!driving||!driveChallenge)return;rankEvent('cannon',{action:'explode',shotId:id,position:point.toArray()});
+    for(const npcId of driving.blast(point,CANNON.radius)){const n=npcs.find(n=>n.id===npcId);if(n)registerDrivingKnockdown(n,'cannon',0,id);}
+    const target=driving.read().position.clone().add(new THREE.Vector3(0,.8,0)),distance=point.distanceTo(target);
+    if(distance<CANNON.radius&&world.rayDistance(point,target.clone().sub(point).normalize(),distance)>=distance-.1){const amount=Math.min(driveChallenge.durability,100*(1-distance/CANNON.radius));if(amount>0){driveChallenge.damage(amount);rankEvent('damage',{amount,source:'cannon',shotId:id,health:driveChallenge.durability});hurt=.4;}}
   }
   function updateDriving(dt: number, frame: import("./types.ts").InputFrame) {
     if (!driving || !driveChallenge) return;
@@ -5186,7 +5233,7 @@ export async function createGame(
       before.position.toArray(),
     );
     elapsed = driveChallenge.elapsed;
-    health = (driveChallenge.durability / DRIVE_RULES.durability) * 100;
+    health = (driveChallenge.durability / driveChallenge.vehicle.durability) * 100;
     emitClock += dt;
     noticeLeft = Math.max(0, noticeLeft - dt);
     if (!noticeLeft) notice = "";
@@ -5203,7 +5250,7 @@ export async function createGame(
     if (events.repair) {
       if (events.repairEvent) rankEvent("repair", events.repairEvent);
       audio.cue("pickup");
-      info("车辆已维修：恢复 200 耐久。");
+      info(`车辆已维修：恢复 ${Math.round(events.repairEvent?.amount??0)} 耐久。`);
     }
     for (const supply of supplies) {
       supply.mesh.visible = !driveChallenge.isRepairUsed(supply.point.id);
@@ -5215,14 +5262,20 @@ export async function createGame(
         -0.2,
         0.85,
       );
-    } else if (!frame.lookHeld) {
+    } else if (!frame.lookHeld && activeVehicleId!=="tank") {
       orbit = THREE.MathUtils.damp(orbit, 0, 1.4, dt);
       orbitPitch = THREE.MathUtils.damp(orbitPitch, 0.28, 1.4, dt);
     }
+    if(activeVehicleId==='tank'&&car?.aim){
+      const look=camera.getWorldDirection(new THREE.Vector3()),range=Math.min(180,world.rayDistance(camera.position,look,180)),aimPoint=camera.position.clone().addScaledVector(look,range),pivot=before.position.clone().add(new THREE.Vector3(0,1.55,0)),localAim=aimPoint.sub(pivot).normalize().applyQuaternion(before.rotation.clone().invert());
+      car.aim(Math.atan2(-localAim.x,-localAim.z),THREE.MathUtils.clamp(Math.asin(localAim.y),-.13,.55));
+    }
     const ready = driveChallenge.countdown <= 0;
+    if(ready&&cannon&&frame.actions.has("fire"))fireDrivingCannon();
+    cannon?.tick(dt,drivingProjectileHit,(id,point)=>explodeDrivingCannon(id,point));
     if (ready) {
-      if (frame.actions.has("shiftUp")) driving.shift(1);
-      else if (frame.actions.has("shiftDown")) driving.shift(-1);
+      if (activeVehicleId==="bao5"&&frame.actions.has("shiftUp")) driving.shift(1);
+      else if (activeVehicleId==="bao5"&&frame.actions.has("shiftDown")) driving.shift(-1);
     }
     driving.beforeStep(
       ready
@@ -5264,23 +5317,7 @@ export async function createGame(
     for (const impact of changes.impacts) {
       const n = npcs.find((n) => n.id === impact.id);
       if (!n) continue;
-      n.disabled = 0.001;
-      n.path = [];
-      n.sees = false;
-      n.attack.cancel("suppressed");
-      n.driveAttack!.cancel("suppressed");
-      n.skill?.interrupt();
-      n.team.clear();
-      driveFire.release(n.id);
-      rankEvent("hit", {
-        npcId: n.id,
-        generation: rankGeneration.get(n.id) ?? 0,
-        speed: impact.speed,
-      });
-      const gained = driveChallenge.hit(n.id);
-      impactShake = 0.6;
-      audio.vehicleCue("impact");
-      info(`${NPC_IDENTITY[n.identity].name}被撞飞　+${gained}`, 1.8);
+      registerDrivingKnockdown(n,'collision',impact.speed);
     }
     updateDriveCamera(dt);
     camera.updateMatrixWorld(true);
@@ -5390,7 +5427,7 @@ export async function createGame(
     );
     if (phaseActive()) {
       audio.update(dt, false);
-      audio.engine(
+      if(activeVehicleId!=="scooter")audio.engine(
         state.horizontalSpeed,
         ready ? controls.throttle : 0,
         dt,
@@ -5399,7 +5436,7 @@ export async function createGame(
       if (state.shiftSerial > before.shiftSerial) audio.vehicleCue("shift");
       if (state.rejectedShiftSerial > before.rejectedShiftSerial)
         audio.vehicleCue("shiftRejected");
-      audio.tires(state.lateralSpeed ?? 0, state.slipAngle ?? 0, dt);
+      if(activeVehicleId==="bao5")audio.tires(state.lateralSpeed ?? 0, state.slipAngle ?? 0, dt);
     }
     if (controls.brake > 0 && state.horizontalSpeed > 5 && stepClock <= 0) {
       audio.vehicleCue("brake");
@@ -6439,7 +6476,7 @@ export async function createGame(
         (transmission !== "auto" && transmission !== "manual")
       )
         return;
-      ranked?.observeTransmission(elapsed, transmission);
+      if(mode==='dafei'&&activeVehicleId==='bao5')ranked?.observeTransmission(elapsed, transmission);
       settings = { ...settings, transmission };
       input.flushTransient();
       driving?.setTransmission(transmission);
@@ -6454,7 +6491,7 @@ export async function createGame(
         canSelectTransmission(phase) &&
         transmission !== (settings.transmission ?? "auto")
       ) {
-        ranked?.observeTransmission(elapsed, transmission);
+        if(mode==='dafei'&&activeVehicleId==='bao5')ranked?.observeTransmission(elapsed, transmission);
         input.flushTransient();
         driving?.setTransmission(transmission);
       }

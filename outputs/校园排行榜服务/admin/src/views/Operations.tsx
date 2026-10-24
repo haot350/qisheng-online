@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { api, modeName, stamp, useResource, type Row } from "../api";
 import {
   Badge,
@@ -11,6 +11,7 @@ import {
   PageTitle,
   Panel,
   useNotify,
+  useUnsaved,
 } from "../ui";
 const MODES = [
   "story",
@@ -159,6 +160,26 @@ function OperationEditor({
   const dirty = JSON.stringify(draft) !== JSON.stringify(item),
     patch = (key: string, value: any) =>
       setDraft((d) => ({ ...d, [key]: value }));
+  useUnsaved(!!confirm && dirty);
+  const editor = useRef<HTMLDivElement>(null), confirmation = useRef<HTMLDivElement>(null);
+  const returnPoint = useRef<{scroll:number;focus:HTMLElement|null}|null>(null);
+  const ask = (next:string, trigger:HTMLElement) => {
+    returnPoint.current={scroll:editor.current?.closest('dialog')?.scrollTop??0,focus:trigger};
+    setConfirm(next);
+  };
+  const confirmationTitle = confirm === 'mode' ? draft.enabled ? '确认重新开放？' : '确认关闭此玩法？'
+    : confirm === 'withdrawn' ? '确认撤下通知？' : confirm === 'draft' ? '确认撤回为草稿？' : '确认向玩家发布这条通知？';
+  useLayoutEffect(()=>{
+    const dialog=editor.current?.closest('dialog');
+    if(confirm){
+      if(dialog)dialog.scrollTop=0;
+      confirmation.current?.querySelector<HTMLButtonElement>('button')?.focus({preventScroll:true});
+    }else if(returnPoint.current){
+      if(dialog)dialog.scrollTop=returnPoint.current.scroll;
+      returnPoint.current.focus?.focus({preventScroll:true});
+      returnPoint.current=null;
+    }
+  },[confirm]);
   async function save(status?: string) {
     setBusy(true);
     setError("");
@@ -199,15 +220,16 @@ function OperationEditor({
   return (
     <Dialog
       title={
-        item.type === "mode"
+        confirm ? confirmationTitle : item.type === "mode"
           ? modeName[item.id]
           : item.id
             ? "编辑通知"
             : "新建通知"
       }
-      dirty={dirty}
-      onClose={() => !busy && onClose()}
+      dirty={!confirm && dirty}
+      onClose={() => {if(!busy){if(confirm)setConfirm('');else onClose();}}}
     >
+      <div ref={editor} hidden={!!confirm}>
       {item.type === "mode" ? (
         <>
           <Field label="是否允许进入">
@@ -320,36 +342,6 @@ function OperationEditor({
         </>
       )}
       <FormError error={error} />
-      {confirm ? (
-        <div className="confirm-inline">
-          <strong>
-            {confirm === "mode"
-              ? draft.enabled
-                ? "确认重新开放？"
-                : "确认关闭此玩法？"
-              : confirm === "withdrawn"
-                ? "确认撤下通知？"
-                : "确认向玩家发布这条通知？"}
-          </strong>
-          <p>
-            {confirm === "mode"
-              ? "已开始的比赛不受影响。"
-              : "请核对正文、显示范围和生效时间。"}
-          </p>
-          <div className="actions">
-            <button disabled={busy} onClick={() => setConfirm("")}>
-              返回编辑
-            </button>
-            <button
-              className="primary"
-              disabled={busy}
-              onClick={() => save(confirm === "mode" ? undefined : confirm)}
-            >
-              {busy ? "正在保存…" : "确认"}
-            </button>
-          </div>
-        </div>
-      ) : (
         <div className="actions">
           <button disabled={busy} data-dialog-dismiss onClick={onClose}>
             取消
@@ -358,7 +350,7 @@ function OperationEditor({
             <button
               className="primary"
               disabled={busy}
-              onClick={() => setConfirm("mode")}
+              onClick={(e) => ask("mode", e.currentTarget)}
             >
               保存设置
             </button>
@@ -366,15 +358,15 @@ function OperationEditor({
             <>
               <button
                 disabled={busy || !draft.title.trim() || !draft.body.trim()}
-                onClick={() => save("draft")}
+                onClick={(e) => item.status === "published" ? ask("draft", e.currentTarget) : save("draft")}
               >
-                保存草稿
+                {item.status === "published" ? "撤回为草稿" : "保存草稿"}
               </button>
               {item.id && item.status === "published" && (
                 <button
                   className="danger"
                   disabled={busy}
-                  onClick={() => setConfirm("withdrawn")}
+                  onClick={(e) => ask("withdrawn", e.currentTarget)}
                 >
                   撤下
                 </button>
@@ -382,7 +374,7 @@ function OperationEditor({
               <button
                 className="primary"
                 disabled={busy || !draft.title.trim() || !draft.body.trim()}
-                onClick={() => setConfirm("published")}
+                onClick={(e) => ask("published", e.currentTarget)}
               >
                 {draft.startsAt && Date.parse(draft.startsAt) > Date.now()
                   ? "定时发布"
@@ -391,7 +383,18 @@ function OperationEditor({
             </>
           )}
         </div>
-      )}
+      </div>
+      {confirm && <div ref={confirmation} className="operation-confirm">
+        <p><strong>{item.type === 'mode' ? modeName[item.id] : draft.title}</strong></p>
+        <p>{confirm === 'mode' ? '已开始的比赛不受影响。'
+          : confirm === 'draft' ? '玩家将不再看到这条通知，内容会保留在草稿中。'
+          : confirm === 'withdrawn' ? '玩家将不再看到这条通知。'
+          : '将按已设置的范围与时间向玩家显示。'}</p>
+        <div className="actions">
+          <button disabled={busy} onClick={()=>setConfirm('')}>返回编辑</button>
+          <button className="primary" disabled={busy} onClick={()=>save(confirm === 'mode' ? undefined : confirm)}>{busy?'正在保存…':'确认'}</button>
+        </div>
+      </div>}
     </Dialog>
   );
 }

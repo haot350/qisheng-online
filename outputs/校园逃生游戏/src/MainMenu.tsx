@@ -14,6 +14,7 @@ import roamDesktop from './assets/mode-covers/roam-desktop.webp';
 import roamMobile from './assets/mode-covers/roam-mobile.webp';
 import './menu.css';
 import {BrandLogo} from './BrandLogo';
+import {StudioLogo} from './StudioLogo';
 import {NativeDownloads} from './NativeDownloads';
 import {recentPlayName,type RecentPlay} from './recent-mode';
 import {MenuNavigation,type MenuPageId} from './MenuPages';
@@ -29,7 +30,7 @@ function ModeCover({mode,preparation=false}:{mode:Mode;preparation?:boolean}){co
 export const PLAY_MODES:{id:Mode;label:string;description:string;detail:string}[]=[
 {id:'story',label:'明天，照常见',description:'借一台相机，和朋友把今天留在照片里。',detail:'七章校园故事 · 摄影与同行'},
 {id:'escape',label:'校园突围',description:'完成行动任务，应对追兵，守住校门撤离。',detail:'单人突围 · 合作突围 · 玩家对战'},
-{id:'dafei',label:'大飞模式',description:'驾驶越野车穿过校园，撞飞追逐者争取高分。',detail:'五分钟驾驶 · 自动／手动六挡'},
+{id:'dafei',label:'大飞模式',description:'选择越野车、坦克或电动滑板车，穿行校园争取高分。',detail:'五分钟驾驶 · 三种载具'},
 {id:'roam',label:'自由漫游',description:'走过道路与庭院，探索室内，随时举起相机。',detail:'自由探索 · 没有追逐与倒计时'},
 ];
 export type EscapeEntry='single'|'coop'|'pvp';
@@ -53,7 +54,7 @@ export function MainMenu({practice=false,onTraining,active=true,screen,mode,entr
    {practice?<div className="menu-online-preview"><h2>按自己的节奏来</h2><p>依次完成七个操作。准备好后，点击开始练习。</p></div>:multiplayer?<div className="menu-online-preview"><h2>{entry==='coop'?'和同伴一起撤离':variant==='tdm'?'两队交战':'各自为战'}</h2><p>{entry==='coop'?'2—4 人共同完成任务，可以救援倒地的队友。':variant==='tdm'?'2—8 人自动平衡分队，十分钟内争取更多击倒。':'2—8 人十分钟复活赛，按击倒数决定名次。'}</p></div>:controls}
    {status}</div><div className="menu-prep-actions">{mode==='story'&&hasSave&&<button className="primary wide" disabled={disabled||busy} onClick={onContinue}>继续上次的故事 <span aria-hidden="true">→</span></button>}<button className={mode==='story'&&hasSave?'secondary wide':'primary wide'} onClick={saveDataWaiting?onPrepare:onStart} disabled={busy||(!saveDataWaiting&&disabled)}>{saveDataWaiting?'准备资源':busy?'正在进入…':prepareState==='loading'?'正在准备 '+prepareProgress+'%':prepareState==='error'?'准备未完成':practice?'开始练习':multiplayer?'进入'+(entry==='coop'?'合作':'对战')+'大厅':mode==='story'?(hasSave?'重新开始故事':'开始故事'):mode==='dafei'?'出发前见见大飞老师':'开始游玩'}<span aria-hidden="true">→</span></button></div>
   </section></div></div>}
-  {screen==='home'&&status}<footer className="menu-footer"><div><a href="https://zbqsgz.tianhw.top/game">游戏介绍 ↗</a><a href="/copyright/">© 2026 OpenQS · 齐盛Online</a></div><span>{version} · 预览版</span></footer>
+  {screen==='home'&&status}<footer className="menu-footer"><div><a href="https://zbqsgz.tianhw.top/game">游戏介绍 ↗</a><a href="/copyright/">© 2026 LIUFRAME INTERACTIVE · 齐盛Online</a></div><span>{version} · 预览版</span></footer>
   </div>
  </section>;
 }
@@ -74,9 +75,10 @@ export function MenuAbout({onUpdates,onCopyright}:{onUpdates:()=>void;onCopyrigh
   <div className="menu-about-brand"><BrandLogo/></div>
   <p className="menu-release-meta">{LATEST_RELEASE.version} · 预览版</p>
   <p className="menu-about-intro">在数字校园里同行、探索、驾驶，或与同伴完成一场突围。</p>
+  <div className="menu-about-studio"><p>制作与维护</p><StudioLogo/></div>
   <NativeDownloads/>
   <button className="menu-information-card menu-update-card" onClick={onUpdates}><span className="menu-information-copy"><strong>更新记录{unread&&<span className="menu-update-dot" role="img" aria-label="有未读更新"/>}</strong><time dateTime={LATEST_RELEASE.date}>{LATEST_RELEASE.date}</time><span>{LATEST_RELEASE.overview??LATEST_RELEASE.summary[0]}</span><span className="menu-information-link">查看本次与历史更新 →</span></span></button>
-  <div className="menu-about-links">{onCopyright&&<button onClick={onCopyright}>版权与许可 →</button>}<a href="https://zbqsgz.tianhw.top/game" target="_blank" rel="noreferrer">游戏介绍 ↗</a><a href="https://zbqsgz.tianhw.top" target="_blank" rel="noreferrer">校园主站 ↗</a></div><p className="menu-release-meta">© 2026 OpenQS · 齐盛Online</p>
+  <div className="menu-about-links">{onCopyright&&<button onClick={onCopyright}>版权与许可 →</button>}<a href="https://zbqsgz.tianhw.top/game" target="_blank" rel="noreferrer">游戏介绍 ↗</a><a href="https://zbqsgz.tianhw.top" target="_blank" rel="noreferrer">校园主站 ↗</a></div><p className="menu-release-meta">© 2026 LIUFRAME INTERACTIVE · 齐盛Online</p>
  </div>;
 }
 

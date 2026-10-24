@@ -1,5 +1,5 @@
 import {rankingClient,RankingError} from './client.ts';
-import {rankingRuleVersion,RANKING_LIMITS,type RankingEvent,type RankingRunConfig,type RankingSummary,type RankingTicket,type RankingStatus,type RankingSubmission} from './shared.ts';
+import {rankingRuleVersion,drivingRuleVersion,RANKING_LIMITS,type RankingEvent,type RankingRunConfig,type RankingSummary,type RankingTicket,type RankingStatus,type RankingSubmission} from './shared.ts';
 export type RankingViewSnapshot={status:RankingStatus;runId?:string;message:string;eligible:boolean;canSubmit:boolean;canPublish?:boolean;published?:boolean;recorded?:boolean;newAchievements?:string[]};
 export type StoredRankingRun={id:string;ownerId:string;ticket:RankingTicket;config:RankingRunConfig;events:RankingEvent[];acked:number;summary?:RankingSummary;status:RankingStatus;autoSubmit:boolean;recordStats?:boolean;publishBoard?:boolean;createdAt:number;finishedAt?:number;};
 const memory=new Map<string,StoredRankingRun>();const removed=new Set<string>();let database:Promise<IDBDatabase>|null=null;
@@ -23,7 +23,7 @@ export class RankingRecorder{
  private update(state:Partial<RankingViewSnapshot>){this.state={...this.state,...state};this.notify();}
  cancel(){this.cancelled=true;this.notify=()=>{};if(this.run&&!this.sealed)void removeRun(this.run.id);}
  async begin(config:RankingRunConfig,signal?:AbortSignal){
-  config={...config,ruleVersion:rankingRuleVersion(config.mode)};
+  config={...config,ruleVersion:config.mode==='dafei'?drivingRuleVersion(config.vehicleId??'bao5'):rankingRuleVersion(config.mode)};
   const clientRunId=crypto.randomUUID();try{
    let timeout:ReturnType<typeof setTimeout>|undefined;
    const player=rankingClient.getPlayer()??await Promise.race([rankingClient.me(),new Promise<null>(resolve=>{timeout=setTimeout(()=>resolve(null),2500);})]).finally(()=>clearTimeout(timeout));
@@ -46,7 +46,7 @@ export class RankingRecorder{
   run.events.push({seq:run.events.length+1,t:time,order:last&&Math.abs(last.t-time)<1e-6?last.order+1:0,type,data:structuredClone(data)});if(t-this.lastPersist>=2){this.lastPersist=t;this.persist();}
  }
  observeControls(t:number,controls:RankingRunConfig['controls']){const run=this.run;if(!run||run.config.controls===controls||run.config.controls==='mixed')return;run.config.controls='mixed';this.append(t,'controls',{value:'mixed'});}
- observeTransmission(t:number,value:'auto'|'manual'){const run=this.run;if(!run||run.config.transmission===value||run.config.transmission==='mixed')return;run.config.transmission='mixed';this.append(t,'transmission',{value:'mixed'});}
+ observeTransmission(t:number,value:'auto'|'manual'){const run=this.run;if(!run||run.config.mode!=='dafei'||(run.config.vehicleId??'bao5')!=='bao5'||run.config.transmission===value||run.config.transmission==='mixed')return;run.config.transmission='mixed';this.append(t,'transmission',{value:'mixed'});}
  private persist(){if(!this.run)return;const copy=structuredClone(this.run);this.saving=this.saving.catch(()=>{}).then(()=>store(copy));}
  seal(summary:RankingSummary){
   if(this.sealed||this.cancelled)return;this.sealed=true;const run=this.run;if(!run)return;

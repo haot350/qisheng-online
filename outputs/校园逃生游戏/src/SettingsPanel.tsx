@@ -43,7 +43,7 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
           {field('操作方式',undefined,<div className="settings-segmented" role="group" aria-label="操作方式">{([['auto','自动'],['desktop','键鼠'],['touch','触屏']] as const).map(([value,label])=><button key={value} aria-pressed={settings.controls===value} onClick={()=>onChange({...settings,controls:value})}>{label}</button>)}</div>)}
           {range('sensitivity','观察灵敏度',.35,2,.05,settings.sensitivity.toFixed(2)+' 倍')}
           {mode==='escape'&&<div className="settings-touch-group"><EscapeTouchSettings settings={settings} onChange={onChange} onEdit={onEditTouch}/>{toggle('aimAssist','触屏瞄准减速','准星接近可见目标时，减慢观察速度。')}</div>}
-          {mode==='dafei'&&<div className="settings-choice-block"><h3>换挡方式</h3><TransmissionChoice mode={settings.transmission??'auto'} onChange={transmission=>onChange({...settings,transmission})} disabled={!canChangeTransmission}/>{!canChangeTransmission&&<p className="settings-note">暂停后可以更换换挡方式。</p>}</div>}
+          {mode==='dafei'&&(!settings.drivingVehicle||settings.drivingVehicle==='bao5')&&<div className="settings-choice-block"><h3>换挡方式</h3><TransmissionChoice mode={settings.transmission??'auto'} onChange={transmission=>onChange({...settings,transmission})} disabled={!canChangeTransmission}/>{!canChangeTransmission&&<p className="settings-note">暂停后可以更换换挡方式。</p>}</div>}
         </>}
         {section==='graphics'&&<>
           <div className="settings-quality" role="group" aria-label="画面质量">{([

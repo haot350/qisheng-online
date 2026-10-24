@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+export {roomCommandNotice, roomSnapshotFresh} from './room-status';
 export type Row = Record<string, any>;
 export type Administrator = {
   id: string;
@@ -73,6 +74,8 @@ export function useResource<T = Row>(path: string | null) {
   const [data, setData] = useState<T | null>(null),
     [error, setError] = useState(""),
     [loading, setLoading] = useState(!!path),
+    [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null),
+    [lastReadFailed, setLastReadFailed] = useState(false),
     [version, bump] = useState(0);
   const generation = useRef(0);
   const previousPath = useRef<string | null>(null);
@@ -80,7 +83,11 @@ export function useResource<T = Row>(path: string | null) {
     const id = ++generation.current,
       controller = new AbortController();
     setError("");
-    if (previousPath.current !== path) setData(null);
+    if (previousPath.current !== path) {
+      setData(null);
+      setLastSuccessAt(null);
+      setLastReadFailed(false);
+    }
     previousPath.current = path;
     if (!path) {
       setData(null);
@@ -90,11 +97,17 @@ export function useResource<T = Row>(path: string | null) {
     setLoading(true);
     api<T>(path, undefined, controller.signal)
       .then((result) => {
-        if (id === generation.current) setData(result);
+        if (id === generation.current) {
+          setData(result);
+          setLastSuccessAt(Date.now());
+          setLastReadFailed(false);
+        }
       })
       .catch((err) => {
-        if (!controller.signal.aborted && id === generation.current)
+        if (!controller.signal.aborted && id === generation.current) {
           setError(err.message);
+          setLastReadFailed(true);
+        }
       })
       .finally(() => {
         if (id === generation.current) setLoading(false);
@@ -105,6 +118,8 @@ export function useResource<T = Row>(path: string | null) {
     data,
     error,
     loading,
+    lastSuccessAt,
+    lastReadFailed,
     reload: useCallback(() => bump((n) => n + 1), []),
     setData,
   };

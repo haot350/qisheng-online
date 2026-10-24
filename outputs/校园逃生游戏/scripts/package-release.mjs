@@ -87,6 +87,8 @@ const required = [
   'audio/escape-search.wav','audio/escape-combat.wav','audio/escape-extraction.wav','audio/escape-score.json',
   ...['glock','mp5','m4a1','ak47','r870','awm','m249'].flatMap(id=>[`weapons/${id}-near.glb`,`weapons/${id}-far.glb`]),
   'map/drive-v122.json','vehicles/bao5-v122.manifest.json','vehicles/bao5-v122.glb','images/dafei-guide.webp',
+  ...['tank','scooter'].flatMap(id=>['glb','manifest.json'].map(ext=>'vehicles/campus-'+id+'-r1.'+ext)),
+  ...['bao5','tank','scooter'].map(id=>'vehicles/'+id+'-card.webp'),
   'story/archive/manifest.json','story/camera/manifest.json',
 ];
 // Include the complete public story tree, not just resources named with a URL
@@ -101,6 +103,7 @@ const drivingManifest=JSON.parse(await fs.readFile((await fileInfo(distRoot,'map
 if(drivingManifest.sourceSha256!==manifest.sourceSha256||!Array.isArray(drivingManifest.npcSpawns)||drivingManifest.npcSpawns.length!==4||drivingManifest.releaseVersion!=='1.2.2'||!Array.isArray(drivingManifest.npcRegions)||drivingManifest.npcRegions.length!==4)throw new Error('Driving manifest must match the campus source and contain four runtime slots.');
 const carManifest=JSON.parse(await fs.readFile((await fileInfo(distRoot,'vehicles/bao5-v122.manifest.json')).absolute,'utf8'));
 if(checkedRelative(carManifest.url)!=='vehicles/bao5-v122.glb'||carManifest.triangles>30000||carManifest.bytes!==(await fileInfo(distRoot,'vehicles/bao5-v122.glb')).info.size)throw new Error('Incomplete or mismatched vehicle manifest.');
+for(const id of ['tank','scooter']){const item=JSON.parse(await fs.readFile((await fileInfo(distRoot,'vehicles/campus-'+id+'-r1.manifest.json')).absolute,'utf8'));const data=await fs.readFile((await fileInfo(distRoot,checkedRelative(item.url))).absolute);if(item.id!==id||item.bytes!==data.length||item.sha256!==hash(data)||item.triangles>30000)throw Error('Vehicle manifest mismatch: '+id);}
 const cameraManifest=JSON.parse(await fs.readFile((await fileInfo(distRoot,'story/camera/manifest.json')).absolute,'utf8'));
 for(const asset of cameraManifest.assets??[]){const relative=checkedRelative(asset.url),data=await fs.readFile((await fileInfo(distRoot,relative)).absolute);if(data.length!==asset.bytes||hash(data)!==asset.sha256)throw new Error('Camera asset manifest mismatch: '+relative);}
 if(cameraManifest.assets?.length!==2)throw new Error('Camera high/low LOD resources are required.');

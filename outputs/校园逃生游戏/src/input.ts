@@ -165,7 +165,7 @@ export function createInput(
       if (mode === "dafei" && pressed) actions.add(a);
       return;
     }
-    if (mode === "dafei") return;
+    if (mode === "dafei") {if(a === "fire" && pressed) actions.add(a);return;}
     if (mode === "story" && a === "run") {
       if (pressed) {
         toggleBefore.set(a, fastWalk);
@@ -380,6 +380,7 @@ export function createInput(
       if (e.target === canvas) {
         focus();
         if (mode === "dafei" && e.button === 2) dragging = true;
+        if (mode === "dafei" && e.button === 0) actions.add("fire");
       }
       return;
     }

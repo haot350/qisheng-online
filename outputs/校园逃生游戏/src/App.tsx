@@ -1,3 +1,5 @@
+import {drivingVehicleId} from './vehicles';
+import {VehicleChoice} from './DrivingUI';
 import {WeatherChoice} from './WeatherChoice';
 import type {AssistantMenuAction, AssistantMenuContext} from '@qisheng/shared/assistant';
 import {readRecentPlay,saveRecentPlay,type RecentPlay} from './recent-mode';
@@ -608,8 +610,7 @@ export default function App() {
         const player = rankingClient.getPlayer();
         setRankingPlayer(player);
         const client = onlineClient.current;
-        if (client?.room && client.playerId !== player?.id) {
-          void client.leave();
+        if (client?.handleIdentityChange(player?.id ?? null)) {
           setOnlineRoomKey(null);
           setOnlineOpen(true);
         }
@@ -888,6 +889,7 @@ export default function App() {
     escapeEntry,
     primary,
     settings.quality,
+    settings.drivingVehicle,
     practice,
     settings.escapeDifficulty,
     touchLayout,
@@ -1579,11 +1581,11 @@ export default function App() {
                   <p className="mode-note">
                     五分钟争取更多积分，车况耗尽会提前结算。
                   </p>
-                  <TransmissionChoice
+<VehicleChoice value={drivingVehicleId(settings.drivingVehicle)} onChange={drivingVehicle=>changeSettings({...settings,drivingVehicle})} disabled={busy}/>{drivingVehicleId(settings.drivingVehicle)==='bao5'&&<TransmissionChoice
                     mode={settings.transmission ?? "auto"}
                     onChange={changeTransmission}
                     disabled={busy}
-                  />
+                  />}
                 </>
               ) : (
                 <p className="mode-note">
@@ -1607,8 +1609,8 @@ export default function App() {
         page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
-        page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
-        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} onPlanComplete={plan=>{if(plan.actions.some(action=>action.type==='create_room'||action.type==='join_room')&&onlineClient.current?.view.currentRoom?.phase==='lobby'){pages.clear();setOnlineOpen(true);}}} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?'online-'+onlineView.currentRoom?.mode:snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
+        page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
+        page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} onPlanComplete={plan=>{if(plan.actions.some(action=>action.type==='create_room'||action.type==='join_room')&&onlineClient.current?.view.currentRoom?.phase==='lobby'){pages.clear();setOnlineOpen(true);}}} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
       {leaveConfirmation&&<GameDialog tactical={snapshot.mode==='escape'||!!onlineView.currentRoom} tone="danger" title={leaveDestination==='lobby'?'返回联机大厅？':onlineView.currentRoom?'离开当前房间？':'结束本局？'} busy={leavingRoom} busyLabel="正在离开…" onCancel={()=>setLeaveConfirmation(false)} cancelLabel="留在菜单" confirmLabel={leaveDestination==='lobby'?'返回联机大厅':'返回主菜单'} onConfirm={()=>void (leaveDestination==='lobby'?finishReturnLobby():finishReturnMenu())}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位。其他玩家可以继续对局。':storyMode?'故事进度会保留在本机，下次可以继续。':'本局尚未完成，返回主菜单将结束当前游玩。'}</p></GameDialog>}
@@ -2075,7 +2077,7 @@ export default function App() {
           <div className="pause-shade">
             <section className="pause-panel">
               <div className="pause-session-heading"><h2>{snapshot.mode==='escape'?'准备好，继续行动。':'校园在等你。'}</h2><p>{driving?'驾驶与倒计时已暂停。':'当前进度已暂停。'}</p></div>
-              {driving&&<div className="pause-session-controls"><TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/></div>}
+              {driving&&(!snapshot.driving?.vehicleId||snapshot.driving.vehicleId==='bao5')&&<div className="pause-session-controls"><TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/></div>}
               <button
                 className="primary wide"
                 onClick={resume}

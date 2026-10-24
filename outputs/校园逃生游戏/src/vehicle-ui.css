@@ -1,0 +1,14 @@
+.vehicle-choice{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.vehicle-card{display:flex;flex-direction:column;align-items:stretch;text-align:left;border:1px solid #bbb8aa;background:#f7f5ee;color:#262b28;padding:12px;min-width:0;border-radius:4px;cursor:pointer}
+.vehicle-card[aria-pressed=true]{border-color:#9c4736;box-shadow:inset 0 0 0 1px #9c4736;background:#fffaf1}
+.vehicle-card img{display:block;width:100%;aspect-ratio:1.7;object-fit:contain;background:#dedfd7;border-radius:2px}
+.vehicle-card-heading{display:flex;justify-content:space-between;gap:8px;margin:10px 0 3px}.vehicle-card-heading strong{font-size:17px}.vehicle-card-heading i{font-style:normal;color:#9c4736}
+.vehicle-card small{color:#62685f;font-size:12px}.vehicle-card p{font-size:13px;line-height:1.65;margin:8px 0;flex:1}.vehicle-card-spec{font:12px/1.5 ui-monospace,monospace}
+.simple-drive-instrument{min-width:102px;display:flex;flex-direction:column;align-items:center;padding:13px}.simple-drive-instrument .drive-instrument-speed{position:static;transform:none}.simple-drive-instrument .drive-instrument-speed>span{position:static;font-size:10px}.simple-drive-instrument>small{font-size:11px;margin-top:6px}
+.tank-reticle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:32px;height:32px;border:1px solid #f1f3d8aa;border-radius:50%;pointer-events:none;filter:drop-shadow(0 1px 2px #171e17)}
+.tank-reticle i,.tank-reticle b{position:absolute;background:#f8f8e8;left:50%;top:50%;transform:translate(-50%,-50%)}.tank-reticle i{width:12px;height:1px}.tank-reticle b{width:1px;height:12px}
+.tank-ammo{position:absolute;right:max(22px,env(safe-area-inset-right));bottom:218px;background:#17251fe8;color:#fff;padding:12px 16px;border-left:3px solid #cfb17c;display:grid;grid-template-columns:auto 1fr;gap:3px 8px;pointer-events:none}.tank-ammo strong{font:700 30px/1 ui-monospace,monospace}.tank-ammo span{align-self:end}.tank-ammo small{grid-column:1/-1;color:#cdd6ca;font-size:12px}
+.cannon-button{min-width:58px;min-height:44px;display:flex;flex-direction:column;justify-content:center;align-items:center}.cannon-button:disabled{opacity:.6}
+.touch-layout .tank-ammo{display:none}
+@media(max-width:550px){.vehicle-choice{grid-template-columns:1fr}.vehicle-card{display:grid;grid-template-columns:104px 1fr;column-gap:12px}.vehicle-card img{grid-row:1/5;align-self:center}.vehicle-card-heading{margin:0}.vehicle-card p{margin:4px 0}}
+@media(max-height:430px){.vehicle-choice{gap:8px}.vehicle-card{padding:8px}.vehicle-card img{aspect-ratio:2.5}.vehicle-card p{font-size:12px}}

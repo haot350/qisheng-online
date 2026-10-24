@@ -1,10 +1,10 @@
 /** Public production credits only. Never add deployment details or private contributors here. */
 export const COPYRIGHT = {
   year: 2026,
-  owner: 'OpenQS',
+  owner: 'LIUFRAME INTERACTIVE',
   title: '齐盛Online',
-  short: '© 2026 OpenQS · 齐盛Online',
-  statement: '齐盛Online由OpenQS制作与维护。公开程序源码依MIT许可证提供；第三方软件、音乐、标志与其他素材遵循各自许可及权利声明。正式校园、人物及视觉素材未纳入公开源码许可。',
+  short: '© 2026 LIUFRAME INTERACTIVE · 齐盛Online',
+  statement: '齐盛Online由LIUFRAME INTERACTIVE制作与维护。公开程序源码依MIT许可证提供；第三方软件、音乐、标志与其他素材遵循各自许可及权利声明。正式校园、人物及视觉素材未纳入公开源码许可。',
 } as const;
 
 export const CREDITS_MODELS = [

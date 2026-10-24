@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import type {TestContext} from 'node:test';
 registerHooks({resolve(specifier,context,next){if(specifier.startsWith('.')&&context.parentURL?.includes('/src/')){const url=new URL(specifier,context.parentURL);if(!/\.[a-z]+$/i.test(url.pathname)&&existsSync(fileURLToPath(url)+'.ts'))return next(specifier+'.ts',context);}return next(specifier,context);}});
 const {OnlineClient}=await import('../src/multiplayer/client.ts');
+function reconnectSdk(t:TestContext,client:any){const sdk=client.createReconnectClient();t.mock.method(client,'createReconnectClient',()=>sdk);return sdk;}
 const {rankingClient}=await import('../src/ranking/client.ts');
 const {gameMapSession}=await import('../src/game-map.ts');
 const {RoomSimulation}=await import('../src/multiplayer/shared/simulation.ts');
@@ -22,17 +23,17 @@ function mapReady(t:TestContext){
  const manifestBytes=new TextEncoder().encode(JSON.stringify({sourceVersion:'fixture',collisionUrl:'/collision.glb',navmeshUrl:'/nav.bin'})).buffer;
  t.mock.method(gameMapSession,'initialize',async()=>({manifestBytes,index:{manifest:{sha256:'m'},resources:{'/collision.glb':{sha256:'c'},'/nav.bin':{sha256:'n'}}}} as any));
 }
-function fakeRoom(){
+function fakeRoom(autoSnapshot=false){
  const callbacks=new Map<string,Function>(),sent:{type:string;data:unknown}[]=[];let left=0;
  const connection={isOpen:true,close(){connection.isOpen=false;}};
- return{roomId:'reserved-room',reconnectionToken:'reserved-room:new-secret',reconnection:{enabled:true},connection,onMessage:(name:string,fn:Function)=>callbacks.set(name,fn),onDrop:(fn:Function)=>callbacks.set('drop',fn),onReconnect:(fn:Function)=>callbacks.set('reconnect',fn),onError:(fn:Function)=>callbacks.set('error',fn),onLeave:(fn:Function)=>callbacks.set('leave',fn),send:(type:string,data:unknown)=>sent.push({type,data}),leave:async()=>{left++;connection.close();return 0;},callbacks,sent,get left(){return left;}};
+ return{roomId:'reserved-room',reconnectionToken:'reserved-room:new-secret',reconnection:{enabled:true},connection,onMessage:(name:string,fn:Function)=>{callbacks.set(name,fn);if(autoSnapshot&&name==='snapshot')queueMicrotask(()=>fn({roomId:'reserved-room',phase:'lobby',tick:0,players:[{id:'p0'}],events:[]}));},onDrop:(fn:Function)=>callbacks.set('drop',fn),onReconnect:(fn:Function)=>callbacks.set('reconnect',fn),onError:(fn:Function)=>callbacks.set('error',fn),onLeave:(fn:Function)=>callbacks.set('leave',fn),send:(type:string,data:unknown)=>sent.push({type,data}),leave:async()=>{left++;connection.close();return 0;},callbacks,sent,get left(){return left;}};
 }
-function clientFor(t:TestContext){const client=new OnlineClient();t.after(()=>client.dispose());return client;}
+function clientFor(t:TestContext){t.mock.method(rankingClient,'getPlayer',()=>({id:'p0'}) as any);const client=new OnlineClient();t.after(()=>client.dispose());return client;}
 
 test('a transient identity lookup failure preserves a reserved seat and retries even with an old storage timestamp',async t=>{
  const data=storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom();let lookups=0,reconnects=0;
  t.mock.method(rankingClient,'me',async()=>{if(++lookups===1)throw Error('temporary offline');return{id:'p0'} as any;});
- t.mock.method((client as any).sdk,'reconnect',async(token:string)=>{reconnects++;assert.equal(token,'reserved-room:secret-test-token');return room;});
+ t.mock.method(reconnectSdk(t,client),'reconnect',async(token:string)=>{reconnects++;assert.equal(token,'reserved-room:secret-test-token');return room;});
  assert.equal(await client.reconnect(),false);assert.equal(client.view.errorCode,'RECONNECT_RETRY');assert.equal(client.hasResumeSession(),true);assert.equal(data.has(key),true);assert.equal(reconnects,0);
  assert.equal(await client.reconnect(),true);assert.equal(reconnects,1);assert.equal(client.room,room);assert.equal(client.view.error,undefined);assert.equal(JSON.parse(data.get(key)!).token,room.reconnectionToken);
 });
@@ -40,35 +41,35 @@ test('temporary map or websocket failures never erase the reconnect token',async
  const data=storage(t);mapReady(t);const client=clientFor(t);t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));
  const mapMock=t.mock.method(gameMapSession,'initialize',async()=>{throw Error('map request interrupted');});
  assert.equal(await client.reconnect(),false);assert.equal(data.has(key),true);mapMock.mock.restore();
- t.mock.method((client as any).sdk,'reconnect',async()=>{throw Object.assign(Error('socket interrupted'),{code:1006});});
+ t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{throw Object.assign(Error('socket interrupted'),{code:1006});});
  assert.equal(await client.reconnect(),false);assert.equal(client.view.errorCode,'RECONNECT_RETRY');assert.equal(data.has(key),true);
 });
 test('server-confirmed expired token or disposed room clears the reserved-seat entry',async t=>{
  storage(t);mapReady(t);t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));
- for(const code of [522,524]){const client=clientFor(t);sessionStorage.setItem(key,JSON.stringify({token:'reserved-room:secret',playerId:'p0'}));t.mock.method((client as any).sdk,'reconnect',async()=>{throw Object.assign(Error('expired'),{code});});assert.equal(await client.reconnect(),false);assert.equal(client.hasResumeSession(),false);assert.equal(client.view.errorCode,'RECONNECT_EXPIRED');}
+ for(const code of [522,524]){const client=clientFor(t);sessionStorage.setItem(key,JSON.stringify({token:'reserved-room:secret',playerId:'p0'}));t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{throw Object.assign(Error('expired'),{code});});assert.equal(await client.reconnect(),false);assert.equal(client.hasResumeSession(),false);assert.equal(client.view.errorCode,'RECONNECT_EXPIRED');}
 });
 test('identity changes discard a seat without reconnecting as another player',async t=>{
- storage(t);mapReady(t);const client=clientFor(t);t.mock.method(rankingClient,'me',async()=>({id:'other'} as any));let requests=0;t.mock.method((client as any).sdk,'reconnect',async()=>{requests++;return fakeRoom();});
+ storage(t);mapReady(t);const client=clientFor(t);t.mock.method(rankingClient,'me',async()=>({id:'other'} as any));let requests=0;t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{requests++;return fakeRoom();});
  assert.equal(await client.reconnect(),false);assert.equal(requests,0);assert.equal(client.hasResumeSession(),false);assert.equal(client.view.errorCode,'IDENTITY_CHANGED');
 });
 test('repeated manual recovery is single-flight and a late socket after leaving is closed',async t=>{
  const data=storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom();t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let resolveRoom!:(room:ReturnType<typeof fakeRoom>)=>void,requests=0;
- t.mock.method((client as any).sdk,'reconnect',()=>{requests++;return new Promise(resolve=>{resolveRoom=resolve;});});
+ t.mock.method(reconnectSdk(t,client),'reconnect',()=>{requests++;return new Promise(resolve=>{resolveRoom=resolve;});});
  const first=client.reconnect(),second=client.reconnect();assert.equal(first,second);await new Promise(resolve=>setImmediate(resolve));assert.equal(requests,1);
- await client.leave();resolveRoom(room);assert.equal(await first,false);assert.equal(room.left,1);assert.equal(room.reconnection.enabled,false);assert.equal(client.room,null);assert.equal(data.has(key),false);assert.equal(client.view.status,'lobby');
+ await client.leave();resolveRoom(room);assert.equal(await first,false);await new Promise(resolve=>setImmediate(resolve));assert.equal(room.left,1);assert.equal(room.reconnection.enabled,false);assert.equal(client.room,null);assert.equal(data.has(key),false);assert.equal(client.view.status,'lobby');
 });
 test('joining the reserved full room resumes the original seat rather than consuming a new seat',async t=>{
- storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom();t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let requests=0;t.mock.method((client as any).sdk,'reconnect',async()=>{requests++;return room;});
+ storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom(true);t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let requests=0;t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{requests++;return room;});
  t.mock.method(globalThis,'fetch',async()=>{throw Error('new admission must not be requested');});
  await client.join(undefined,'reserved-room');assert.equal(requests,1);assert.equal(client.room,room);assert.equal(room.left,0);
 });
 test('a failed reserved-room retry cannot fall through to ordinary full-room matchmaking',async t=>{
- storage(t);mapReady(t);const client=clientFor(t);t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let requests=0;t.mock.method((client as any).sdk,'reconnect',async()=>{requests++;throw Error('temporary network failure');});
+ storage(t);mapReady(t);const client=clientFor(t);t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let requests=0;t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{requests++;throw Error('temporary network failure');});
  t.mock.method(globalThis,'fetch',async()=>{throw Error('new admission must not be requested');});
  await client.join(undefined,'reserved-room');assert.equal(requests,1);assert.equal(client.hasResumeSession(),true);assert.equal(client.view.errorCode,'RECONNECT_RETRY');
 });
 test('manual retry does not compete with an SDK automatic reconnection in progress',async t=>{
- storage(t);const client=clientFor(t),room=fakeRoom();(client as any).bind(room);room.callbacks.get('drop')!();let requests=0;t.mock.method((client as any).sdk,'reconnect',async()=>{requests++;return room;});
+ storage(t);const client=clientFor(t),room=fakeRoom();(client as any).bind(room);room.callbacks.get('drop')!();let requests=0;t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{requests++;return room;});
  assert.equal(await client.reconnect(),false);assert.equal(requests,0);assert.equal(client.view.status,'reconnecting');assert.equal(client.room,room);room.callbacks.get('reconnect')!();assert.equal(await client.reconnect(),true);
 });
 test('SDK retry exhaustion preserves a manual recovery entry, and a server-accepted late recovery is still valid',async t=>{
@@ -124,5 +125,5 @@ test('pickup outcome is included only for the interacting player, not an observi
 
 
 test('rejoining by invite code preserves and resumes the reserved original seat before resolving a new admission',async t=>{
- storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom();t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let calls=0;t.mock.method((client as any).sdk,'reconnect',async()=>{calls++;return room;});t.mock.method(globalThis,'fetch',async()=>{throw Error('must not consume a fresh invite grant while the original seat is recoverable');});await client.join(undefined,undefined,'SAMECODE');assert.equal(calls,1);assert.equal(client.room,room);assert.equal(room.left,0);
+ storage(t);mapReady(t);const client=clientFor(t),room=fakeRoom(true);t.mock.method(rankingClient,'me',async()=>({id:'p0'} as any));let calls=0;t.mock.method(reconnectSdk(t,client),'reconnect',async()=>{calls++;return room;});t.mock.method(globalThis,'fetch',async()=>{throw Error('must not consume a fresh invite grant while the original seat is recoverable');});await client.join(undefined,undefined,'SAMECODE');assert.equal(calls,1);assert.equal(client.room,room);assert.equal(room.left,0);
 });

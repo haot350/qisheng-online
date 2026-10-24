@@ -1,0 +1,6 @@
+.liuframe-brand{display:block;width:min(320px,100%);height:auto;object-fit:contain}
+.menu-about-studio{display:flex;flex-direction:column;align-items:center;gap:10px;margin:0 auto 28px}
+.menu-about-studio p{margin:0;font-size:13px;color:#666c61}
+.film-credits .liuframe-brand{width:min(420px,80vw);margin:0 auto 24px}
+.film-credits-ending .liuframe-brand{width:min(320px,72vw);margin:34px auto 6px}
+.copyright-page .liuframe-brand{margin-bottom:18px}

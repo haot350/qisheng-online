@@ -1,3 +1,4 @@
+import {type DrivingVehicleId} from './vehicles.ts';
 import { MapDecodeQueue } from "./map-decode.ts";
 import { MapScenePreparer, type MapRenderContext } from './map-scene-preparer.ts';
 import { VisionGeometry } from "./vision-geometry.ts";
@@ -92,11 +93,12 @@ export interface GameWorld {
   npcRouteSafe(points: THREE.Vector3[], distance?: number): boolean;
   restorePlayer(position: THREE.Vector3, crouch: boolean): void;
   step(dt: number): number;
-  startDriving(map: DriveMap): DrivingPhysics;
+  startDriving(map: DriveMap, vehicleId?:DrivingVehicleId): DrivingPhysics;
   validateDrivingSpawn(
     map: DriveMap,
     point: DriveMap["spawn"],
     yaw: number,
+    vehicleId?:DrivingVehicleId,
   ): DriveMap["spawn"] | null;
   actorPosition(id: number): THREE.Vector3 | null;
   pathOutdoor(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3[];
@@ -834,10 +836,10 @@ export async function loadWorld(
       navigationFrame++;
       return performance.now() - started;
     },
-    validateDrivingSpawn(map, point, yaw) {
-      return validateDrivingSpawn(physics, map, point, yaw);
+    validateDrivingSpawn(map, point, yaw, vehicleId) {
+      return validateDrivingSpawn(physics, map, point, yaw, vehicleId);
     },
-    startDriving(map) {
+    startDriving(map,vehicleId) {
       driving?.dispose();
       driveMap = map;
       outdoorGraph = undefined;
@@ -853,6 +855,7 @@ export async function loadWorld(
           driveMap = undefined;
           outdoorGraph = undefined;
         },
+        vehicleId,
       );
       physics.propagateModifiedBodyPositionsToColliders();
       return driving;

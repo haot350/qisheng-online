@@ -68,3 +68,12 @@
 @media(orientation:landscape) and (max-height:500px){.game-player-information{grid-template-columns:1fr 1.15fr;gap:14px}.game-player-information-card{padding:20px}.game-player-information-card h2{font-size:23px}}
 
 .game-brand-title img{display:block;width:min(600px,100%);height:auto;margin:0;object-fit:contain}
+.game-client-download{display:flex;align-items:center;justify-content:space-between;gap:28px;padding-block:28px 32px;border-bottom:1px solid #d3d7ce}
+.game-client-download>div{min-width:0;max-width:720px}
+.game-client-download h2{font-size:24px;margin:0 0 8px}
+.game-intro-page .game-client-download p{font-size:15px;line-height:1.8;color:#5b6255;margin:8px 0 0}
+.game-intro-page .game-client-download .game-client-meta{font:13px/1.8 ui-monospace,monospace;color:#737a6b;overflow-wrap:anywhere}
+.game-client-download .game-intro-button{flex-shrink:0;min-width:190px;min-height:48px;font-size:16px;padding:12px 20px;text-align:center}
+@media(max-width:650px){.game-client-download{align-items:stretch;flex-direction:column;gap:18px}.game-client-download .game-intro-button{width:100%;box-sizing:border-box}}
+
+.game-client-logo{display:block;width:min(420px,100%);height:auto;object-fit:contain;margin:0 0 20px}

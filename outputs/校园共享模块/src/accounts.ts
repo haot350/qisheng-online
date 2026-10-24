@@ -23,14 +23,14 @@ export interface AccountModeStats {
   hits?: number; bestCombo?: number; bestScore?: number; bestElapsed?: number;
   revives?: number; repairCount?: number; resetCount?: number;
   totalKills?: number | null; totalDeaths?: number | null; totalAssists?: number | null;
-  totalHeadshots?: number | null; totalRevives?: number | null; totalHits?: number | null;
+  totalHeadshots?: number | null; totalRevives?: number | null; totalHits?: number | null; totalCannonHits?: number | null;
   totalRepairs?: number | null; totalResets?: number | null;
 }
 export interface AccountProfile extends AccountIdentity {
   stats: Partial<Record<AchievementMode, AccountModeStats>>;
   recent: (RankingSubmission | Record<string, unknown>)[];
   achievements: AchievementUnlock[]; featuredAchievements: (string | AchievementUnlock)[];
-  bestByRule?: {mode: string; difficulty?: string; ruleVersion: string; bestScore: number; matches?: number}[];
+  bestByRule?: {mode: string; difficulty?: string; vehicleId?: import('./ranking.ts').DrivingVehicleId; ruleVersion: string; bestScore: number; matches?: number}[];
 }
 export interface AccountSession { id: string; current: boolean; createdAt?: number; expiresAt: number; lastSeenAt?: number; label?: string; }
 export interface AccountAppeal { id: string; receiptCode?: string; status?: string; message?: string; response?: string; resetCode?: string; expiresAt?: number; legacy?: boolean; replies?: {message: string; createdAt: number}[]; createdAt?: number; }
@@ -38,7 +38,7 @@ export interface FeedbackAssociation { id: string; receiptCode: string; }
 export interface PublicAccountProfile {
   player: Pick<AccountPlayer, 'nickname' | 'shortId' | 'id'>;
   avatar?: AvatarId; featuredAchievements: (string | AchievementUnlock)[];
-  publicBoardSummary?: {mode: string; difficulty?: string; ruleVersion?: string; bestScore?: number; matches?: number}[];
+  publicBoardSummary?: {mode: string; difficulty?: string; vehicleId?: import('./ranking.ts').DrivingVehicleId; ruleVersion?: string; bestScore?: number; matches?: number}[];
 }
 export function isActiveAccount(player: AccountPlayer | null | undefined): boolean { return !!player && player.accountStatus === 'active'; }
 export function needsAccountUpgrade(player: AccountPlayer | null | undefined): boolean { return !!player && (player.accountStatus === 'legacy' || player.needsUpgrade === true); }

@@ -19,6 +19,7 @@ registerHooks({
   },
 });
 const { OnlineClient } = await import("../src/multiplayer/client.ts");
+function reconnectSdk(t:TestContext,client:any){const sdk=client.createReconnectClient();t.mock.method(client,'createReconnectClient',()=>sdk);return sdk;}
 const { rankingClient } = await import("../src/ranking/client.ts");
 const { gameMapSession } = await import("../src/game-map.ts");
 
@@ -326,7 +327,7 @@ test("a stale failed handshake cannot replace the new join status or cancellatio
   assert.equal(client.room?.roomId, "new-room");
 });
 
-test("late cleanup of an old active room cannot clear a new join", async (t) => {
+test("new admission waits until the old active room has finished leaving", async (t) => {
   const { client } = setup(t),
     room = fakeRoom("old-room"),
     release = deferred<number>();
@@ -340,8 +341,11 @@ test("late cleanup of an old active room cannot clear a new join", async (t) => 
     async () => newRoom,
   );
   await client.join({ mode: "pvp" });
+  assert.equal(client.room,null);
+  assert.equal(client.view.errorCode,'LEAVING');
   release.resolve(0);
   await leaving;
+  await client.join({ mode: "pvp" });
   assert.equal(client.room, newRoom);
   assert.equal(client.view.currentRoom?.roomId, "new-room");
   assert.equal(client.view.status, "lobby");
@@ -503,7 +507,7 @@ test("manual recovery timeout retains its token, permits retry and retires its l
   const old = deferred<any>(),
     room = fakeRoom("reserved");
   let calls = 0;
-  t.mock.method((client as any).sdk, "reconnect", () =>
+  t.mock.method(reconnectSdk(t,client), "reconnect", () =>
     ++calls === 1 ? old.promise : Promise.resolve(room),
   );
   const first = client.reconnect();
@@ -531,7 +535,7 @@ test("leaving cancels a blackholed manual recovery immediately without reviving 
   const pending = deferred<any>(),
     room = fakeRoom("reserved");
   let requested = false;
-  t.mock.method((client as any).sdk, "reconnect", () => {
+  t.mock.method(reconnectSdk(t,client), "reconnect", () => {
     requested = true;
     return pending.promise;
   });

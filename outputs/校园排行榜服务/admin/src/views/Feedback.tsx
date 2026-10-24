@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeConnectionSummary } from "@qisheng/shared/connection-summary";
 import {
   api,
   has,
@@ -102,7 +103,7 @@ export default function Feedback({
               <input
                 value={filter.version}
                 onChange={(e) => update("version", e.target.value)}
-                placeholder="0.6.9"
+                placeholder="版本号，可含 Preview"
               />
             </Field>
             <Field label="玩法">
@@ -111,10 +112,10 @@ export default function Feedback({
                 onChange={(e) => update("mode", e.target.value)}
               >
                 <option value="">全部</option>
-                {["story", "roam", "dafei", "escape", "coop", "tdm", "ffa"].map(
+                {["story", "roam", "dafei", "escape", "coop", "tdm", "ffa", "pvp"].map(
                   (v) => (
                     <option key={v} value={v}>
-                      {modeName[v]}
+                      {v === "pvp" ? "玩家对战（历史未分类）" : modeName[v]}
                     </option>
                   ),
                 )}
@@ -252,7 +253,7 @@ export default function Feedback({
                     <summary>设备与诊断</summary>
                     <KeyValues
                       items={Object.fromEntries(
-                        Object.entries(detail.data.diagnostics).map(
+                        Object.entries(detail.data.diagnostics).filter(([k]) => k !== 'connection').map(
                           ([k, v]) => [
                             (
                               {
@@ -270,6 +271,18 @@ export default function Feedback({
                         ),
                       )}
                     />
+                    {safeConnectionSummary(detail.data.diagnostics.connection) && <KeyValues items={Object.fromEntries(
+                      Object.entries(safeConnectionSummary(detail.data.diagnostics.connection)!).map(([key, value]) => {
+                        const labels:Record<string,[string,string]> = {
+                          rttMs:['往返延迟','ms'],jitterMs:['网络抖动','ms'],snapshotIntervalMs:['状态间隔','ms'],
+                          snapshotAgeMs:['状态年龄','ms'],bufferMs:['显示缓冲','ms'],inputAckAgeMs:['输入确认年龄','ms'],
+                          backlogAgeMs:['发送积压','ms'],correctionP95M:['位置校正 P95','米'],hardCorrections:['直接重定位','次'],
+                          longFrames:['长帧','次'],resyncs:['重新同步','次'],replaySteps:['预测重放','步'],
+                        };
+                        const [label, unit] = labels[key];
+                        return [label, value + ' ' + unit];
+                      })
+                    )}/>}
                   </details>
                 )}
                 <div className="detail-actions">

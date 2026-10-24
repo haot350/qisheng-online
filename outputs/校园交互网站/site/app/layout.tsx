@@ -9,6 +9,7 @@ const shareImage = new URL(staticAssetUrl("/images/campus-overview.jpg"), SITE_O
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),
+  authors: [{name: "LIUFRAME INTERACTIVE"}],
   alternates: {canonical: '/'},
   title: "齐盛 · 数字校园",
   description: "走近齐盛校园，探索建筑与庭院，了解一座数字校园的制作故事。",

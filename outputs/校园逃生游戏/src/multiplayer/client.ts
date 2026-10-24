@@ -51,6 +51,7 @@ type AdmissionResult = {
 };
 const RESYNC_RETRY_MS = 500;
 const JOIN_TIMEOUT_MS = 12000;
+const PRE_QUEUE_REJECTIONS = new Set(['ADMISSION_ID', 'MAP_MISMATCH', 'TICKET_REQUIRED', 'INVALID_WEATHER', 'INVALID_MODE']);
 const terminalResumeError = (error: unknown) =>
   [522, 524].includes(Number((error as { code?: unknown })?.code));
 export async function localMapIdentity(
@@ -90,6 +91,11 @@ class AdmissionClient extends Client {
     try { return this.consumeSeatReservation(reservation); }
     finally { this.captureRoom = undefined; }
   }
+  async reconnectTracked(token: string, capture: (room: Room) => void): Promise<Room> {
+    this.captureRoom = capture;
+    try { return await this.reconnect(token); }
+    finally { this.captureRoom = undefined; }
+  }
 }
 function playerJoinError(error: unknown): unknown {
   const message = (error as {message?: string})?.message;
@@ -120,6 +126,7 @@ export class OnlineClient {
   private events = new Set<(e: GameEvent) => void>();
   private loadingRetries = new Set<(e: { epoch: number; retryAfterMs: number }) => void>();
   private operation = 0;
+  private operationPlayerId: string | null = null;
   private abort = new AbortController();
   private queue: AdmissionHandle | null = null;
   private disposed = false;
@@ -130,6 +137,7 @@ export class OnlineClient {
   private sdk = new AdmissionClient(REALTIME_API);
   private pendingAdmission:PendingAdmission|null=null;
   private admissionRecovery:Promise<boolean>|null=null;
+  private leaveWork:Promise<void>|null=null;
   private retiredRooms = new WeakSet<Room>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private resyncPending = false;
@@ -138,23 +146,34 @@ export class OnlineClient {
   constructor(){try{const value=JSON.parse(sessionStorage.getItem(PENDING_ADMISSION_KEY)||'null');if(value&&typeof value.id==='string'&&/^[a-f0-9-]{36}$/i.test(value.id)&&typeof value.playerId==='string'&&value.playerId.length<=100&&['coop','pvp'].includes(value.mode)&&['tdm','ffa'].includes(value.variant))this.pendingAdmission=value;}catch{}}
   private savePendingAdmission(value:PendingAdmission|null){this.pendingAdmission=value;try{if(value)sessionStorage.setItem(PENDING_ADMISSION_KEY,JSON.stringify(value));else sessionStorage.removeItem(PENDING_ADMISSION_KEY);}catch{}}
   hasUncertainAdmission(){return !!this.pendingAdmission;}
+  handleIdentityChange(playerId: string | null): boolean {
+    const owner = this.room ? this.playerId : this.operationPlayerId ?? this.pendingAdmission?.playerId;
+    if (!owner || owner === playerId) return false;
+    if (this.pendingAdmission?.playerId === owner) this.savePendingAdmission(null);
+    void this.leave();
+    return true;
+  }
+  private createReconnectClient() { return new AdmissionClient(REALTIME_API); }
   recoverAdmission(signal?:AbortSignal):Promise<boolean>{
     if(this.admissionRecovery)return this.admissionRecovery;
     const pending=this.pendingAdmission;if(!pending)return Promise.resolve(true);
+    const serial=this.operation,ownSignal=this.abort.signal;
+    this.operationPlayerId=pending.playerId;
     const controller=new AbortController(),cancel=()=>controller.abort(),timer=setTimeout(cancel,8000);
-    signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted)cancel();
-    const valid=()=>!this.disposed&&this.pendingAdmission?.id===pending.id;
+    signal?.addEventListener('abort',cancel,{once:true});ownSignal.addEventListener('abort',cancel,{once:true});if(signal?.aborted||ownSignal.aborted)cancel();
+    const owns=()=>this.current(serial)&&this.pendingAdmission?.id===pending.id;
+    const valid=()=>owns()&&!controller.signal.aborted;
+    this.set({status:'reconnecting',error:'正在核对上一次加入请求…',errorCode:'ADMISSION_CHECKING'});
     const work=(async()=>{try{
-      const player=await rankingClient.me();if(!valid())return false;
-      if(player?.id!==pending.playerId){if(player?.id){this.savePendingAdmission(null);return true;}throw Error('请先登录原账号，再核对加入状态。');}
-      this.set({status:'reconnecting',error:'正在核对上一次加入请求…',errorCode:'ADMISSION_UNCERTAIN'});
+      const player=await rankingClient.me();if(!valid())throw new DOMException('Cancelled','AbortError');
+      if(player?.id!==pending.playerId){if(player?.id){this.handleIdentityChange(player.id);return false;}throw Error('请先登录原账号，再核对加入状态。');}
       const {ticket}=await rankingClient.request<{ticket:string}>('/multiplayer/tickets',{method:'POST',body:{mode:pending.mode,variant:pending.variant},signal:controller.signal});
       const result=await this.request<{cleared:boolean;active?:boolean}>('/v1/admission/reconcile',{method:'POST',body:JSON.stringify({ticket,admissionId:pending.id,mode:pending.mode,variant:pending.variant})},controller.signal);
-      if(!valid())return false;
+      if(!valid())throw new DOMException('Cancelled','AbortError');
       if(result.cleared){this.savePendingAdmission(null);this.set({status:'lobby',error:undefined,errorCode:undefined});return true;}
       this.set({status:'error',error:result.active?'原房间连接仍在使用，请回到原页面重连或明确离开。':'原加入请求仍在确认中，请稍后重试连接。',errorCode:'ADMISSION_UNCERTAIN'});return false;
-    }catch{if(valid())this.set({status:'error',error:'暂时无法确认原加入请求，请重试连接后再创建房间。',errorCode:'ADMISSION_UNCERTAIN'});return false;}
-    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}})();
+    }catch{if(owns()&&!ownSignal.aborted)this.set({status:'error',error:'暂时无法确认原加入请求，请重试连接后再创建房间。',errorCode:'ADMISSION_UNCERTAIN'});return false;}
+    finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);ownSignal.removeEventListener('abort',cancel);}})();
     this.admissionRecovery=work;void work.finally(()=>{if(this.admissionRecovery===work)this.admissionRecovery=null;});return work;
   }
   subscribe(fn: () => void) {
@@ -217,7 +236,7 @@ export class OnlineClient {
           value?.error?.message ||
             value?.message ||
             "联机服务暂时无法连接，请重试。",
-          value?.error?.code || "ONLINE",
+          value?.error?.code || value?.code || "ONLINE",
           r.status >= 500,
         );
       return value;
@@ -238,7 +257,7 @@ export class OnlineClient {
       );
       if (serial === this.operation) {
         // Browsing fresh listings does not release an uncertain admission or a reserved seat.
-        const recovering=!this.room&&(this.hasUncertainAdmission()||this.hasResumeSession())&&['error','reconnecting'].includes(this.view.status);
+        const recovering=!!this.leaveWork||(!this.room&&(this.hasUncertainAdmission()||this.hasResumeSession())&&['error','reconnecting'].includes(this.view.status));
         this.set({
           rooms,
           ...(recovering?{}:{
@@ -249,7 +268,7 @@ export class OnlineClient {
         });
       }
     } catch (e) {
-      if (serial === this.operation && !this.disposed)
+      if (serial === this.operation && !this.disposed && !this.leaveWork)
         this.set({
           error: (e as Error).message,
           status: this.room ? this.view.status : "error",
@@ -288,13 +307,10 @@ export class OnlineClient {
     if (this.retiredRooms.has(room)) return;
     this.retiredRooms.add(room);
     room.reconnection.enabled = false;
-    if (room.connection && !room.connection.isOpen) {
-      room.connection.close();
+    if (!room.connection || !room.connection.isOpen) {
+      room.connection?.close();
       return;
     }
-    try {
-      room.send("leave", {});
-    } catch {}
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -351,7 +367,13 @@ export class OnlineClient {
       // The SDK exposes its Room only after joining. Retire a success that arrives
       // after cancellation/timeout rather than reviving the abandoned operation.
       try {
-        start((room) => { pendingRoom = room; }).then(
+        start((room) => {
+          if (settled) {
+            void this.retireRoom(room);
+            throw new DOMException('Cancelled', 'AbortError');
+          }
+          pendingRoom = room;
+        }).then(
           (room) => {
             if (!finish(() => resolve(room))) void this.retireRoom(room);
           },
@@ -384,7 +406,7 @@ export class OnlineClient {
     });
   }
   async join(options?: RoomOptions, roomId?: string, inviteCode?: string, externalSignal?: AbortSignal):Promise<RoomSnapshot|undefined> {
-    if (this.disposed) return;
+    if (this.disposed || this.leaveWork) return;
     if(externalSignal?.aborted)throw new DOMException('Cancelled','AbortError');
     if(this.pendingAdmission&&!this.room&&!await this.recoverAdmission(externalSignal))return;
     const saved = this.readResume();
@@ -405,6 +427,7 @@ export class OnlineClient {
         return recovered ? this.waitForOwnSnapshot(externalSignal) : undefined;
     }
     const serial = ++this.operation;
+    this.operationPlayerId = rankingClient.getPlayer()?.id ?? null;
     await this.releaseCurrent(serial);
     if (!this.current(serial)) return;
     const controller = new AbortController();
@@ -414,7 +437,8 @@ export class OnlineClient {
     externalSignal?.addEventListener('abort',cancel,{once:true});
     if(externalSignal?.aborted)cancel();
     let admission: AdmissionHandle | null = null,
-      unboundRoom: Room | null = null;
+      unboundRoom: Room | null = null,
+      pending: PendingAdmission | null = null;
     this.set({
       status: "connecting",
       error: undefined,
@@ -451,6 +475,7 @@ export class OnlineClient {
           false,
         );
       this.playerId = playerId;
+      this.operationPlayerId = playerId;
       this.map = local;
       const { ticket } = await rankingClient.request<{ ticket: string }>(
         "/multiplayer/tickets",
@@ -463,7 +488,7 @@ export class OnlineClient {
       if (!this.current(serial) || signal.aborted) return;
       // Creation has a server-side effect. Let its bounded response arrive so a cancelled
       // operation can revoke its own handle instead of orphaning the queue.
-      const pending:PendingAdmission={id:crypto.randomUUID(),playerId,mode:options?.mode==='pvp'?'pvp':'coop',variant:options?.variant==='ffa'?'ffa':'tdm'};
+      pending={id:crypto.randomUUID(),playerId,mode:options?.mode==='pvp'?'pvp':'coop',variant:options?.variant==='ffa'?'ffa':'tdm'};
       this.savePendingAdmission(pending);
       let admitted = await this.request<AdmissionResult>(
         "/v1/queue",
@@ -540,6 +565,7 @@ export class OnlineClient {
       return await this.waitForOwnSnapshot(signal);
     } catch (error) {
       const e = playerJoinError(error);
+      if (pending && this.pendingAdmission?.id === pending.id && e instanceof RankingError && PRE_QUEUE_REJECTIONS.has(e.code)) this.savePendingAdmission(null);
       if (admission) void this.cancelAdmission(admission);
       if (unboundRoom) await this.retireRoom(unboundRoom);
       if (this.current(serial) && !signal.aborted)
@@ -898,12 +924,13 @@ export class OnlineClient {
     return !!this.readResume();
   }
   reconnect(): Promise<boolean> {
-    if (this.disposed) return Promise.resolve(false);
+    if (this.disposed || this.leaveWork) return Promise.resolve(false);
     if (this.room) return Promise.resolve(this.view.status !== "reconnecting");
     if (this.resumeWork) return this.resumeWork;
     const saved = this.readResume();
     if (!saved) return Promise.resolve(false);
     const serial = ++this.operation;
+    this.operationPlayerId = saved.playerId;
     this.abort.abort();
     const controller = new AbortController();
     this.abort = controller;
@@ -933,8 +960,9 @@ export class OnlineClient {
         }
         this.playerId = player!.id;
         this.map = map;
+        const sdk = this.createReconnectClient();
         const room = await this.waitForRoom(
-          () => this.sdk.reconnect(saved.token),
+          capture => sdk.reconnectTracked(saved.token, capture),
           signal,
           new RankingError(
             "连接暂时未能恢复，请重试重连。",
@@ -944,6 +972,14 @@ export class OnlineClient {
         );
         if (!this.current(serial) || signal.aborted) {
           await this.retireRoom(room);
+          return false;
+        }
+        if (rankingClient.getPlayer()?.id !== saved.playerId) {
+          await this.retireRoom(room);
+          if (this.current(serial)) {
+            this.removeResume();
+            this.set({currentRoom:null,status:'error',error:'登录身份已改变，请重新加入。',errorCode:'IDENTITY_CHANGED'});
+          }
           return false;
         }
         this.bind(room);
@@ -995,13 +1031,14 @@ export class OnlineClient {
     this.reconnectTimer = null;
     if (reset) this.reconnectStarted = null;
   }
-  private async releaseCurrent(serial: number) {
+  private async releaseCurrent(serial: number, updateView = true) {
     this.inputSent.clear();this.inputAcknowledged=0;this.inputAckAgeMs=0;
     this.socketOff?.();
     this.socketOff = null;
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = null;
     this.resumeWork = null;
+    this.admissionRecovery = null;
     this.abort.abort();
     this.abort = new AbortController();
     this.clearReconnectTimer();
@@ -1014,7 +1051,7 @@ export class OnlineClient {
     this.decoder.reset();
     this.removeResume();
     await Promise.all([cancelWork,room?this.retireRoom(room):Promise.resolve()]);
-    if (this.current(serial))
+    if (updateView && this.current(serial))
       this.set({
         currentRoom: null,
         status: "lobby",
@@ -1024,10 +1061,20 @@ export class OnlineClient {
         queuePosition: undefined,
       });
   }
-  async leave() {
+  leave(): Promise<void> {
+    if (this.leaveWork) return this.leaveWork;
     const serial = ++this.operation;
-    await this.releaseCurrent(serial);
-    if(this.pendingAdmission&&!this.disposed)await this.recoverAdmission();
+    this.set({status:'connecting',error:'正在离开房间…',errorCode:'LEAVING',queuePosition:undefined});
+    const work=(async()=>{
+      await this.releaseCurrent(serial,false);
+      if (!this.current(serial)) return;
+      this.operationPlayerId=null;
+      if(this.pendingAdmission&&!this.disposed)await this.recoverAdmission();
+      if(this.current(serial)&&!this.pendingAdmission)this.set({currentRoom:null,status:'lobby',error:undefined,errorCode:undefined,reconnectLeft:undefined,queuePosition:undefined});
+    })();
+    this.leaveWork=work;
+    void work.finally(()=>{if(this.leaveWork===work)this.leaveWork=null;});
+    return work;
   }
   dispose() {
     void this.leave();

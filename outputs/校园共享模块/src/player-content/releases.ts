@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.9.6',sequence:44,date:'2026-10-24',version:'Preview 0.9.6',
+ overview:'换一种载具出发，入房与返回更顺手。',
+ summary:['大飞新增轻型坦克和电动滑板车，三种载具分别记录成绩。','改善入房、重连和离场流程，失败时保留已填写的内容。','突围撤离阶段的追兵防守更分散，小屏确认操作更清楚。'],
+ items:['新增：大飞可选择汽车、轻型坦克或电动滑板车，坦克可以发射炮弹。','新增：三种载具各自的排行榜和本机最佳，旧汽车成绩继续保留。','调整：单人突围撤离阶段，部分追兵会选择圈外可达位置防守。','修复：退出房间时的多余消息，以及重连、取消和切换账号时的席位处理。','调整：创建或加入失败后保留房间设置与房间码，并显示对应的重试操作。','修复：反馈的设备信息和连接摘要需要重复勾选，以及网络重试可能重复提交。','调整：离场、清理等确认的操作按钮在小屏和放大文字时保持可见。','调整：客户端下载区分当前测试版与历史版本，玩法说明与现有内容保持一致。']
+},
+{
  id:'preview-0.9.5',sequence:43,date:'2026-10-19',version:'Preview 0.9.5',
  overview:'先熟悉操作，再与同伴继续下一局。',
  summary:['新增本机操作练习，逐步熟悉观察、移动、射击和互动。','支持的客户端可在结算后保留队伍，再来一局。','准星和文字可调整，重试连接时保留原席位状态。'],

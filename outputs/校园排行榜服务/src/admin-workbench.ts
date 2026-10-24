@@ -7,7 +7,7 @@ import {hostname} from 'node:os';
 import type {FastifyRequest} from 'fastify';
 import type {Context} from './app.js';
 import {AppError} from './validation.js';
-import {feedbackView, page} from './feedback.js';
+import {feedbackViews, page} from './feedback.js';
 import {readGameConfig} from './operations.js';
 
 type Admin = (req: FastifyRequest, write?: boolean, scope?: string) => any;
@@ -99,11 +99,25 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
     else if (state !== 'all') {filters.push('f.status=?'); args.push(state);}
     const search = String(q.search ?? '').trim().slice(0, 100);
     if (search) {filters.push('(instr(lower(f.title),lower(?))>0 OR instr(lower(f.message),lower(?))>0 OR f.id=?)'); args.push(search, search, search);}
-    if (q.version) {filters.push("json_extract(f.diagnostics,'$.version')=?"); args.push(String(q.version).slice(0, 40));}
-    if (q.mode) {filters.push("json_extract(f.diagnostics,'$.mode')=?"); args.push(String(q.mode).slice(0, 40));}
+    if (q.version) {
+      const version = String(q.version).trim().slice(0, 40).replace(/^Preview\s+/i, '');
+      filters.push("(json_extract(f.diagnostics,'$.version')=? OR json_extract(f.diagnostics,'$.version')=?)");
+      args.push(version, 'Preview ' + version);
+    }
+    if (q.mode) {
+      const mode = String(q.mode).slice(0, 40);
+      const aliases:Record<string,string[]> = {
+        coop:['coop','online-coop','escape-coop'],
+        tdm:['tdm','online-tdm'], ffa:['ffa','online-ffa'],
+        pvp:['pvp','online-pvp'], escape:['escape','escape-solo'],
+      };
+      const values = aliases[mode] ?? [mode];
+      filters.push("json_extract(f.diagnostics,'$.mode') IN (" + values.map(() => '?').join(',') + ')');
+      args.push(...values);
+    }
     range(q, filters, args, 'f.created');
     const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '', source = ' FROM feedback f LEFT JOIN feedback_resolutions r ON r.feedback_id=f.id';
-    const items = (db.prepare('SELECT f.*' + source + where + ' ORDER BY f.updated DESC,f.id ASC LIMIT 20 OFFSET ?').all(...args, (pg - 1) * 20) as any[]).map(r => feedbackView(c, r, true));
+    const items = feedbackViews(c, db.prepare('SELECT f.*' + source + where + ' ORDER BY f.updated DESC,f.id ASC LIMIT 20 OFFSET ?').all(...args, (pg - 1) * 20) as any[], true);
     return {items, total: (db.prepare('SELECT count(*) n' + source + where).get(...args) as any).n, page: pg, pageSize: 20};
   });
   app.get('/admin/audit', req => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import {UE_WINDOWS_PREVIEW} from '@qisheng/shared/player-content';
 import { api, stamp, useResource, type Row } from "../api";
 import {
   Dialog,
@@ -84,6 +85,18 @@ export default function Releases() {
           </div>
         </Load>
       </Panel>
+      <Panel title="客户端下载档案">
+        <p className="muted">网页与客户端分别编号。独立下载记录不表示网页或实时服务已经更新。</p>
+        <div className="release-list">
+          <article>
+            <header><h2>{UE_WINDOWS_PREVIEW.productName} · {UE_WINDOWS_PREVIEW.title}</h2><span>Preview {UE_WINDOWS_PREVIEW.version}</span><span className="badge">独立实验版</span></header>
+            <p>{UE_WINDOWS_PREVIEW.description}</p>
+            <p className="muted">{(UE_WINDOWS_PREVIEW.bytes/1_000_000).toFixed(1)} MB · {UE_WINDOWS_PREVIEW.installation}</p>
+            <a className="text-link" href={'https://game.tianhw.top'+UE_WINDOWS_PREVIEW.downloadPath} download>下载现有 Windows UE 实验版 →</a>
+          </article>
+          <article><header><h2>Godot 客户端（历史）</h2><span className="badge">停止更新</span></header><p>Windows 历史发行保留下载；安卓内部包未公开。旧客户端更新通道与 UE 下载相互独立。</p></article>
+        </div>
+      </Panel>
       {edit && (
         <ReleaseEditor
           item={edit}
@@ -127,7 +140,7 @@ function ReleaseEditor({
       <div className="form-grid">
         <Field label="版本">
           <input
-            placeholder="Preview 0.6.9"
+            placeholder="Preview x.y.z"
             value={form.version}
             onChange={(e) => patch("version", e.target.value)}
           />

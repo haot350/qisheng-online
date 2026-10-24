@@ -1,6 +1,6 @@
 {
   "name": "qisheng-campus-realtime",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,7 +22,7 @@
     "recast-navigation": "0.43.1",
     "three": "0.183.0",
     "express": "5.2.1",
-    "@qisheng/shared": "file:vendor/qisheng-shared-0.9.5.tgz"
+    "@qisheng/shared": "file:vendor/qisheng-shared-0.9.6.tgz"
   },
   "devDependencies": {
     "@types/express": "5.0.3",

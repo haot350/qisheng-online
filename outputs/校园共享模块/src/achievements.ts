@@ -5,6 +5,7 @@ export interface AchievementEvidence {
   difficulty?: 'easy' | 'standard' | 'hard'; variant?: 'tdm' | 'ffa'; playerCount?: number;
   kills?: number; deaths?: number; assists?: number; downs?: number; uniqueDowns?: number;
   headshots?: number; damage?: number; rank?: number; transmission?: 'auto' | 'manual' | 'mixed';
+  vehicleId?: import('./ranking.ts').DrivingVehicleId; cannonHits?: number; totalHits?: number;
   revives?: number; repairCount?: number; resetCount?: number; hits?: number; bestCombo?: number;
 }
 export interface AchievementDefinition {
@@ -41,7 +42,7 @@ export const ACHIEVEMENTS: readonly AchievementDefinition[] = Object.freeze([
   entry('drive-finish', 'dafei', '五分钟的旅程', '在大飞模式中坚持完整300秒。', completeDrive),
   entry('drive-twenty', 'dafei', '行动不止', '单局完成二十次有效撞飞。', v => atLeast(v.hits, 20)),
   entry('drive-combo', 'dafei', '一气呵成', '在大飞模式中达成四倍连击。', v => atLeast(v.bestCombo, 4)),
-  entry('drive-manual', 'dafei', '掌握节奏', '全程手动挡并坚持完整300秒。', v => completeDrive(v) && v.transmission === 'manual'),
+  entry('drive-manual', 'dafei', '掌握节奏', '全程手动挡并坚持完整300秒。', v => completeDrive(v) && (v.vehicleId??'bao5') === 'bao5' && v.transmission === 'manual'),
   entry('drive-repair', 'dafei', '整装再出发', '单局完成两次有效维修。', v => atLeast(v.repairCount, 2)),
   entry('drive-clean', 'dafei', '一路向前', '未经脱困或安全恢复，坚持完整300秒。', v => completeDrive(v) && zero(v.resetCount)),
 ]);

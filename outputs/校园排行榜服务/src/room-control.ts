@@ -42,8 +42,8 @@ export function submitRoomCommand(c: Context, actor: string, roomId: string, b: 
     throw new AppError('CONFLICT', '房间状态已经变化，请刷新后重新确认。', 409);
   if (playerId && !room.players.some((p: any) => p.playerId === playerId))
     throw new AppError('ROOM_MEMBER', '此玩家已不在房间中。', 409);
-  const pending = c.db.prepare("SELECT r.command_id FROM room_command_results r JOIN room_commands q ON q.id=r.command_id WHERE q.room_id=? AND r.generation=? AND q.action=? AND COALESCE(q.player_id,'')=? AND r.state IN ('queued','executing')").get(roomId, room.generation, b.action, playerId ?? '') as any;
-  if (pending) return {ok: true, commandId: pending.command_id, state: 'queued', duplicate: true};
+  const pending = c.db.prepare("SELECT r.command_id,r.state FROM room_command_results r JOIN room_commands q ON q.id=r.command_id WHERE q.room_id=? AND r.generation=? AND q.action=? AND COALESCE(q.player_id,'')=? AND r.state IN ('queued','executing')").get(roomId, room.generation, b.action, playerId ?? '') as any;
+  if (pending) return {ok: true, commandId: pending.command_id, state: pending.state, duplicate: true};
   const id = random(16), created = c.now();
   c.db.transaction(() => {
     c.db.prepare('INSERT INTO room_commands(id,room_id,action,player_id,reason,created,acked) VALUES(?,?,?,?,?,?,1)').run(id, roomId, b.action, playerId, b.reason.trim(), created);
