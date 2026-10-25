@@ -43,7 +43,7 @@ import {
 } from "./driving-presentation.ts";
 import { RESPAWN_RULES, chooseDrivingRespawn } from "./driving-respawn.ts";
 import { DRIVE_RULES } from "./driving-rules.ts";
-import { escapeFloorAt } from "./escape-floor";
+import { escapeFloorAt,escapeLevelAt,mapLayoutFromManifest,mapLevels } from "./escape-floor";
 import { EscapeContacts } from "./escape/contacts.ts";
 import { ExtractionDefense } from "./escape/extraction-defense.ts";
 import {
@@ -1021,19 +1021,22 @@ export async function createGame(
       ...snap,
       interactionAvailable,
       mapOpen: escapeMapOpen,
+      mapLayout: mapLayoutFromManifest(world.manifest),
       playerPosition: position.toArray() as Vec3,
       playerYaw: yaw,
       playerFloor: escapeFloor(position),
+      playerLevelId: escapeLevelAt(position.toArray(),world.manifest)?.id,
       mapFloor: escapeFloor(position),
-      mapFloors: [0, ...(world.manifest.floors ?? []).map((f) => f.id)],
+      mapFloors: [0, ...mapLevels(world.manifest).map((f) => f.floor)],
       enemyContacts: escapeContacts
         .read(elapsed)
-        .map((c) => ({ ...c, floor: escapeFloor(v(c.position)) })),
+        .map((c) => ({ ...c, floor: escapeFloor(v(c.position)),levelId:escapeLevelAt(c.position,world.manifest)?.id })),
       supplies: supplies.map((p) => ({
         id: p.point.id,
         name: p.point.label,
         position: p.point.position,
         floor: escapeFloor(v(p.point.position)),
+        levelId: escapeLevelAt(p.point.position,world.manifest)?.id,
         used: p.collected,
       })),
       best: escapeBest,
@@ -1042,7 +1045,7 @@ export async function createGame(
     };
   }
   function escapeFloor(point: THREE.Vector3): number {
-    return escapeFloorAt(point.toArray() as Vec3, world.manifest.floors);
+    return escapeFloorAt(point.toArray() as Vec3, world.manifest);
   }
   function escapeTarget() {
     const snap = escapeRound?.snapshot(),
@@ -2209,7 +2212,7 @@ export async function createGame(
       try {
         const stored = Number(
           localStorage.getItem(
-            "qisheng-escape-0.3.0-" + escapeSelectedDifficulty,
+            "qisheng-escape-" + rankingRuleVersion("escape") + "-" + escapeSelectedDifficulty,
           ),
         );
         if (stored > 0 && Number.isFinite(stored)) escapeBest = stored;
@@ -2770,7 +2773,7 @@ export async function createGame(
     });
   }
   async function start(next: Mode, loadout?: Loadout) {
-    if (import.meta.env.DEV) (window as any).__gameStartError = null;
+    if (import.meta.env.DEV) { (window as any).__gameStartError = null; delete canvas.dataset.startError; }
     if (dead) return;
     gameOperations.assert(entryFor(next));
     const permission = gameOperations.check(entryFor(next));
@@ -2909,12 +2912,14 @@ export async function createGame(
       return enter(false);
     } catch (error) {
       if (dead || token !== enterToken) return;
-      if (import.meta.env.DEV)
+      if (import.meta.env.DEV) {
         (window as any).__gameStartError = {
           next,
           ids: value?.roster.ids,
           message: error instanceof Error ? error.message : String(error),
         };
+        canvas.dataset.startError = JSON.stringify((window as any).__gameStartError);
+      }
       cancelPreparation();
       cancelModePreparation();
       resetTransient();
@@ -3560,7 +3565,7 @@ export async function createGame(
         escapeBest = result.score;
         try {
           localStorage.setItem(
-            "qisheng-escape-0.3.0-" + escapeSelectedDifficulty,
+            "qisheng-escape-" + rankingRuleVersion("escape") + "-" + escapeSelectedDifficulty,
             String(escapeBest),
           );
         } catch {}

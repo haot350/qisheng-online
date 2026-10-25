@@ -20,15 +20,19 @@ export function alternativeWheelMotion(vehicle: VehicleDefinition, input: DriveI
   const force = boosted && vehicle.boost ? vehicle.physics.boostForce : vehicle.physics.engineForce;
   const rolling = vehicle.physics.mass * .15 * sample.coast * dt / count;
   if (vehicle.id === 'tank') {
-    const turn = clamp(sample.steering, -1, 1) * clamp(1 - sample.horizontalSpeed / 22, .35, 1);
-    const drive = reversing ? 0 : direction * throttle;
+    const steering = clamp(sample.steering, -1, 1);
+    const turn = steering * clamp(1 - sample.horizontalSpeed / 22, .35, 1);
+    // The speed governor limits forward drive, not differential track steering.
+    const drive = reversing ? 0 : direction * throttle * available * (1 - .5 * Math.abs(steering));
     return vehicle.physics.wheels.map(point => {
       const track = clamp(drive + (point[0] < 0 ? turn : -turn), -1, 1);
       return {
-        force: brake > .01 ? 0 : -force * track * available / count,
+        force: brake > .01 ? 0 : -force * track / count,
         brake: vehicle.physics.mass * 7.5 * brake * dt / count + rolling,
         steering: 0,
-        sideFriction: .12 + .6 * (1 - Math.abs(turn)),
+        // Skid steering needs lateral scrub at all six contacts. Increasing grip
+        // with road speed otherwise cancels the very torque used to turn.
+        sideFriction: .06 + .66 * (1 - Math.abs(steering)) ** 2,
       };
     });
   }

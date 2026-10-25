@@ -6,13 +6,13 @@ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 /** Sidecar generation never rewrites the accepted map manifest or map bytes. */
 export async function buildMapCacheIndex(publicRoot,manifestUrl,indexUrl,extras=[]){
  const original=await readFile(path.join(publicRoot,manifestUrl)),manifest=JSON.parse(original),logical=new Set(extras);
- function visit(value){if(typeof value==='string'&&value.startsWith('/')&&/\.(glb|bin)$/.test(value))logical.add(value);else if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')Object.values(value).forEach(visit);}
+ function visit(value){if(typeof value==='string'&&value.startsWith('/')&&/\.(glb|bin|webp|png|jpe?g)$/.test(value))logical.add(value);else if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')Object.values(value).forEach(visit);}
  visit(manifest);const resources={};await mkdir(path.join(publicRoot,'assets/map'),{recursive:true});
  for(const source of [...logical].sort()){
   if(source.includes('..')||source.includes('\\')||!source.startsWith('/'))throw Error('Unsafe map path');
   const file=path.join(publicRoot,source),bytes=await readFile(file),hash=sha(bytes),ext=path.extname(source).slice(1),url='/assets/map/'+hash+'.'+ext,target=path.join(publicRoot,url);
   if(await stat(target).catch(()=>null)){if(sha(await readFile(target))!==hash)throw Error('Content address collision');}else await copyFile(file,target);
-  resources[source]={url,sha256:hash,bytes:bytes.length,mime:ext==='glb'?'model/gltf-binary':ext==='json'?'application/json':'application/octet-stream'};
+  resources[source]={url,sha256:hash,bytes:bytes.length,mime:ext==='glb'?'model/gltf-binary':ext==='webp'?'image/webp':ext==='png'?'image/png':/jpe?g/.test(ext)?'image/jpeg':ext==='json'?'application/json':'application/octet-stream'};
  }
  const index={schema:1,manifest:{url:manifestUrl,sha256:sha(original)},resources};await mkdir(path.dirname(path.join(publicRoot,indexUrl)),{recursive:true});await writeFile(path.join(publicRoot,indexUrl),JSON.stringify(index,null,2)+'\n');
  if(sha(await readFile(path.join(publicRoot,manifestUrl)))!==index.manifest.sha256)throw Error('Source manifest changed during indexing');

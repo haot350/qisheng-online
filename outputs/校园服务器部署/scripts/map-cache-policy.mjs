@@ -1,6 +1,10 @@
 import {createHash} from 'node:crypto';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const safeLogical=url=>typeof url==='string'&&/^\/(?!\/)[^?#%\\]+$/.test(url)&&!url.split('/').some(p=>p==='.'||p==='..');
+export function mapVerificationBodyTimeout(bytes){
+ if(!Number.isSafeInteger(bytes)||bytes<=0)throw Error('Invalid map transfer size');
+ return Math.min(90000,Math.max(20000,Math.ceil(bytes/(512*1024))*1000+10000));
+}
 export function validateResourceIndex(index,manifestUrl){
  if(!index||index.schema!==1||index.manifest?.url!==manifestUrl||!/^[a-f0-9]{64}$/.test(index.manifest.sha256)||!index.resources||typeof index.resources!=='object'||Array.isArray(index.resources))throw Error('Invalid versioned map resource index');
  const rows=Object.entries(index.resources);if(!rows.length)throw Error('Empty map resource index');
@@ -11,8 +15,8 @@ export async function verifyMapCache(base,read){
  const response=await read(base+'/map/resource-index.json');if(!/no-store/.test(response.headers.get('cache-control')??''))throw Error('Map resource index must not be cached');
  const index=await response.json(),manifestUrl=base==='https://game.tianhw.top'?'/map/manifest.json':'/campus.manifest.json',rows=validateResourceIndex(index,manifestUrl),manifest=await read(base+manifestUrl);
  if(!/no-store/.test(manifest.headers.get('cache-control')??''))throw Error('Map manifest must not be cached');if(sha(Buffer.from(await manifest.arrayBuffer()))!==index.manifest.sha256)throw Error('Map index is not bound to current manifest bytes');
- const samples=[];for(const ext of ['glb','bin']){const row=rows.find(([,r])=>r.url.endsWith('.'+ext));if(row)samples.push(row);}if(!samples.length)samples.push(rows[0]);
- for(const [logical,r]of samples){const asset=await read(base+r.url),cache=asset.headers.get('cache-control')??'';if(!cache.includes('max-age=31536000')||!cache.includes('immutable'))throw Error('Hashed map resource is not immutable');if(asset.headers.get('content-type')?.split(';')[0]!==r.mime)throw Error('Incorrect map resource MIME');const bytes=Buffer.from(await asset.arrayBuffer());if(bytes.length!==r.bytes||sha(bytes)!==r.sha256)throw Error('Hashed map resource bytes do not match index');const original=await read(base+logical,200,{method:'HEAD'});if(!/no-store/.test(original.headers.get('cache-control')??''))throw Error('Legacy logical map URL must not be immutable');}
+ const samples=[];for(const ext of ['glb','bin','webp']){const row=rows.find(([,r])=>r.url.endsWith('.'+ext));if(row)samples.push(row);}if(!samples.length)samples.push(rows[0]);
+ for(const [logical,r]of samples){const asset=await read(base+r.url,200,{bodyTimeoutMs:mapVerificationBodyTimeout(r.bytes)}),cache=asset.headers.get('cache-control')??'';if(!cache.includes('max-age=31536000')||!cache.includes('immutable'))throw Error('Hashed map resource is not immutable');if(asset.headers.get('content-type')?.split(';')[0]!==r.mime)throw Error('Incorrect map resource MIME');const bytes=Buffer.from(await asset.arrayBuffer());if(bytes.length!==r.bytes||sha(bytes)!==r.sha256)throw Error('Hashed map resource bytes do not match index');if(logical!==r.url){const original=await read(base+logical,200,{method:'HEAD'});if(!/no-store/.test(original.headers.get('cache-control')??''))throw Error('Legacy logical map URL must not be immutable');}}
  const first=samples[0][1],last=Math.min(first.bytes-1,15),range=await read(base+first.url,206,{headers:{Range:'bytes=0-'+last}});if(range.headers.get('content-range')!=='bytes 0-'+last+'/'+first.bytes||(await range.arrayBuffer()).byteLength!==last+1)throw Error('Map resource range response is invalid');
  return{resources:rows.length,verifiedSamples:samples.map(([logical,r])=>({logical,url:r.url,bytes:r.bytes,sha256:r.sha256})),range:true,manifestBound:true};
 }

@@ -3,6 +3,8 @@ import { MapDecodeQueue } from "./map-decode.ts";
 import { MapScenePreparer, type MapRenderContext } from './map-scene-preparer.ts';
 import { VisionGeometry } from "./vision-geometry.ts";
 import { WalkingPrefetch } from "./walking-prefetch.ts";
+import {chunkAllowedAtLevel,mapStreamingFloors} from './escape-floor';
+import {presentMapLod} from './map-lod';
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -22,6 +24,7 @@ import {
 import { SceneResources } from "./resources.ts";
 import { withDeadline } from "./network.ts";
 import { loadGameMapBundle, gameMapSession } from "./game-map.ts";
+import {withValidatedMapTextures} from '@qisheng/shared/map-client';
 import {
   createDrivingPhysics,
   drivePointAllowed,
@@ -39,6 +42,8 @@ import {
 } from "./navigation/avoidance.ts";
 import { crowdMotion } from "./navigation/crowd.ts";
 import { StairFlow } from "./navigation/stair-flow.ts";
+import {createCampusQuery,campusQueryPathOptions,expandedCampusQuery} from "./navigation/query-budget.ts";
+import {escapeLevelAt} from "./escape-floor";
 import { pathMotion } from "./path-following.ts";
 export interface GameWorld {
   manifest: MapManifest;
@@ -215,7 +220,7 @@ export async function loadWorld(
     physics.free();
     throw new Error("校园导航资源未能解码，请重新载入。", { cause: error });
   }
-  const query = new NavMeshQuery(navMesh);
+  const query = createCampusQuery(navMesh,manifest);
   const root = new THREE.Group();
   root.name = `${manifest.sourceVersion ?? "campus"}-game-campus`;
   scene.add(root);
@@ -241,8 +246,8 @@ export async function loadWorld(
         ? await withDeadline(
             gameMapSession
               .read(chunk.url, { signal, priority })
-              .then((bytes) =>
-                decodeQueue.run(
+              .then((bytes) => withValidatedMapTextures(bytes,gameMapSession,signal,resolve=>{
+                manager.setURLModifier(resolve);return decodeQueue.run(
                   () =>
                     loader.parseAsync(
                       bytes,
@@ -250,8 +255,7 @@ export async function loadWorld(
                     ),
                   signal,
                   priority,
-                ),
-              ),
+                );},priority)),
             30000,
             {
               signal,
@@ -675,7 +679,7 @@ export async function loadWorld(
     if (!holding || holding.key !== line.key) {
       const landing =
           yieldFor.direction > 0 ? line.points[0] : line.points.at(-1)!,
-        towards = new THREE.Vector3(-51, landing.y, -77.4)
+        towards = (()=>{const level=escapeLevelAt(landing.toArray(),manifest);return level?new THREE.Vector3((level.bounds.min[0]+level.bounds.max[0])/2,landing.y,(level.bounds.min[2]+level.bounds.max[2])/2):line.points.at(yieldFor.direction>0?-1:0)!.clone();})()
           .sub(landing)
           .setY(0)
           .normalize();
@@ -991,7 +995,7 @@ export async function loadWorld(
           point,
           observers.map((p) => p.toArray()),
           low,
-          manifest.floors ?? [],
+          mapStreamingFloors(manifest),
           {
             isDriving: outdoorOnly || !!driving,
             outdoorOnly,
@@ -1002,28 +1006,8 @@ export async function loadWorld(
                 : undefined),
           },
         );
-      const floor = manifest.floors?.reduce((best, f) =>
-          Math.abs(position.y - f.elevation) <
-          Math.abs(position.y - best.elevation)
-            ? f
-            : best,
-        ),
-        bounds = floor?.bounds;
-      const inside =
-        bounds &&
-        position.x >= bounds.min[0] - 1 &&
-        position.x <= bounds.max[0] + 1 &&
-        position.z >= bounds.min[2] - 1 &&
-        position.z <= bounds.max[2] + 1;
       streamer.forEach((asset, chunk, distance) => {
-        const allowed =
-            chunk.kind !== "interior" ||
-            (!outdoorOnly &&
-              (!floor ||
-                !chunk.floor ||
-                (inside
-                  ? Math.abs(chunk.floor - floor.id) <= 1
-                  : chunk.floor === 1))),
+        const allowed = chunkAllowedAtLevel(chunk,point,manifest,outdoorOnly),
           visible = streamer.hasCombatLease() && combatStructure(chunk) ? streamer.inCombatView(chunk.url) :
             streamer.inCombatView(chunk.url) ||
             !!allowed &&
@@ -1036,6 +1020,7 @@ export async function loadWorld(
           asset.visible = visible;
           visibilityRevision++;
         }
+        if(presentMapLod(asset,distance,low))visibilityRevision++;
         if (asset.userData.shadowNear !== shadowNear) {
           asset.userData.shadowNear = shadowNear;
           visibilityRevision++;
@@ -1075,7 +1060,7 @@ export async function loadWorld(
     retry() {
       streamer.retry();
     },
-    checkSafety(position,low,outdoorOnly=false){return streamer.checkSafety(position.toArray(),low,manifest.floors??[],{isDriving:outdoorOnly||!!driving,outdoorOnly});},
+    checkSafety(position,low,outdoorOnly=false){return streamer.checkSafety(position.toArray(),low,mapStreamingFloors(manifest),{isDriving:outdoorOnly||!!driving,outdoorOnly});},
     prepareCombat(signal,onProgress){return streamer.prepareCombat(signal,onProgress);},
     diagnostics(){return {...streamer.diagnostics(),gpu:scenePreparer.diagnostics(),resources:resources.diagnostics(),decode:decodeQueue.diagnostics()};},
     retryView() {
@@ -1328,11 +1313,11 @@ export function campusPath(
   const plain = (a: Point, b: Point) => {
     const r = query.computePath(a, b, {
       halfExtents: { x: 3, y: 1.2, z: 3 },
-      maxPathPolys: 512,
-      maxStraightPathPoints: 256,
+      ...campusQueryPathOptions(query),
     });
     return r.success ? r.path : [];
   };
+  if(expandedCampusQuery(query))return plain(from,to);
   const radius = (p: Point) => Math.hypot(p.x - 44, p.z + 124);
   const inside = (p: Point) => p.y < -0.4 && radius(p) < 19;
   const heightAt = (r: number) =>

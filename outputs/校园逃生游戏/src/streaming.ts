@@ -1,4 +1,5 @@
 import type { MapChunk, Vec3 } from "./types";
+import {streamFloorForChunk,streamChunkAllowed,type StreamFloor} from './escape-floor.ts';
 import { withDeadline } from "./network.ts";
 export type StreamStatus = {
   blocked: boolean;
@@ -150,10 +151,7 @@ export class ChunkStreamer<T> {
   private geometryInput?: {
     player: Vec3;
     low: boolean;
-    floors: {
-      id: number;
-      elevation: number;
-    }[];
+    floors: StreamFloor[];
     isDriving: boolean;
     outdoorOnly: boolean;
     lookAhead?: Vec3;
@@ -348,10 +346,7 @@ export class ChunkStreamer<T> {
     player: Vec3,
     _observers: Vec3[],
     low: boolean,
-    floors: {
-      id: number;
-      elevation: number;
-    }[] = [],
+    floors: StreamFloor[] = [],
     driving?: StreamDriving,
   ): StreamStatus {
     this.counters.updates++;
@@ -394,7 +389,7 @@ export class ChunkStreamer<T> {
       floors.some(
         (f, i) =>
           f.id !== previous.floors[i].id ||
-          f.elevation !== previous.floors[i].elevation,
+          f.elevation !== previous.floors[i].elevation || f.levelId !== previous.floors[i].levelId || f.buildingId !== previous.floors[i].buildingId || f.bounds !== previous.floors[i].bounds,
       );
     if (changed) {
       this.counters.geometryScans++;
@@ -409,31 +404,15 @@ export class ChunkStreamer<T> {
       }
       const distance = (c: MapChunk) => this.distances.get(c.url)!,
         ahead = (c: MapChunk) => this.aheadDistances.get(c.url)!;
-      const currentFloor = floors.reduce<
-        | {
-            id: number;
-            elevation: number;
-          }
-        | undefined
-      >(
-        (best, f) =>
-          !best ||
-          Math.abs(f.elevation - player[1]) <
-            Math.abs(best.elevation - player[1])
-            ? f
-            : best,
-        undefined,
-      );
       // Interior floors above/below a viewer are preloaded only near stairs/the room boundary.
-      const photoWanted = (c: MapChunk) => this.viewUrls.has(c.url),
-        floorById = new Map(floors.map((f) => [f.id, f]));
+      const photoWanted = (c: MapChunk) => this.viewUrls.has(c.url);
       this.needed = this.chunks.filter((c) => {
         if(this.combatLeases.size)return combatStructure(c);
         if(c.residency==='detail')return false;
         if(this.combatUrls.has(c.url))return true;
         if (c.kind !== "interior") return distance(c) < (isDriving ? 25 : 20);
         if (outdoorOnly) return false;
-        const floor = floorById.get(c.floor!);
+        const floor = streamFloorForChunk(c,floors);
         return (
           distance(c) < 7 &&
           (!floor || Math.abs(player[1] - floor.elevation) < 2.25)
@@ -446,16 +425,13 @@ export class ChunkStreamer<T> {
           (distance(c) < (c.kind === "interior" ? 18 : low ? 75 : 90) ||
             ahead(c) < (c.kind === "interior" ? 12 : 30) ||
             photoWanted(c) || this.combatUrls.has(c.url)) &&
-          (this.combatUrls.has(c.url) || c.kind !== "interior" ||
-            !currentFloor ||
-            !c.floor ||
-            Math.abs(c.floor - currentFloor.id) <= 1),
+          (this.combatUrls.has(c.url) || streamChunkAllowed(c,player,floors,outdoorOnly)),
       );
       this.wantedUrls = new Set(this.wanted.map((c) => c.url));
       this.geometryInput = {
         player: [...player],
         low,
-        floors: floors.map((f) => ({ id: f.id, elevation: f.elevation })),
+        floors: floors.map((f) => ({ ...f })),
         isDriving,
         outdoorOnly,
         lookAhead: lookAhead ? [...lookAhead] : undefined,
@@ -735,13 +711,13 @@ export class ChunkStreamer<T> {
     });
   }
   /** Physics calls this before advancing. It does not sort, evict, schedule or render. */
-  checkSafety(point:Vec3,_low:boolean,floors:{id:number;elevation:number}[]=[],driving?:StreamDriving):StreamStatus{
+  checkSafety(point:Vec3,_low:boolean,floors:StreamFloor[]=[],driving?:StreamDriving):StreamStatus{
     if(this.combatLeases.size)return this.status();
     const required=this.chunks.filter(c=>{
       if(c.residency==='detail')return false;
       if(this.combatUrls.has(c.url))return true;
       if(c.kind!=='interior')return chunkDistance(c,point)<(driving?.isDriving?25:20);
-      const floor=floors.find(f=>f.id===c.floor);
+      const floor=streamFloorForChunk(c,floors);
       return !driving?.outdoorOnly && chunkDistance(c,point)<7 && (!floor||Math.abs(point[1]-floor.elevation)<2.25);
     });
     if(required.every(c=>this.assets.has(c.url)))return this.status();

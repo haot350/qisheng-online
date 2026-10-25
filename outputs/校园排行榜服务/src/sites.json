@@ -1,1 +1,142 @@
-[{"id":"yard","label":"教学庭院","region":"teaching","position":[-46,0.16500002086300264,-103],"floor":0},{"id":"teaching-supply","label":"教学区道路","region":"teaching","position":[-24,0.06700001597542177,-100],"floor":0},{"id":"library-west","label":"图书馆西侧","region":"teaching","position":[-18,0.1550000154955219,-106],"floor":0},{"id":"sports-north","label":"运动场北侧","region":"sports","position":[-118,0.17300000726708892,-95],"floor":0},{"id":"sports-road","label":"运动区道路","region":"sports","position":[-77,0.0749999934434891,-78],"floor":0},{"id":"canteen-north","label":"食堂北侧","region":"canteen","position":[0,-0.01000002086419402,-184],"floor":0},{"id":"dorm-road","label":"宿舍东侧道路","region":"dorm","position":[82,0.0840000116825104,-120],"floor":0},{"id":"dorm-yard","label":"宿舍下沉庭院","region":"dorm","position":[45,-2.3600000000039305,-124],"floor":0,"roles":["take","deliver"]},{"id":"south-floor-1","label":"南楼一层走廊","region":"teaching","position":[-51,0.5350000262260437,-77.4],"floor":1,"roles":["take","activate","deliver"]},{"id":"south-floor-2","label":"南楼二层走廊","region":"teaching","position":[-50,4.244999847412109,-78],"floor":2,"roles":["take","activate","deliver"]},{"id":"south-floor-1-west","label":"南楼一层西侧","region":"teaching","position":[-64,0.5350000262260437,-77.4],"floor":1,"roles":["activate"]},{"id":"south-floor-2-west","label":"南楼二层西侧","region":"teaching","position":[-64,4.244999847412109,-78],"floor":2,"roles":["activate"]}]
+[
+  {
+    "id": "yard",
+    "label": "示例地点 1",
+    "region": "teaching",
+    "position": [
+      -15.75,
+      0,
+      -16
+    ],
+    "floor": 0
+  },
+  {
+    "id": "teaching-supply",
+    "label": "示例地点 2",
+    "region": "teaching",
+    "position": [
+      -7.75,
+      0,
+      -16
+    ],
+    "floor": 0
+  },
+  {
+    "id": "library-west",
+    "label": "示例地点 3",
+    "region": "teaching",
+    "position": [
+      0.25,
+      0,
+      -16
+    ],
+    "floor": 0
+  },
+  {
+    "id": "sports-north",
+    "label": "示例地点 4",
+    "region": "sports",
+    "position": [
+      8.25,
+      0,
+      -16
+    ],
+    "floor": 0
+  },
+  {
+    "id": "sports-road",
+    "label": "示例地点 5",
+    "region": "sports",
+    "position": [
+      16.25,
+      0,
+      -16
+    ],
+    "floor": 0
+  },
+  {
+    "id": "south-floor-1",
+    "label": "示例地点 6",
+    "region": "teaching",
+    "position": [
+      -15.75,
+      3.8,
+      -8
+    ],
+    "floor": 1,
+    "roles": [
+      "take",
+      "activate",
+      "deliver"
+    ],
+    "levelId": "south-f1",
+    "buildingId": "south-teaching"
+  },
+  {
+    "id": "south-floor-2",
+    "label": "示例地点 7",
+    "region": "teaching",
+    "position": [
+      -7.75,
+      7.6,
+      -8
+    ],
+    "floor": 2,
+    "roles": [
+      "take",
+      "activate",
+      "deliver"
+    ],
+    "levelId": "south-f2",
+    "buildingId": "south-teaching"
+  },
+  {
+    "id": "south-floor-1-west",
+    "label": "示例地点 8",
+    "region": "teaching",
+    "position": [
+      0.25,
+      3.8,
+      -8
+    ],
+    "floor": 1,
+    "roles": [
+      "activate"
+    ],
+    "levelId": "south-f1",
+    "buildingId": "south-teaching"
+  },
+  {
+    "id": "south-floor-2-west",
+    "label": "示例地点 9",
+    "region": "teaching",
+    "position": [
+      8.25,
+      7.6,
+      -8
+    ],
+    "floor": 2,
+    "roles": [
+      "activate"
+    ],
+    "levelId": "south-f2",
+    "buildingId": "south-teaching"
+  },
+  {
+    "id": "hf-middle-f1",
+    "label": "示例地点 10",
+    "region": "teaching",
+    "position": [
+      16.25,
+      3.8,
+      -8
+    ],
+    "floor": 1,
+    "levelId": "middle-f1",
+    "buildingId": "middle-teaching",
+    "roles": [
+      "take",
+      "deliver"
+    ]
+  }
+]

@@ -14,9 +14,10 @@ export type ViewState = {
  fov: number;
  environment: EnvironmentSettings;
  floor?: CampusFloor;
+ levelId?: string;
 };
 
-export const VIEW_ZONES = ['all', 'gate', 'admin', 'teaching', 'library', 'canteen', 'dorm', 'sports'] as const;
+export const VIEW_ZONES = ['all', 'gate', 'admin', 'teaching', 'library', 'canteen', 'dorm', 'sports', 'garage'] as const;
 export const DEFAULT_ENVIRONMENT: EnvironmentSettings = {hour: 14, weather: 'clear', smooth: false};
 export const DEFAULT_VIEW: ViewState = {
  v: 1, zone: 'all', position: [180, 230, 155], target: [-40, 3, -96], fov: 40,
@@ -33,9 +34,10 @@ export function validateView(value: unknown): ViewState | null {
  if (!value || typeof value !== 'object') return null;
  const s = value as Record<string, unknown>, e = s.environment as Record<string, unknown> | undefined;
  if (s.v !== 1 || typeof s.zone !== 'string' || !VIEW_ZONES.some(zone => zone === s.zone) ||
-     (s.floor !== undefined && (!Number.isInteger(s.floor) || !bounded(s.floor, 0, 4))) ||
-     !vector(s.position, [[-2500, 2500], [2, 2000], [-2500, 2500]]) ||
-     !vector(s.target, [[-210, 120], [0, 30], [-230, 40]]) || !bounded(s.fov, 20, 75) ||
+     (s.floor !== undefined && (!Number.isInteger(s.floor) || !bounded(s.floor, -1, 5))) ||
+     (s.levelId !== undefined && (typeof s.levelId !== 'string' || !/^(south|middle|north)-f[1-5]$|^garage-b1$/.test(s.levelId))) ||
+     !vector(s.position, [[-2500, 2500], [-1.5, 2000], [-2500, 2500]]) ||
+     !vector(s.target, [[-210, 120], [-4, 30], [-230, 40]]) || !bounded(s.fov, 20, 75) ||
      !e || !bounded(e.hour, 7, 18) || typeof e.weather !== 'string' || !['clear', 'overcast', 'mist', 'rain'].includes(e.weather) ||
      typeof e.smooth !== 'boolean') return null;
  const distance = Math.hypot(...s.position.map((n, i) => n - (s.target as number[])[i]));
@@ -43,7 +45,8 @@ export function validateView(value: unknown): ViewState | null {
  return {
   v: 1, zone: s.zone, position: [...s.position], target: [...s.target], fov: s.fov,
   environment: {hour: e.hour, weather: e.weather as EnvironmentSettings['weather'], smooth: e.smooth},
-  floor: s.zone === 'teaching' ? (s.floor ?? 0) as CampusFloor : 0,
+  floor: s.zone === 'teaching' || s.zone === 'garage' ? (s.floor ?? 0) as CampusFloor : 0,
+  ...(s.levelId?{levelId:s.levelId as string}:{}),
  };
 }
 

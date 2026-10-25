@@ -69,6 +69,6 @@ test('rectangular frustum rejects vertical cone corners but conservatively retai
 test('whole-frame diagnostics include work outside renderer and exclude background gaps',()=>{
  let now=10;const frames=new FrameDiagnostics(3,()=>now);
  frames.begin(100);now=17;frames.phase('streaming',5);frames.end();
- now=20;frames.begin(116);now=31;frames.end();frames.begin(180);now=34;frames.end();frames.begin(3000);now=36;frames.end();
+ now=20;frames.begin(116);now=31;frames.end();frames.begin(180);now=34;frames.end();frames.begin(3000,false);now=36;frames.end();
  const report=frames.snapshot();assert.equal(report.frameIntervalMs.samples,2);assert.equal(report.frameIntervalMs.max,64);assert.equal(report.longFrames,1);assert.equal(report.frameCpuMs.max,11);assert.equal(report.phases.streaming.max,5);
 });

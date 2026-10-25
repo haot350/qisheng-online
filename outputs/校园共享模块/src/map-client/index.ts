@@ -1,6 +1,6 @@
 /** Map bytes only. HTML, manifests, APIs, photos and saves never enter this cache. */
 export const MAP_CACHE_NAME='qisheng-map-bytes-v1';
-export const MAP_CACHE_LIMIT=192*1024*1024;
+export const MAP_CACHE_LIMIT=384*1024*1024;
 export type MapResource={url:string;sha256:string;bytes:number;mime:string};
 export type MapResourceIndex={schema:1;manifest:{url:string;sha256:string};resources:Record<string,MapResource>};
 export type MapCacheCoverage={bytes:number;files:number;totalBytes:number;totalFiles:number;remainingBytes:number;oldBytes:number;oldFiles:number;complete:boolean};
@@ -175,4 +175,34 @@ export class MapAssetSession {
 }
 export function awaitWithSignal<T>(promise:Promise<T>,signal?:AbortSignal):Promise<T>{
  if(!signal)return promise;if(signal.aborted)return Promise.reject(abortMapRequest());return new Promise<T>((resolve,reject)=>{const abort=()=>{signal.removeEventListener('abort',abort);reject(abortMapRequest());};signal.addEventListener('abort',abort,{once:true});promise.then(v=>{signal.removeEventListener('abort',abort);if(!signal.aborted)resolve(v);},e=>{signal.removeEventListener('abort',abort);reject(e);});});
+}
+
+/** External map images use the same verified, cancellable two-request queue as geometry. */
+export async function withValidatedMapTextures<T>(bytes:ArrayBuffer,session:Pick<MapAssetSession,'read'>,signal:AbortSignal|undefined,parse:(resolveUrl:(url:string)=>string)=>Promise<T>,priority=1):Promise<T>{
+ if(signal?.aborted)throw abortMapRequest();
+ const header=new DataView(bytes);let imageUrls:string[]=[];
+ if(bytes.byteLength>=20&&header.getUint32(0,true)===0x46546c67){
+  const size=header.getUint32(12,true);if(size>bytes.byteLength-20||header.getUint32(16,true)!==0x4e4f534a)throw Error('校园模型格式无效。');
+  const json=JSON.parse(new TextDecoder().decode(new Uint8Array(bytes,20,size))) as {images?:{uri?:string}[];buffers?:{uri?:string}[]};
+  if((json.buffers??[]).some(buffer=>buffer.uri!==undefined&&(typeof buffer.uri!=='string'||!buffer.uri.startsWith('data:'))))throw Error('校园几何缓冲未列入本次版本。');
+  imageUrls=[...new Set((json.images??[]).map(i=>i.uri).filter((uri):uri is string=>!!uri&&!uri.startsWith('data:')))];
+ }
+ if(imageUrls.some(uri=>!/^\/assets\/map\/[a-f0-9]{64}\.(webp|png|jpe?g)$/.test(uri)))throw Error('校园贴图未列入本次版本。');
+ if(!imageUrls.length)return parse(url=>url);
+ const owner=new AbortController(),local=new Map<string,string>();let alive=true;
+ const release=()=>{alive=false;for(const url of local.values())URL.revokeObjectURL(url);local.clear();};
+ const cancel=()=>{owner.abort();release();};
+ signal?.addEventListener('abort',cancel,{once:true});
+ try{
+  await Promise.all(imageUrls.map(async uri=>{
+   const image=await session.read(uri,{signal:owner.signal,priority});if(!alive||signal?.aborted)throw abortMapRequest();
+   const type=uri.endsWith('.webp')?'image/webp':uri.endsWith('.png')?'image/png':'image/jpeg';
+   local.set(uri,URL.createObjectURL(new Blob([image],{type})));
+  }));
+  if(signal?.aborted)throw abortMapRequest();
+  return await parse(url=>{
+   const pathname=url.startsWith('/')?url:new URL(url,typeof location==='undefined'?'http://localhost':location.href).pathname;
+   return local.get(pathname)??url;
+  });
+ }finally{signal?.removeEventListener('abort',cancel);owner.abort();release();}
 }

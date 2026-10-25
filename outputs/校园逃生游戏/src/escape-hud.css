@@ -176,3 +176,5 @@
 .result-panel.escape-result{background:var(--surface-bg,#152029);color:var(--text-primary,#eef2ed);border-color:var(--border-subtle,#81949755)}.result-panel.escape-result .result-stats strong{color:var(--text-primary,#eef2ed)}.result-panel.escape-result p,.result-panel.escape-result .result-stats span,.result-panel.escape-result .result-stats small,.result-panel.escape-result .muted{color:var(--text-muted,#aabbb8)}
 
 .result-panel.escape-result .secondary{background:var(--surface-card,#1b2a32);color:var(--text-primary,#eef2ed);border-color:var(--border-subtle,#81949755)}
+
+.fps-map-level-picker{flex-wrap:wrap;align-items:center;gap:8px}.fps-map-level-picker label{display:flex;align-items:center;gap:8px;color:var(--text,#e6e9df);font-size:14px}.fps-map-level-picker select{min-height:44px;max-width:180px;background:#182b25;color:#e6e9df;border:1px solid #61766b;border-radius:3px;padding:7px 30px 7px 10px}.fps-map-level-picker>div{display:flex;flex-wrap:wrap;gap:6px}.online-map-floors>.fps-map-level-picker{margin:0;flex:1}

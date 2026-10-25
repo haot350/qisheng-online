@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.9.7',sequence:45,date:'2026-10-25',version:'Preview 0.9.7',
+ overview:'走进更新后的校园，按楼栋与楼层继续探索。',
+ summary:['更新校园建筑、教室、办公室和植被，调整可进入区域。','地图支持按楼栋和楼层查看，任务与补给位置重新校准。','新校园成绩单独记录，原有榜单与纪录保留。'],
+ items:['调整：两站使用更新后的校园模型，室内外细节与道路衔接重新校准。','新增：按楼栋选择楼层，地下区域与跨楼通路显示对应位置。','调整：地图分块共享贴图，重复家具与植被根据距离调整细节。','调整：任务、补给、出生与载具安全位置适配新校园。','修复：坦克行驶时转向困难，改善原地和行进中的转向。','调整：单人、合作与大飞的新校园成绩分别记录，历史成绩继续可查。']
+},
+{
  id:'preview-0.9.6',sequence:44,date:'2026-10-24',version:'Preview 0.9.6',
  overview:'换一种载具出发，入房与返回更顺手。',
  summary:['大飞新增轻型坦克和电动滑板车，三种载具分别记录成绩。','改善入房、重连和离场流程，失败时保留已填写的内容。','突围撤离阶段的追兵防守更分散，小屏确认操作更清楚。'],

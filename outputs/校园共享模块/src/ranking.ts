@@ -1,7 +1,12 @@
 /** Pure, browser/server shared ranking rules. Canonical @qisheng/shared module. */
-export const RANKING_RULE_VERSION='campus-2026-0.9.0';
-export const COOP_RULE_VERSION='coop-2026-0.9.0';
-export const DAFEI_RULE_VERSION='dafei-2026-0.9.0';
+export const RANKING_RULE_VERSION='campus-hfr02-1';
+export const COOP_RULE_VERSION='coop-hfr02-1';
+export const DAFEI_RULE_VERSION='dafei-hfr02-1';
+export const LEGACY_ESCAPE_RULE_VERSION='campus-2026-0.9.0';
+export const LEGACY_COOP_RULE_VERSION='coop-2026-0.9.0';
+export const LEGACY_DAFEI_RULE_VERSION='dafei-2026-0.9.0';
+export const MAP_CATALOG_ID='hf-r02-web-1';
+export const LEGACY_MAP_CATALOG_ID='campus-v17-web-1';
 export const DAFEI_VEHICLE_RULE_VERSION='dafei-2026-vehicles-1';
 export const DRIVING_VEHICLE_IDS=Object.freeze(['bao5','tank','scooter'] as const);
 export type DrivingVehicleId=typeof DRIVING_VEHICLE_IDS[number];
@@ -13,21 +18,35 @@ export const DRIVING_VEHICLES=Object.freeze({
 export function isDrivingVehicleId(value:unknown):value is DrivingVehicleId{return typeof value==='string'&&Object.hasOwn(DRIVING_VEHICLES,value);}
 /** Missing vehicle identity belongs to the original car, including archived credentials. */
 export function drivingVehicleId(value:unknown):DrivingVehicleId{return value===undefined||value===null?'bao5':isDrivingVehicleId(value)?value:'bao5';}
-export function drivingRuleVersion(vehicleId:DrivingVehicleId='bao5'){return vehicleId==='bao5'?DAFEI_RULE_VERSION:DAFEI_VEHICLE_RULE_VERSION;}
-export const ESCAPE_RULE_VERSIONS=Object.freeze(['campus-2026-0.4.0','campus-2026-0.7.0',RANKING_RULE_VERSION]);
-export const DAFEI_OLD_BEST_KEYS=Object.freeze(['qisheng-game-dafei-best:dafei-2026-0.7.0','qisheng-game-dafei-best:dafei-2026-0.6.5','qisheng-game-dafei-best']);
+export function drivingRuleVersion(_vehicleId:DrivingVehicleId='bao5'){return DAFEI_RULE_VERSION;}
+export const ESCAPE_RULE_VERSIONS=Object.freeze(['campus-2026-0.4.0','campus-2026-0.7.0',LEGACY_ESCAPE_RULE_VERSION,RANKING_RULE_VERSION]);
+export const DAFEI_OLD_BEST_KEYS=Object.freeze(['qisheng-game-dafei-best:'+LEGACY_DAFEI_RULE_VERSION,'qisheng-game-dafei-best:dafei-2026-0.7.0','qisheng-game-dafei-best:dafei-2026-0.6.5','qisheng-game-dafei-best']);
 export type RankingMode='escape'|'dafei';
 export function rankingRuleVersion(mode:RankingMode){return mode==='dafei'?DAFEI_RULE_VERSION:RANKING_RULE_VERSION;}
+export function rankingRuleVersionForCatalog(mode:RankingMode,mapCatalogId:string,vehicleId:DrivingVehicleId='bao5'){
+ if(mapCatalogId===MAP_CATALOG_ID)return mode==='dafei'?DAFEI_RULE_VERSION:RANKING_RULE_VERSION;
+ if(mapCatalogId===LEGACY_MAP_CATALOG_ID)return mode==='dafei'?(vehicleId==='bao5'?LEGACY_DAFEI_RULE_VERSION:DAFEI_VEHICLE_RULE_VERSION):LEGACY_ESCAPE_RULE_VERSION;
+ return undefined;
+}
+export function coopRuleVersionForCatalog(mapCatalogId:string){return mapCatalogId===MAP_CATALOG_ID?COOP_RULE_VERSION:mapCatalogId===LEGACY_MAP_CATALOG_ID?LEGACY_COOP_RULE_VERSION:undefined;}
 export interface DriveRankingRules {round:number;durability:number;repairAmount:number;stun:number;minimumImpactSpeed:number;baseScore:number;comboWindow:number;maxCombo:number;resetPenalty:number;}
 const driveRules=():Readonly<DriveRankingRules>=>Object.freeze({round:300,durability:400,repairAmount:200,stun:10,minimumImpactSpeed:3,baseScore:100,comboWindow:20,maxCombo:4,resetPenalty:50});
-export const DRIVE_RANKING_RULES:Readonly<Record<string,Readonly<DriveRankingRules>>>=Object.freeze({'campus-2026-0.4.0':driveRules(),'dafei-2026-0.6.5':driveRules(),'dafei-2026-0.7.0':driveRules(),[DAFEI_RULE_VERSION]:driveRules()});
+export const DRIVE_RANKING_RULES:Readonly<Record<string,Readonly<DriveRankingRules>>>=Object.freeze({'campus-2026-0.4.0':driveRules(),'dafei-2026-0.6.5':driveRules(),'dafei-2026-0.7.0':driveRules(),[LEGACY_DAFEI_RULE_VERSION]:driveRules(),[DAFEI_RULE_VERSION]:driveRules()});
 export function drivingRankingRules(version:string,vehicleId:DrivingVehicleId='bao5'):Readonly<DriveRankingRules>|undefined{
  if(!isDrivingVehicleId(vehicleId))return undefined;
  if(vehicleId==='bao5')return DRIVE_RANKING_RULES[version];
- return version===DAFEI_VEHICLE_RULE_VERSION?Object.freeze({...driveRules(),durability:DRIVING_VEHICLES[vehicleId].durability,repairAmount:DRIVING_VEHICLES[vehicleId].repairAmount}):undefined;
+ return version===DAFEI_VEHICLE_RULE_VERSION||version===DAFEI_RULE_VERSION?Object.freeze({...driveRules(),durability:DRIVING_VEHICLES[vehicleId].durability,repairAmount:DRIVING_VEHICLES[vehicleId].repairAmount}):undefined;
 }
 export function rankingRuleSupported(mode:RankingMode,version:string,vehicleId:DrivingVehicleId='bao5'){return mode==='escape'?ESCAPE_RULE_VERSIONS.includes(version):mode==='dafei'&&!!drivingRankingRules(version,vehicleId);}
+export interface RankingRuleCapabilities {mapCatalogId:string;rosterSize:number;expandedRoster:boolean;gadgets:boolean;initialMeng:boolean;}
+/** A map revision changes the record scope, without turning existing actions into invalid history. */
+export function rankingRuleCapabilities(mode:RankingMode,version:string,vehicleId:DrivingVehicleId='bao5'):Readonly<RankingRuleCapabilities>|undefined{
+ if(!rankingRuleSupported(mode,version,vehicleId))return undefined;
+ const expandedRoster=mode==='escape'?(version===LEGACY_ESCAPE_RULE_VERSION||version===RANKING_RULE_VERSION):version===LEGACY_DAFEI_RULE_VERSION||version===DAFEI_VEHICLE_RULE_VERSION||version===DAFEI_RULE_VERSION;
+ return {mapCatalogId:version===RANKING_RULE_VERSION||version===DAFEI_RULE_VERSION?MAP_CATALOG_ID:LEGACY_MAP_CATALOG_ID,rosterSize:mode==='escape'?(expandedRoster?9:6):4,expandedRoster,gadgets:mode==='escape'&&expandedRoster,initialMeng:mode==='escape'&&expandedRoster};
+}
 export function drivingBestKey(vehicleId:DrivingVehicleId='bao5'){return vehicleId==='bao5'?DAFEI_BEST_KEY:'qisheng-game-dafei-best:'+drivingRuleVersion(vehicleId)+':'+vehicleId;}
+export function drivingOldBestKeys(vehicleId:DrivingVehicleId='bao5'):readonly string[]{return vehicleId==='bao5'?DAFEI_OLD_BEST_KEYS:['qisheng-game-dafei-best:'+DAFEI_VEHICLE_RULE_VERSION+':'+vehicleId];}
 export const DAFEI_BEST_KEY='qisheng-game-dafei-best:'+DAFEI_RULE_VERSION;
 export const LEGACY_DAFEI_BEST_KEY='qisheng-game-dafei-best';
 export type RankingDifficulty='easy'|'standard'|'hard';
@@ -36,8 +55,8 @@ export type RankingTransmission='auto'|'manual'|'mixed';
 export type RankingStatus='pending'|'uploading'|'ranked'|'review'|'rejected'|'retry'|'local'|'unranked';
 export interface RankingPlayer{id:string;nickname:string;shortId:string;renameAt:number;autoSubmit:boolean;restricted:boolean;needsUpgrade?:boolean;syncStats?:boolean;accountStatus?:'legacy'|'active'|'disabled';accountId?:string;username?:string;}
 export interface RankingAuth{player:RankingPlayer;token:string;expiresAt:number;recoveryCode?:string;}
-export interface RankingTask{id:string;kind:'take'|'activate'|'hold'|'deliver';label:string;duration:number;radius:number;sites:Array<{id:string;label:string;region:string;position:[number,number,number];floor?:number}>;}
-export interface RankingRunConfig{mode:RankingMode;difficulty?:RankingDifficulty;ruleVersion:string;seed:number;weapon:string;roster:string[];tasks:RankingTask[];controls:RankingControls;transmission?:RankingTransmission;vehicleId?:DrivingVehicleId;}
+export interface RankingTask{id:string;kind:'take'|'activate'|'hold'|'deliver';label:string;duration:number;radius:number;sites:Array<{id:string;label:string;region:string;position:[number,number,number];floor?:number;levelId?:string;buildingId?:string}>;}
+export interface RankingRunConfig{mode:RankingMode;difficulty?:RankingDifficulty;ruleVersion:string;mapCatalogId?:string;seed:number;weapon:string;roster:string[];tasks:RankingTask[];controls:RankingControls;transmission?:RankingTransmission;vehicleId?:DrivingVehicleId;}
 export interface RankingEvent{seq:number;t:number;order:number;type:'task-interact'|'task-start'|'task-progress'|'task-complete'|'extract-start'|'extract-progress'|'shot'|'down'|'damage'|'hit'|'recover'|'repair'|'reset'|'controls'|'transmission'|'npc-spawn'|'gadget'|'cannon';data:Record<string,unknown>;}
 export interface RankingSummary{won:boolean;elapsed:number;score:number;hits?:number;cannonShots?:number;cannonHits?:number;totalHits?:number;vehicleId?:DrivingVehicleId;bestCombo?:number;damage?:number;headshots?:number;downs?:number;uniqueDowns?:number;completed?:number;repairCount?:number;resetCount?:number;controls:RankingControls;transmission?:RankingTransmission;reason?:string;}
 export interface RankingTicket{runId:string;credential:string;expiresAt:number;recordStats?:boolean;publishBoard?:boolean;}

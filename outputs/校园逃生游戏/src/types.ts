@@ -1,5 +1,5 @@
 import {isWeatherPreset,type WeatherPreset} from '@qisheng/shared/weather';
-import type {Vec3,WeaponId,PrimaryWeaponId} from '@qisheng/shared/types';
+import type {Vec3,WeaponId,PrimaryWeaponId,MapLayout} from '@qisheng/shared/types';
 import type {GraphicsQuality} from '@qisheng/shared/render-profile';
 export type {Vec3,WeaponId,PrimaryWeaponId,Point,MapChunk,MapManifest} from '@qisheng/shared/types';
 import type {NearbyInteraction} from './nearby-interaction';
@@ -14,7 +14,7 @@ import type {EscapeSnapshot,EscapeDifficulty} from './escape';
 import {sanitizeEscapeTouchLayout,type EscapeTouchLayout,type EscapeAimMode} from './escape-touch-layout.ts';
 export type {EscapeDifficulty} from './escape';
 export type EscapeMusic='battle'|'run'|'off';
-export type EscapeMapView={mapOpen?:boolean;playerPosition?:Vec3;playerYaw?:number;playerFloor?:number;mapFloor?:number;mapFloors?:number[];enemyContacts?:{id:number|string;position:Vec3;floor:number;kind:'seen'|'heard';remaining:number}[];supplies?:{id:string;name:string;position:Vec3;floor?:number;used:boolean}[];best?:number|null;bestBeforeResult?:number|null;stairGuide?:{core:string;label:string;direction:'up'|'down';floor:number;position:Vec3;distance:number}|null};
+export type EscapeMapView={mapOpen?:boolean;mapLayout?:MapLayout;playerPosition?:Vec3;playerYaw?:number;playerFloor?:number;playerLevelId?:string;mapFloor?:number;mapFloors?:number[];enemyContacts?:{id:number|string;position:Vec3;floor:number;levelId?:string;kind:'seen'|'heard';remaining:number}[];supplies?:{id:string;name:string;position:Vec3;floor?:number;levelId?:string;used:boolean}[];best?:number|null;bestBeforeResult?:number|null;stairGuide?:{core:string;label:string;direction:'up'|'down';floor:number;levelId?:string;position:Vec3;distance:number}|null};
 export type Mode='escape'|'roam'|'dafei'|'story';
 export type TransmissionMode='auto'|'manual';
 export type AttackPhase='search'|'aim'|'fire'|'cooldown'|'reload'|'suppressed';

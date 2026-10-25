@@ -4,6 +4,8 @@ import {init as initNavigation,importNavMesh,NavMeshQuery} from 'recast-navigati
 import type {MapManifest} from '../../types';
 import type {Vec3} from './protocol';
 import {storyCurbLift,storyDirectRoute} from '../../story-curb';
+import {escapeFloorAt} from '../../escape-floor';
+import {createCampusQuery,campusQueryPathOptions,expandedCampusQuery} from '../../navigation/query-budget.ts';
 import {storyCorridorPath} from '../../story-corridor';
 import {NavigationAvoidance,normalizeCampusRoute} from '../../navigation/avoidance';
 import {VisionGeometry} from '../../vision-geometry';
@@ -16,7 +18,7 @@ export class SimWorld {
  private vision:VisionGeometry;private blockers:StaticTriangleBlockers;private staticCollider:RAPIER.Collider;
  private visibilityCounters={proofHits:0,physicalFallbacks:0,visionQueries:0,learned:0,unmapped:0};
  visibilityQueryStats(){return {...this.visibilityCounters};}
- private constructor(readonly manifest:MapManifest,collision:ArrayBuffer,navData:Uint8Array,vision?:ArrayBuffer){const header=new Uint32Array(collision,0,2);if(collision.byteLength!==8+header[0]*4+header[1]*4)throw Error('Invalid collision binary');const positions=new Float32Array(collision,8,header[0]),indices=new Uint32Array(collision,8+header[0]*4,header[1]);this.physics=new RAPIER.World({x:0,y:-18,z:0});this.staticCollider=this.physics.createCollider(RAPIER.ColliderDesc.trimesh(positions,indices,RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES));this.blockers=new StaticTriangleBlockers(positions,indices);this.vision=new VisionGeometry(vision);this.nav=importNavMesh(navData).navMesh;this.query=new NavMeshQuery(this.nav);this.physics.step();}
+ private constructor(readonly manifest:MapManifest,collision:ArrayBuffer,navData:Uint8Array,vision?:ArrayBuffer){const header=new Uint32Array(collision,0,2);if(collision.byteLength!==8+header[0]*4+header[1]*4)throw Error('Invalid collision binary');const positions=new Float32Array(collision,8,header[0]),indices=new Uint32Array(collision,8+header[0]*4,header[1]);this.physics=new RAPIER.World({x:0,y:-18,z:0});this.staticCollider=this.physics.createCollider(RAPIER.ColliderDesc.trimesh(positions,indices,RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES));this.blockers=new StaticTriangleBlockers(positions,indices);this.vision=new VisionGeometry(vision);this.nav=importNavMesh(navData).navMesh;this.query=createCampusQuery(this.nav,manifest);this.physics.step();}
  static async create(manifest:MapManifest,collision:ArrayBuffer,nav:Uint8Array,vision?:ArrayBuffer){initialized??=Promise.all([RAPIER.init(),initNavigation()]);await initialized;return new SimWorld(manifest,collision,nav,vision);}
  addActor(id:string,position:Vec3,team='none',kind:'human'|'npc'='human'){if(this.actors.has(id))this.removeActor(id);const body=this.physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()),collider=this.physics.createCollider(RAPIER.ColliderDesc.capsule((CAPSULE.standing-.6)/2,.3),body),controller=this.physics.createCharacterController(.015);controller.enableAutostep(.42,.20,false);controller.enableSnapToGround(.30);controller.setMaxSlopeClimbAngle(Math.PI*.27);controller.setMinSlopeSlideAngle(Math.PI*.30);this.actors.set(id,{body,collider,controller,height:1.75,team,kind});this.restore(id,position);}
  removeActor(id:string){const a=this.actors.get(id);if(!a)return;this.physics.removeCharacterController(a.controller);this.physics.removeRigidBody(a.body);this.actors.delete(id);this.avoidance.remove(this.numericId(id));this.actorIds.delete(id);}
@@ -63,7 +65,7 @@ export class SimWorld {
  observeNavigation(id:string,from:Vec3,desired:Vec3,actual:Vec3,staticBlocked:boolean,dt:number){this.avoidance.observe(this.numericId(id),v(from),v(desired),v(actual),staticBlocked,dt);}
 
  safeRoute(points:Vec3[],standing=1.75){if(points.length<2)return false;for(let i=1;i<points.length;i++){const start=v(points[i-1]),end=v(points[i]),steps=Math.ceil(start.distanceTo(end)/.4);for(let n=0;n<=steps;n++){const point=start.clone().lerp(end,steps?n/steps:0).toArray() as Vec3;if(!this.supportAt(point,standing)?.clear)return false;}}return true;}
- floor(point:Vec3){const candidates=(this.manifest.floors??[]).filter(f=>point[0]>=f.bounds.min[0]-1.5&&point[0]<=f.bounds.max[0]+1.5&&point[2]>=f.bounds.min[2]-1.5&&point[2]<=f.bounds.max[2]+1.5);if(!candidates.length||point[1]<Math.min(...candidates.map(f=>f.elevation))-.35)return 0;return candidates.sort((a,b)=>Math.abs(point[1]-a.elevation)-Math.abs(point[1]-b.elevation))[0].id;}
+ floor(point:Vec3){return escapeFloorAt(point,this.manifest);}
  dispose(){for(const id of this.actors.keys())this.removeActor(id);this.query.destroy();this.nav.destroy();this.blockers.clear();this.vision.dispose();this.physics.free();}
 }
 export function continuousCampusPath(query:NavMeshQuery,manifest:MapManifest,from:THREE.Vector3,to:THREE.Vector3){
@@ -99,7 +101,8 @@ export function continuousCampusPath(query:NavMeshQuery,manifest:MapManifest,fro
 }
 export function campusPath(query:NavMeshQuery,from:THREE.Vector3,to:THREE.Vector3){
  type Point={x:number;y:number;z:number};
- const plain=(a:Point,b:Point)=>{const r=query.computePath(a,b,{halfExtents:{x:3,y:1.2,z:3},maxPathPolys:512,maxStraightPathPoints:256});return r.success?r.path:[];};
+ const plain=(a:Point,b:Point)=>{const r=query.computePath(a,b,{halfExtents:{x:3,y:1.2,z:3},...campusQueryPathOptions(query)});return r.success?r.path:[];};
+ if(expandedCampusQuery(query))return plain(from,to);
  const radius=(p:Point)=>Math.hypot(p.x-44,p.z+124);
  const inside=(p:Point)=>p.y<-.4&&radius(p)<19;
  const heightAt=(r:number)=>-2.36+Math.min(1,Math.max(0,(r-8.75)/(18.55-8.75)))*2.54;
