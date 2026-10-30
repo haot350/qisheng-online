@@ -19,12 +19,12 @@ const root=path.join(site,'dist/client');
 const buildProfile=JSON.parse(await fs.readFile(path.join(root,'openqs-profile.json'),'utf8').catch(()=>{throw Error('Production packaging requires an explicit build:production profile.');}));
 assert(buildProfile.profile==='production'&&!buildProfile.localOnly,'Demo builds cannot be packaged as production.');
 const delivery=path.dirname(site);
-const manifest=JSON.parse(await fs.readFile(path.join(root,'campus.manifest.json'),'utf8'));
+const manifest=JSON.parse(await fs.readFile(path.join(root,'map/manifest.json'),'utf8'));
 const source=path.resolve(site,'../../总模型_南楼室内整合_v16/齐盛校园_v16_南教学楼室内轻量整合.blend');
 const sha=data=>createHash('sha256').update(data).digest('hex');
 assert.equal(manifest.sourceVersion,'v16');
 assert.equal(await hashFile(source),manifest.sourceSha256,'原模型哈希或来源版本不符');
-assert.equal(sha(await fs.readFile(path.join(root,'campus.manifest.json'))),sha(await fs.readFile(path.join(site,'public/campus.manifest.json'))),'请先重新构建最新资产');
+assert.equal(sha(await fs.readFile(path.join(root,'map/manifest.json'))),sha(await fs.readFile(path.join(site,'public/map/manifest.json'))),'请先重新构建最新资产');
 const files=[];
 async function walk(dir){for(const item of await fs.readdir(dir,{withFileTypes:true})){const full=path.join(dir,item.name),relative=path.relative(root,full).replaceAll('\\','/');assertStaticReleasePath(relative);assert(!item.isSymbolicLink(),'上传包不允许符号链接');if(item.isDirectory())await walk(full);else if(item.isFile()){const data=await fs.readFile(full);assert(data.length>0,`${item.name} 为零字节`);assert(singleFileLimit===null||data.length<=singleFileLimit,`${item.name} 超过 Pages 单文件 25 MiB 上限`);files.push({path:relative,bytes:data.length,sha256:sha(data)});}}}
 await walk(root);
