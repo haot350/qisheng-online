@@ -12,9 +12,9 @@ function fixture(){
  const renderer={shadowMap:{autoUpdate:true,needsUpdate:true},autoClear:false,
   getContext:()=>({isContextLost:()=>false,getExtension:()=>({COMPLETION_STATUS_KHR:0x91b1}),getProgramParameter:()=>{polls++;return compiled;}}),initTexture:()=>calls.push('texture'),
   compile:()=>{calls.push('compile');return new Set([material]);},properties:{get:()=>({currentProgram:{program:{}}})},
-  getRenderTarget:()=>target,setRenderTarget:(t:THREE.WebGLRenderTarget|null)=>{target=t;},
+  getActiveCubeFace:()=>0,getActiveMipmapLevel:()=>0,getRenderTarget:()=>target,setRenderTarget:(t:THREE.WebGLRenderTarget|null)=>{target=t;},
   getViewport:(v:THREE.Vector4)=>v.copy(viewport),setViewport:(v:THREE.Vector4|number,y?:number,w?:number,h?:number)=>{viewport=typeof v==='number'?new THREE.Vector4(v,y,w,h):v.clone();},
-  getScissor:(v:THREE.Vector4)=>v.copy(scissor),setScissor:(v:THREE.Vector4)=>{scissor=v.clone();},
+  getScissor:(v:THREE.Vector4)=>v.copy(scissor),setScissor:(v:THREE.Vector4|number,y?:number,w?:number,h?:number)=>{scissor=typeof v==='number'?new THREE.Vector4(v,y,w,h):v.clone();},
   getScissorTest:()=>scissorTest,setScissorTest:(v:boolean)=>{scissorTest=v;},render:()=>calls.push('offscreen'),
  };
  return {calls,scene,root,camera,texture,material,geometry,renderer,finish:()=>compiled=true,polls:()=>polls,state:()=>({target,viewport,scissor,scissorTest})};

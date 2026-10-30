@@ -1,11 +1,11 @@
 export const UE_WINDOWS_PREVIEW = {
   productName: '齐盛：2027',
   logoPath: '/images/branding/qisheng-2027-primary.webp',
-  title: 'Windows UE 实验版',
-  version: '0.1.0',
-  description: '旧版校园探索。网页版校园已更新，跨端联机将在客户端适配后恢复。',
+  title: 'Windows UE 校园游览测试版',
+  version: '0.2.0',
+  description: '新版校园步行探索、六种环境与独立画质设置。本版暂不提供联机枪战。',
   installation: '完整解压后，运行 QishengOnline.exe。',
-  bytes: 597_257_977,
-  sha256: '5cd1f6fd6335cfce9f3b5ba6775a84bb3a9bdd67be4eda905d47d1c47d6b79f7',
-  downloadPath: '/native/releases/5cd1f6fd6335cfce9f3b5ba6775a84bb3a9bdd67be4eda905d47d1c47d6b79f7/qisheng-ue-v0.1.0-experimental-windows.5cd1f6fd6335cfce9f3b5ba6775a84bb3a9bdd67be4eda905d47d1c47d6b79f7.zip',
+  bytes: 1_544_073_068,
+  sha256: 'd6baba430e376e700b218afbc72525a65d9f6508fc4e4e1d223b4ea0fad40957',
+  downloadPath: '/native/releases/d6baba430e376e700b218afbc72525a65d9f6508fc4e4e1d223b4ea0fad40957/qisheng-2027-v0.2.0-campus-windows.d6baba430e376e700b218afbc72525a65d9f6508fc4e4e1d223b4ea0fad40957.zip',
 } as const;

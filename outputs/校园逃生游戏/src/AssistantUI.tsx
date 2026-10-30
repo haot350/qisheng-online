@@ -21,7 +21,7 @@ const hasPlayArrangement=(plan:AssistantActionPlan)=>plan.actions.some(action=>[
 export function AssistantSpark({waiting=false}:{waiting?:boolean}){return <span className={'assistant-spark'+(waiting?' is-waiting':'')} aria-hidden="true"><span className="assistant-spark-orbit"/><span className="assistant-spark-orbit second"/><svg viewBox="0 0 64 64"><path d="M32 5C34 23 41 30 59 32C41 34 34 41 32 59C30 41 23 34 5 32C23 30 30 23 32 5Z"/></svg><i/><i/><i/></span>;}
 export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},connection,menuContext,onMenuAction,onReturn,nextStep,onPlanComplete}:Props){
  const [turns,setTurns]=useState(readAssistantHistory),[question,setQuestion]=useState(''),[pending,setPending]=useState(''),[busy,setBusy]=useState(false),[status,setStatus]=useState<AssistantStatus|null>(null),[statusBusy,setStatusBusy]=useState(false),[error,setError]=useState(''),[remaining,setRemaining]=useState<number|null>(null),[refresh,setRefresh]=useState(0),[visible,setVisible]=useState(()=>document.visibilityState!=='hidden'),[accepted,setAccepted]=useState(false),[consentQuestion,setConsentQuestion]=useState(''),[clearConfirm,setClearConfirm]=useState(false),[draft,setDraft]=useState<AssistantDraft|null>(null);
- const session=useRef(new AssistantSession()),serial=useRef(0),body=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),identity=useRef(rankingClient.getPlayer()?.id??'guest'),alive=useRef(true);
+ const session=useRef(new AssistantSession()),serial=useRef(0),body=useRef<HTMLDivElement>(null),page=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null),identity=useRef(rankingClient.getPlayer()?.id??'guest'),alive=useRef(true);
  const executor=useRef(new AssistantMenuExecution()),runtime=useRef({menuContext,onMenuAction}),actionVersion=useRef(0),startedPlans=useRef(new Set<string>()),[actionBusy,setActionBusy]=useState<string|null>(null),[actionResults,setActionResults]=useState<Record<string,PlanResult>>({}),[confirmPlan,setConfirmPlan]=useState<AssistantActionPlan|null>(null),[nearBottom,setNearBottom]=useState(true),[retryQuestion,setRetryQuestion]=useState('');
  const noticeRevision=useRef(1);noticeRevision.current=status?.noticeRevision??1;
  runtime.current={menuContext,onMenuAction};
@@ -31,9 +31,21 @@ export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},con
  useEffect(()=>{if(!active){stopActions();setClearConfirm(false);}},[active]);
  useEffect(()=>{stopActions();},[menuContext?.token,menuContext?.inBattle]);
  useEffect(()=>{if(!active){serial.current++;session.current.cancel();setBusy(false);setPending('');return;}const controller=new AbortController();setStatusBusy(true);void rankingClient.request<AssistantStatus>('/assistant/status',{auth:false,signal:controller.signal}).then(value=>{if(!controller.signal.aborted){setStatus(value);setAccepted(hasAssistantConsent(identity.current,value.noticeRevision??1));setError('');}}).catch(()=>{if(!controller.signal.aborted){setStatus(null);setError('AI助手暂不可用');}}).finally(()=>{if(!controller.signal.aborted)setStatusBusy(false);});return()=>controller.abort();},[active,refresh]);
- useEffect(()=>{if(active&&nearBottom)body.current?.scrollTo({top:body.current.scrollHeight,behavior:document.documentElement.dataset.motion==='reduced'||matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},[turns.length,busy,active,nearBottom,actionResults]);
+ useEffect(()=>{if(active&&nearBottom)body.current?.scrollTo({top:body.current.scrollHeight,behavior:document.documentElement.dataset.motion==='reduced'||matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});},[turns.length,busy,active,nearBottom,actionResults,error,accepted,statusBusy]);
  useEffect(()=>{const plan=turns.at(-1)?.actionPlan;if(active&&!busy&&!actionBusy&&plan&&onMenuAction&&!menuContext?.inBattle&&plan.contextToken===menuContext?.token&&!plan.actions.some(assistantActionNeedsConfirmation)&&!startedPlans.current.has(plan.id))void executePlan(plan);},[turns,busy,actionBusy,active,menuContext?.token,menuContext?.inBattle,onMenuAction]);
- useEffect(()=>{const viewport=window.visualViewport;if(!viewport)return;const adjust=()=>{body.current?.closest<HTMLElement>('.assistant-page')?.style.setProperty('--assistant-viewport-height',viewport.height+'px');if(active&&document.activeElement===composer.current)composer.current?.scrollIntoView({block:'nearest'});};adjust();viewport.addEventListener('resize',adjust);return()=>viewport.removeEventListener('resize',adjust);},[active]);
+ useEffect(()=>{
+  if(!active)return;
+  const viewport=window.visualViewport,scroller=page.current?.closest<HTMLElement>('.menu-page');
+  let frame=0;
+  const adjust=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{
+   const target=page.current;if(!target)return;
+   const height=viewport?.height??window.innerHeight,offset=viewport?.offsetTop??0;
+   target.style.setProperty('--assistant-available-height',Math.max(0,height-Math.max(0,target.getBoundingClientRect().top-offset)-12)+'px');
+   target.dataset.keyboard=height<window.innerHeight*.75?'open':'closed';
+  });};
+  adjust();viewport?.addEventListener('resize',adjust);viewport?.addEventListener('scroll',adjust);window.addEventListener('resize',adjust);scroller?.addEventListener('scroll',adjust,{passive:true});
+  return()=>{cancelAnimationFrame(frame);viewport?.removeEventListener('resize',adjust);viewport?.removeEventListener('scroll',adjust);window.removeEventListener('resize',adjust);scroller?.removeEventListener('scroll',adjust);};
+ },[active]);
  function exampleQuestion(text:string){setQuestion(text);if(accepted)void send(text);else{setConsentQuestion(text);composer.current?.focus();}}
  function acceptConsent(){if(!status)return;rememberAssistantConsent(identity.current,status.noticeRevision??1);setAccepted(true);const text=consentQuestion;setConsentQuestion('');if(text)void send(text,true);}
  async function send(value=question,consentJustAccepted=false){const text=value.trim();if(busy||actionBusy||!text||text.length>1500||!status?.available||(!accepted&&!consentJustAccepted))return;const token=++serial.current;setBusy(true);setPending(text);setError('');setRetryQuestion('');setNearBottom(true);
@@ -69,7 +81,7 @@ export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},con
   finally{if(current())setActionBusy(null);}
  }
  const latestPlayPlan=[...turns].reverse().find(turn=>turn.actionPlan&&hasPlayArrangement(turn.actionPlan))?.actionPlan?.id;
- return <div className="assistant-page" data-animations={active&&visible?'running':'paused'}>
+ return <div ref={page} className="assistant-page" data-animations={active&&visible?'running':'paused'}>
   <header className="assistant-toolbar"><div><span className={'assistant-status-dot'+(available?' is-online':'')}/><span>{statusBusy?'正在连接…':available?'在线':'暂不可用'}</span></div>{turns.length>0&&<button onClick={()=>setClearConfirm(true)} disabled={busy||!!actionBusy}>新对话</button>}</header>
   {clearConfirm&&<GameDialog title="开始新对话？" confirmLabel="清除对话" cancelLabel="保留对话" onConfirm={clear} onCancel={()=>setClearConfirm(false)}><p>这段对话将从本机清除，已完成的安排会保留。</p></GameDialog>}
   <div className="assistant-conversation" ref={body} aria-label="与小齐的对话" onScroll={e=>{const el=e.currentTarget;setNearBottom(el.scrollHeight-el.scrollTop-el.clientHeight<120);}}>
@@ -77,11 +89,13 @@ export default function AssistantUI({active,onHelp,onFeedback,diagnostics={},con
    {turns.map(turn=><article className="assistant-turn" key={turn.id}><div className="assistant-question"><span className="assistant-speaker">你</span><p>{turn.question}</p></div><div className="assistant-answer"><div className="assistant-answer-mark"><AssistantSpark/><strong>小齐</strong></div><AssistantAnswer value={turn.answer}/>{turn.actionPlan&&<AssistantPlanCard plan={turn.actionPlan} result={actionResults[turn.actionPlan.id]} canExecute={!busy&&!actionBusy&&!!onMenuAction&&!menuContext?.inBattle&&turn.actionPlan.contextToken===menuContext?.token} onExecute={()=>void executePlan(turn.actionPlan!)} onRetry={()=>{startedPlans.current.delete(turn.actionPlan!.id);void executePlan(turn.actionPlan!);}} nextStep={latestPlayPlan===turn.actionPlan.id&&turn.actionPlan.contextToken===menuContext?.token&&!busy&&!actionBusy&&!menuContext?.inBattle?nextStep:undefined} onReturn={onReturn}/>}
 {turn.feedbackDraft&&<button className="assistant-draft-entry" onClick={()=>setDraft({...turn.feedbackDraft!})}>查看并编辑反馈草稿 <span aria-hidden="true">→</span></button>}</div></article>)}
    {busy&&<article className="assistant-turn"><div className="assistant-question"><span className="assistant-speaker">你</span><p>{pending}</p></div><div className="assistant-thinking" role="status"><AssistantSpark waiting/><div><strong>小齐正在回复</strong><span className="assistant-thinking-line"/><span className="assistant-thinking-line short"/></div><span className="assistant-sr-only">请稍候，回答准备好后会显示。</span></div></article>}
-  </div>
-  <footer className="assistant-composer-area">
+   <div className="assistant-notices">
    {error&&<div className="assistant-error" role="alert"><strong>{error}</strong><div>{retryQuestion&&<button disabled={busy||!available} onClick={()=>void send(retryQuestion)}>重试这条问题</button>}<button onClick={onHelp}>查看帮助</button><button onClick={onFeedback}>直接反馈</button><button disabled={statusBusy||busy} onClick={()=>setRefresh(n=>n+1)}>重新连接</button></div></div>}
    {!available&&!statusBusy&&!error&&<div className="assistant-unavailable"><p>小齐暂时还不能回答。你可以先查看帮助，或直接提交反馈。</p><div><button onClick={onHelp}>查看帮助</button><button onClick={onFeedback}>直接反馈</button></div></div>}
    {!accepted&&<div className="assistant-consent"><span>问题会发送给 AI 服务。请勿提供密码或恢复码。</span><button type="button" disabled={!status||busy} onClick={acceptConsent}>{consentQuestion?'同意并提问':'我已了解'}</button><button type="button" className="assistant-text-button" onClick={()=>{setConsentQuestion('');onHelp();}}>查看帮助</button></div>}
+   </div>
+  </div>
+  <footer className="assistant-composer-area">
    <form className="assistant-composer" onSubmit={event=>{event.preventDefault();void send();}}><textarea ref={composer} aria-label="向小齐提问" value={question} maxLength={1500} rows={2} placeholder={available?'说说你想做什么…':'可以先写下问题，稍后再问'} disabled={busy||!!actionBusy} onChange={e=>setQuestion(e.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing&&matchMedia('(pointer: fine)').matches){event.preventDefault();void send();}}}/>{busy||actionBusy?<button type="button" className="assistant-stop" onClick={event=>{event.preventDefault();cancel();}}>停止</button>:<button type="submit" className="assistant-send" disabled={!available||!accepted||!question.trim()} aria-label="发送问题"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 5 7 7M12 5l-7 7M12 5v14"/></svg></button>}</form>
    <div className="assistant-footer-note"><span>AI 回答可能有误。对话仅保存在本机。</span><span>{remaining===null?question.length+' / 1500':'今日还可提问 '+remaining+' 次'}</span></div>
   </footer>

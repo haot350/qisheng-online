@@ -4,14 +4,14 @@ import type { EscapePlan,EscapePlanOptions,EscapeRouteValidation,EscapeTask,Esca
 const permutations=<T>(items:T[]):T[][]=>items.length<=1?[items]:items.flatMap((a,i)=>permutations(items.filter((_,j)=>j!==i)).map(rest=>[a,...rest]));
 const finitePoint=(p:EscapeVec3)=>p.length===3&&p.every(Number.isFinite);
 const key=(p:EscapeVec3)=>p.map(n=>n.toFixed(5)).join(',');
-const indoor=(task:EscapeTask)=>task.sites.some(p=>!!p.levelId||(p.floor??0)!==0);
+const indoor=(task:EscapeTask)=>task.sites.some(p=>(p.floor??0)>0);
 export class EscapePlanError extends Error {constructor(message:string,public diagnostics:string[]=[]){super(message);this.name='EscapePlanError';}}
 /** Every edge is checked both ways; a partial Recast success never counts as a route. */
 export function generateEscapePlan(options:EscapePlanOptions):EscapePlan {
  const cfg=ESCAPE_DIFFICULTIES[options.difficulty],random=escapeRandom(options.seed),cache=new Map<string,EscapeRouteValidation>(),diagnostics:string[]=[];
  const route=(a:EscapeVec3,b:EscapeVec3):EscapeRouteValidation=>{if(key(a)===key(b))return {complete:true,length:0};const id=key(a)+'>'+key(b);if(cache.has(id))return cache.get(id)!;let value:EscapeRouteValidation;try{value=options.validateRoute(a,b);}catch(error){value={complete:false,length:Infinity,reason:String(error)};}if(!value.complete||!Number.isFinite(value.length)||value.length<0)value={...value,complete:false,length:Infinity};cache.set(id,value);return value;};
  const edge=(a:EscapeVec3,b:EscapeVec3)=>{const ab=route(a,b),ba=route(b,a);return ab.complete&&ba.complete?Math.max(ab.length,ba.length):Infinity;};
- const sites=options.sites.filter(s=>finitePoint(s.position)&&(s.floor===undefined||Number.isInteger(s.floor))&&options.validateSite(s));
+ const sites=options.sites.filter(s=>finitePoint(s.position)&&(s.floor===undefined||s.floor===0||s.floor===1||s.floor===2)&&options.validateSite(s));
  const role=(kind:EscapeTaskKind)=>sites.filter(s=>!s.roles||s.roles.includes(kind));
  const make=(kind:EscapeTaskKind):EscapeTask|null=>{const choices=escapeShuffle(role(kind),random);if(kind==='take'||kind==='hold'){const a=choices.find(s=>kind!=='hold'||!(s.floor??0));return a?{id:kind+'-'+a.id,kind,label:kind==='take'?'夺取物资':'守住信标',sites:[a],duration:kind==='hold'?cfg.hold:0,radius:kind==='hold'?ESCAPE_RULES.holdRadius:ESCAPE_RULES.interactionRadius}:null;}
   for(const a of choices){for(const b of escapeShuffle(choices.filter(s=>s.id!==a.id),random)){const distance=edge(a.position,b.position),min=kind==='activate'?ESCAPE_RULES.activateMin:ESCAPE_RULES.deliverMin,max=kind==='activate'?ESCAPE_RULES.activateMax:ESCAPE_RULES.deliverMax;if(distance>=min-1e-6&&distance<=max+1e-6)return {id:kind+'-'+a.id+'-'+b.id,kind,label:kind==='activate'?'启动两处设备':'运送物资',sites:[a,b],duration:0,radius:ESCAPE_RULES.interactionRadius};}}

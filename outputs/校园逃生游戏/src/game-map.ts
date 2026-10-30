@@ -11,6 +11,7 @@ export async function loadGameMapBundle(signal?:AbortSignal):Promise<GameMapBund
  const {index,manifestBytes}=await gameMapSession.initialize(signal),manifest=JSON.parse(new TextDecoder().decode(manifestBytes)) as MapManifest;
  const [collision,navigation,vision]=await Promise.all([gameMapSession.read(manifest.collisionUrl,{signal,priority:0}),gameMapSession.read(manifest.navmeshUrl,{signal,priority:0}),manifest.visionUrl?gameMapSession.read(manifest.visionUrl,{signal,priority:0}):undefined]);
  if(signal?.aborted)throw abortMapRequest();
+ if(import.meta.env?.DEV&&typeof document!=='undefined')document.documentElement.dataset.qaMapManifestHash=index.manifest.sha256;
  return bundle??={manifest,manifestBytes,collision,navigation,vision,index,identity:{sourceVersion:manifest.sourceVersion||manifest.source,manifestHash:index.manifest.sha256,collisionHash:index.resources[manifest.collisionUrl].sha256,navigationHash:index.resources[manifest.navmeshUrl].sha256,...(manifest.visionUrl?{visionHash:index.resources[manifest.visionUrl].sha256}:{})}};
 }
 export async function gameMapManifest(signal?:AbortSignal){const {manifestBytes}=await gameMapSession.initialize(signal);return JSON.parse(new TextDecoder().decode(manifestBytes)) as MapManifest;}

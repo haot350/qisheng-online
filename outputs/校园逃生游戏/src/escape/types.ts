@@ -2,7 +2,7 @@ export type EscapeVec3=[number,number,number];
 export type EscapeDifficulty='easy'|'standard'|'hard';
 export type EscapeTaskKind='take'|'activate'|'hold'|'deliver';
 export type EscapeRegion='teaching'|'sports'|'canteen'|'dorm'|'library'|string;
-export interface EscapeSite {id:string;label:string;region:EscapeRegion;position:EscapeVec3;floor?:number;levelId?:string;buildingId?:string;roles?:EscapeTaskKind[];}
+export interface EscapeSite {id:string;label:string;region:EscapeRegion;position:EscapeVec3;floor?:number;buildingId?:string;levelId?:string;roles?:EscapeTaskKind[];}
 export interface EscapeTask {id:string;kind:EscapeTaskKind;label:string;sites:EscapeSite[];duration:number;radius:number;}
 export interface EscapeRouteValidation {complete:boolean;length:number;points?:EscapeVec3[];reason?:string;}
 export interface EscapePlan {seed:number;difficulty:EscapeDifficulty;tasks:EscapeTask[];spawn:EscapeVec3;extraction:EscapeSite;budgetSeconds:number;worstRouteMeters:number;fallback:boolean;}

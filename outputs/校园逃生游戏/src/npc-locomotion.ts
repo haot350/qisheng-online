@@ -48,3 +48,9 @@ export function chooseNpcPose(motion:NpcMotionSample,state:{suppressed:number;sk
 
 export function isNpcMovingPose(pose:NpcPose){return pose.startsWith('walk-')||pose.startsWith('run-')||pose.startsWith('combat-walk-')||pose.startsWith('combat-run-');}
 export function isNpcArmedPose(pose:NpcPose){return pose==='attack'||pose.startsWith('combat-walk-')||pose.startsWith('combat-run-');}
+export function npcWeaponRaised(pose:NpcPose,state:{aim:boolean;firing:boolean;suppressed:number;reloading:boolean;skill?:string}){
+ return isNpcArmedPose(pose)&&(state.aim||state.firing)&&state.suppressed<=0&&!state.reloading&&!state.skill;
+}
+export function npcDisplaySkill(identity:string,skill:'sprint'|'callout'|undefined,configured:'sprint'|'callout'|undefined){
+ return skill===configured||identity==='meng'&&skill==='callout'?skill:undefined;
+}

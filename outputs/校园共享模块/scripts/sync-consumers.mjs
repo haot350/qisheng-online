@@ -14,7 +14,7 @@ for(const project of ['校园逃生游戏','校园联机服务','校园排行榜
  try{
   const config=JSON.parse(oldPackage);config.dependencies['@qisheng/shared']='file:vendor/'+tar;await writeFile(packageFile,JSON.stringify(config,null,2)+'\n');
   const lock=cleanOptionalPlaceholders(structuredClone(previous));delete lock.packages['node_modules/@qisheng/shared'];lock.packages[''].dependencies['@qisheng/shared']='file:vendor/'+tar;await writeFile(lockFile,JSON.stringify(lock,null,2)+'\n');
-  console.log(project,run([npm,'install','--ignore-scripts','--no-audit','--no-fund',...(process.env.QISHENG_SYNC_OFFLINE==='1'?['--offline']:[])],dir).trim());
+  console.log(project,run([npm,'install',...(process.env.QISHENG_SYNC_LOCK_ONLY==='1'?['--package-lock-only']:[]),'--ignore-scripts','--no-audit','--no-fund',...(process.env.QISHENG_SYNC_OFFLINE==='1'?['--offline']:[])],dir).trim());
   const final=protectOptionalRecords(previous,JSON.parse(await readFile(lockFile,'utf8')));
   await writeFile(lockFile,JSON.stringify(final,null,2)+'\n');
  }catch(error){const restored=await Promise.allSettled([writeFile(packageFile,oldPackage),writeFile(lockFile,oldLock)]);const failed=restored.filter(result=>result.status==='rejected');if(failed.length)throw new AggregateError([error,...failed.map(result=>result.reason)],'Shared sync failed and package/lock restoration was incomplete');throw error;}

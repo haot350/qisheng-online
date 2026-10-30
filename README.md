@@ -1,5 +1,7 @@
 # 齐盛Online
 
+**源码版本：Preview 0.10.0。交付状态：等待生产外部复检；以正式入口实际版本为准。**
+
 LIUFRAME INTERACTIVE 制作的校园游戏项目，原制作署名为 OpenQS。网页版保留“齐盛Online”，UE独立作品采用《齐盛：2027》。此仓库包含客户端、校园网站、账号与管理 API、权威联机服务、共享规则及本地演示，代码采用 MIT；历史作者和第三方许可保留，正式美术与校园素材不随源码授权。
 
 ## 本地开始
@@ -22,10 +24,12 @@ Godot模块现转入退役归档，停止新增研发与支持，既有在线兼
 
 默认 `npm run build` 生成匿名演示。游戏与校园的正式构建使用 `npm run build:production`，实时服务使用 `OPENQS_PROFILE=production npm run build`；均需要独立获得的正式素材和私有人物校准。正式发行拒绝演示文件。演示独立地图身份，不可进入正式房间或提交正式成绩。
 
+若只构建游戏静态演示，先在 `outputs/校园共享模块` 运行 `npm ci`，再在 `outputs/校园逃生游戏` 运行 `npm ci` 和 `npm run build`。共享源码的 React 类型依赖也需要安装。
+
 ## 资源与协作
 
 上传内容由 `scripts/public-source.mjs` 白名单控制。校园模型、真人及衍生贴图、正式封面和图标、生产配置、数据库、玩家截图、日志和历史发行留在本机。不要强制添加未经审查的文件。详见 [开源边界](docs/OPEN_SOURCE.md)、[第三方许可](docs/THIRD_PARTY.md)。
 
-当前正式发行 **Preview 0.9.7**，香港两站与后端已发布。新版校园支持三栋教学楼一至五层及步行车库，地图按楼栋与楼层查看；任务、补给、出生与载具安全位置重新校准，坦克转向修复。新地图成绩单独记录，旧榜与凭证保留。旧UE测试版探索和下载保持，新图跨端联机等待UE适配；Godot历史下载继续归档。实际验证与限制见 [HANDOFF](docs/HANDOFF.md)。游戏 https://game.tianhw.top，校园网站 https://zbqsgz.tianhw.top。
+本次 **Preview 0.10.0** 源码接入轻量校园，整理NPC交战与寻路，并调整坦克操控。三栋教学楼、楼层浏览与步行车库的正式素材独立管理，不包含在开源演示中；历史成绩与凭证继续保留。生产交付等待外部复检，实际验证与限制见 [HANDOFF](docs/HANDOFF.md)。游戏 https://game.tianhw.top，校园网站 https://zbqsgz.tianhw.top。
 
 历史建模记录、原 README 与私密运维证据保留在本机 'work/private-project-state' 及原交付目录，不属于公开仓库。

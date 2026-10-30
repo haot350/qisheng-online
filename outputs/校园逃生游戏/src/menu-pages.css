@@ -12,6 +12,14 @@
 .menu-navigation button:disabled{cursor:wait;opacity:.6}
 .menu-navigation button .menu-update-dot{width:7px;height:7px;margin:0;box-shadow:0 0 0 2px #f1efe7}
 .menu-navigation button[aria-current=page] .menu-update-dot{background:#fff;box-shadow:none}
+.menu-qisheng2027-promo{display:grid;gap:9px;min-width:0;min-height:110px;padding:16px 12px 12px;border:1px solid #dc9da7;background:linear-gradient(135deg,#f7adc9,#ffd1a4);color:#24152c;text-decoration:none;border-radius:7px;transition:filter .16s,transform .16s}
+.menu-qisheng2027-promo img{display:block;width:100%;height:auto;max-height:61px;object-fit:contain}
+.menu-qisheng2027-promo>span{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:600;line-height:1.5}
+.menu-qisheng2027-promo i{font-style:normal;font-size:18px;line-height:1}
+.menu-qisheng2027-promo:hover{filter:brightness(1.04);transform:translateY(-2px)}
+.menu-qisheng2027-promo:focus-visible{outline:3px solid #934e3d;outline-offset:3px}
+@media(max-width:900px){.menu-navigation-home .menu-qisheng2027-promo{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;min-height:94px;padding:14px 16px}.menu-navigation-home .menu-qisheng2027-promo img{max-width:188px;max-height:64px}.menu-navigation-home .menu-qisheng2027-promo>span{max-width:7em;font-size:12px;line-height:1.6}}
+@media(prefers-reduced-motion:reduce){.menu-qisheng2027-promo{transition:none}.menu-qisheng2027-promo:hover{transform:none}}
 .menu-page-main{margin-left:220px;padding:0 max(30px,env(safe-area-inset-right)) max(30px,env(safe-area-inset-bottom));min-width:0}
 .menu-page-header{max-width:1200px;margin:0 auto;padding:30px 0 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;border-bottom:1px solid #dcdace}
 .menu-page-header h1{font-size:clamp(28px,3vw,40px);font-weight:650;line-height:1.3;margin:0;outline-offset:7px}
@@ -109,3 +117,5 @@
 @media(max-width:900px){.menu-page.menu-page-centered{flex-direction:row}.menu-page-centered .menu-page-main{padding:22px}.menu-page-centered .pause-session-heading h2{font-size:28px}}
 @media(orientation:landscape) and (max-height:500px){.menu-page.menu-page-centered{padding:12px max(18px,env(safe-area-inset-left))}.menu-page-centered .menu-page-main{max-height:calc(100dvh - 24px);padding:18px 22px}.menu-page-centered .menu-page-header{padding-bottom:10px}.menu-page-centered .menu-page-content{margin-top:14px}.menu-page-centered .pause-session-heading{margin-bottom:14px}.menu-page-centered .pause-session-heading h2{font-size:25px}.session-menu-actions{margin-top:12px}.session-menu-more{margin-top:5px}.session-menu-exits{margin-top:8px;padding-top:8px}}
 .menu-legal-footer{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.35rem;padding:20px 12px;color:#65665c;font-size:12px;line-height:1.6}.menu-legal-footer button{min-height:44px;padding:6px;background:none;border:0;color:inherit;text-decoration:underline;text-underline-offset:3px}.menu-footer>div{display:flex;gap:12px;flex-wrap:wrap}
+
+.game-shell[data-reduced-motion=true] .menu-qisheng2027-promo{transition:none}.game-shell[data-reduced-motion=true] .menu-qisheng2027-promo:hover{transform:none}

@@ -1,5 +1,5 @@
 import {rankingClient,RankingError} from './client.ts';
-import {rankingRuleVersion,drivingRuleVersion,MAP_CATALOG_ID,RANKING_LIMITS,type RankingEvent,type RankingRunConfig,type RankingSummary,type RankingTicket,type RankingStatus,type RankingSubmission} from './shared.ts';
+import {rankingRuleVersion,drivingRuleVersion,RANKING_LIMITS,type RankingEvent,type RankingRunConfig,type RankingSummary,type RankingTicket,type RankingStatus,type RankingSubmission} from './shared.ts';
 export type RankingViewSnapshot={status:RankingStatus;runId?:string;message:string;eligible:boolean;canSubmit:boolean;canPublish?:boolean;published?:boolean;recorded?:boolean;newAchievements?:string[]};
 export type StoredRankingRun={id:string;ownerId:string;ticket:RankingTicket;config:RankingRunConfig;events:RankingEvent[];acked:number;summary?:RankingSummary;status:RankingStatus;autoSubmit:boolean;recordStats?:boolean;publishBoard?:boolean;createdAt:number;finishedAt?:number;};
 const memory=new Map<string,StoredRankingRun>();const removed=new Set<string>();let database:Promise<IDBDatabase>|null=null;
@@ -23,7 +23,7 @@ export class RankingRecorder{
  private update(state:Partial<RankingViewSnapshot>){this.state={...this.state,...state};this.notify();}
  cancel(){this.cancelled=true;this.notify=()=>{};if(this.run&&!this.sealed)void removeRun(this.run.id);}
  async begin(config:RankingRunConfig,signal?:AbortSignal){
-  config={...config,ruleVersion:config.mode==='dafei'?drivingRuleVersion(config.vehicleId??'bao5'):rankingRuleVersion(config.mode),mapCatalogId:MAP_CATALOG_ID};
+  config={...config,ruleVersion:config.mode==='dafei'?drivingRuleVersion(config.vehicleId??'bao5'):rankingRuleVersion(config.mode)};
   const clientRunId=crypto.randomUUID();try{
    let timeout:ReturnType<typeof setTimeout>|undefined;
    const player=rankingClient.getPlayer()??await Promise.race([rankingClient.me(),new Promise<null>(resolve=>{timeout=setTimeout(()=>resolve(null),2500);})]).finally(()=>clearTimeout(timeout));

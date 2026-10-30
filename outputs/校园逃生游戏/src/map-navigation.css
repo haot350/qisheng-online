@@ -1,0 +1,5 @@
+.fps-map-floors{flex-wrap:wrap;gap:6px;align-items:center}
+.fps-map-floors label{font-size:13px;color:#c8d1c8}
+.fps-map-floors select{min-height:44px;max-width:100%;width:174px;padding:8px 10px;border:1px solid #607568;background:#172923;color:#f2f3e5;font:inherit}
+.fps-map-floors button{min-height:44px}
+@media(max-width:420px){.fps-map-floors select{width:calc(100% - 42px)}.fps-map-floors button{flex:1 0 24%;padding-inline:7px}}

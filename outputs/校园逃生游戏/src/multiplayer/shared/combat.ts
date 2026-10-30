@@ -4,6 +4,12 @@ export const add=(a:Vec3,b:Vec3):Vec3=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];export co
 export function lookDirection(yaw:number,pitch:number):Vec3{return[-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)];}
 export function eyeAt(feet:Vec3,crouch=false):Vec3{return add(feet,[0,crouch?1.04:1.62,0]);}
 export function muzzleAt(feet:Vec3,yaw:number,pitch:number,crouch=false):Vec3{const eye=eyeAt(feet,crouch),forward=lookDirection(yaw,pitch),right:Vec3=[Math.cos(yaw),0,-Math.sin(yaw)];return add(add(eye,mul(forward,.43)),mul(right,.12));}
+/** One visible aim point drives tracking, readiness and the actual muzzle ray. */
+export function npcAimAngles(feet:Vec3,target:Vec3){
+ let delta=sub(target,eyeAt(feet)),yaw=Math.atan2(-delta[0],-delta[2]),pitch=Math.atan2(delta[1],Math.hypot(delta[0],delta[2]));
+ for(let i=0;i<3;i++){delta=sub(target,muzzleAt(feet,yaw,pitch));yaw=Math.atan2(-delta[0],-delta[2]);pitch=Math.atan2(delta[1],Math.hypot(delta[0],delta[2]));}
+ return{yaw,pitch};
+}
 function sphere(origin:Vec3,dir:Vec3,center:Vec3,r:number){const p=sub(origin,center),b=dot(p,dir),c=dot(p,p)-r*r,h=b*b-c;if(h<0)return Infinity;const t=-b-Math.sqrt(h);return t>=0?t:-b+Math.sqrt(h)>=0?-b+Math.sqrt(h):Infinity;}
 function capsule(origin:Vec3,dir:Vec3,a:Vec3,b:Vec3,r:number){const ba=sub(b,a),oa=sub(origin,a),baba=dot(ba,ba),bard=dot(ba,dir),baoa=dot(ba,oa),rdoa=dot(dir,oa),oaoa=dot(oa,oa),qa=baba-bard*bard,qb=baba*rdoa-baoa*bard,qc=baba*oaoa-baoa*baoa-r*r*baba,h=qb*qb-qa*qc;if(h>=0&&Math.abs(qa)>1e-9){const t=(-qb-Math.sqrt(h))/qa,y=baoa+t*bard;if(t>=0&&y>0&&y<baba)return t;}return Math.min(sphere(origin,dir,a,r),sphere(origin,dir,b,r));}
 export function humanHit(origin:Vec3,dir:Vec3,feet:Vec3,yaw:number,crouch=false){const rotate=(x:number,y:number,z=0):Vec3=>add(feet,[x*Math.cos(yaw)+z*Math.sin(yaw),y,-x*Math.sin(yaw)+z*Math.cos(yaw)]),scale=crouch?.67:1,rows:{region:HitRegion;distance:number}[]=[{region:'head',distance:sphere(origin,dir,rotate(0,crouch?1.04:1.56),.19)},{region:'torso',distance:capsule(origin,dir,rotate(0,.72*scale),rotate(0,1.30*scale),.28)},{region:'arm',distance:Math.min(capsule(origin,dir,rotate(-.32,1.27*scale),rotate(-.27,.79*scale),.10),capsule(origin,dir,rotate(.32,1.27*scale),rotate(.27,.79*scale),.10))},{region:'leg',distance:Math.min(capsule(origin,dir,rotate(-.15,.18),rotate(-.14,.77*scale),.12),capsule(origin,dir,rotate(.15,.18),rotate(.14,.77*scale),.12))}];rows.sort((a,b)=>a.distance-b.distance);return Number.isFinite(rows[0].distance)?rows[0]:null;}

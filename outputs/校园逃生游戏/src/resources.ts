@@ -22,16 +22,16 @@ export class SceneResources {
     const keptImages=new Set([...used].map(t=>t.image)),closed=new Set<object>();
     for(const texture of original)if(!used.has(texture)){
       texture.dispose();const bitmap=texture.image;
-      if(typeof ImageBitmap!=='undefined'&&bitmap instanceof ImageBitmap&&!keptImages.has(bitmap)&&!closed.has(bitmap)&&!this.refs.has(this.bitmaps.get(bitmap)!)){bitmap.close();closed.add(bitmap);}
+      if(!texture.userData.mapSourceOwned&&typeof ImageBitmap!=='undefined'&&bitmap instanceof ImageBitmap&&!keptImages.has(bitmap)&&!closed.has(bitmap)&&!this.refs.has(this.bitmaps.get(bitmap)!)){bitmap.close();closed.add(bitmap);}
     }
   }
   retain(root:THREE.Object3D){
     if(this.shareNamedTextures)this.internTextures(root);
     const all=new Set<{dispose():void}>();
-    root.traverse(object=>{if(!(object instanceof THREE.Mesh))return;all.add(object.geometry);
+    root.traverse(object=>{if(!(object instanceof THREE.Mesh))return;if(object instanceof THREE.InstancedMesh)all.add(object);all.add(object.geometry);
       for(const material of Array.isArray(object.material)?object.material:[object.material]){
         all.add(material);for(const value of Object.values(material))if(value instanceof THREE.Texture){all.add(value);
-          if(typeof ImageBitmap!=='undefined'&&value.image instanceof ImageBitmap){let bitmap=this.bitmaps.get(value.image);if(!bitmap){const image=value.image;bitmap={dispose:()=>image.close()};this.bitmaps.set(image,bitmap);}all.add(bitmap);}
+          if(!value.userData.mapSourceOwned&&typeof ImageBitmap!=='undefined'&&value.image instanceof ImageBitmap){let bitmap=this.bitmaps.get(value.image);if(!bitmap){const image=value.image;bitmap={dispose:()=>image.close()};this.bitmaps.set(image,bitmap);}all.add(bitmap);}
         }
       }
     });
@@ -59,5 +59,5 @@ export class SceneResources {
 export function textureSamplingKey(texture:THREE.Texture){
   if(!texture.name||!texture.image)return null;
   const image=texture.image as {width?:number;height?:number};
-  return JSON.stringify([texture.name,image.width,image.height,texture.colorSpace,texture.flipY,texture.wrapS,texture.wrapT,texture.magFilter,texture.minFilter,texture.anisotropy,texture.channel,texture.mapping,texture.format,texture.type,texture.premultiplyAlpha,texture.unpackAlignment,texture.generateMipmaps,texture.matrixAutoUpdate,texture.offset.toArray(),texture.repeat.toArray(),texture.center.toArray(),texture.rotation,...(texture.matrixAutoUpdate?[]:texture.matrix.elements)]);
+  return JSON.stringify([texture.userData.mapSourceId??texture.name,image.width,image.height,texture.colorSpace,texture.flipY,texture.wrapS,texture.wrapT,texture.magFilter,texture.minFilter,texture.anisotropy,texture.channel,texture.mapping,texture.format,texture.type,texture.premultiplyAlpha,texture.unpackAlignment,texture.generateMipmaps,texture.matrixAutoUpdate,texture.offset.toArray(),texture.repeat.toArray(),texture.center.toArray(),texture.rotation,...(texture.matrixAutoUpdate?[]:texture.matrix.elements)]);
 }

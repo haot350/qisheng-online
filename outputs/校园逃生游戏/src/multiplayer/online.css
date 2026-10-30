@@ -270,7 +270,7 @@ html[data-motion="reduced"] .online-connection-pulse{animation:none}
 .online-equipment-summary span{font-size:12px;align-self:center}
 .online-equipment-summary button{flex-shrink:0;min-height:44px}
 .online-equipment .online-loadout{padding:12px 14px;border-top:1px solid var(--border-subtle);margin:0}
-.online-room-actions{position:sticky;bottom:-22px;z-index:3;padding:14px 0;background:linear-gradient(transparent,var(--surface-bg) 18%);box-shadow:0 -10px 20px #080d121f}
+.online-room-actions{position:sticky;bottom:0;z-index:3;padding:14px 0 max(14px,env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--surface-bg) 18%);box-shadow:0 -10px 20px #080d121f}
 .online-room-actions .online-leave{margin-left:auto;background:transparent}
 .online-combat-hud{--hud-map-width:150px;--hud-left:max(16px,env(safe-area-inset-left));--hud-top:max(14px,env(safe-area-inset-top));--hud-map-height:172px}
 .online-combat-hud .online-hud-top>section{margin-left:calc(var(--hud-map-width) + 20px);width:min(280px,32vw);max-width:none;box-sizing:border-box}
@@ -289,7 +289,7 @@ html[data-motion="reduced"] .online-connection-pulse{animation:none}
 
 @media(max-width:700px){.online-equipment-summary>div{grid-template-columns:1fr}
 .online-equipment-summary span{font-size:11px}
-.online-room-actions{bottom:-16px;gap:8px}
+.online-room-actions{bottom:0;gap:8px}
 .online-room-actions button{flex:1}
 .online-room-actions .online-leave{flex:0 1 auto}
 }
@@ -303,7 +303,7 @@ html[data-motion="reduced"] .online-connection-pulse{animation:none}
 .online-combat-hud .online-vote-toast{top:calc(var(--hud-top) + 70px);padding:5px 8px;max-width:45vw}
 .online-combat-hud .online-shot-directions{top:calc(var(--hud-top) + 99px)}
 .online-combat-hud.has-vote .online-shot-directions{top:calc(var(--hud-top) + 126px)}
-.online-room-actions{bottom:-14px;padding-bottom:8px}
+.online-room-actions{bottom:0;padding-bottom:max(8px,env(safe-area-inset-bottom))}
 }
 
 

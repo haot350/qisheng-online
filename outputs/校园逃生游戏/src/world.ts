@@ -1,10 +1,13 @@
+import {mapNavigationQueryOptions} from './navigation/query-config';
 import {type DrivingVehicleId} from './vehicles.ts';
 import { MapDecodeQueue } from "./map-decode.ts";
+import {MapImageSources} from './map-image-sources';
+import {presentMapFarParts} from './map-far-parts';
+import {readMapCollision,createMapColliders} from './map-collision';
+import {stairRouteKey,stairLandingDirection} from './navigation/stair-route';
 import { MapScenePreparer, type MapRenderContext } from './map-scene-preparer.ts';
 import { VisionGeometry } from "./vision-geometry.ts";
 import { WalkingPrefetch } from "./walking-prefetch.ts";
-import {chunkAllowedAtLevel,mapStreamingFloors} from './escape-floor';
-import {presentMapLod} from './map-lod';
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
@@ -24,7 +27,6 @@ import {
 import { SceneResources } from "./resources.ts";
 import { withDeadline } from "./network.ts";
 import { loadGameMapBundle, gameMapSession } from "./game-map.ts";
-import {withValidatedMapTextures} from '@qisheng/shared/map-client';
 import {
   createDrivingPhysics,
   drivePointAllowed,
@@ -42,8 +44,6 @@ import {
 } from "./navigation/avoidance.ts";
 import { crowdMotion } from "./navigation/crowd.ts";
 import { StairFlow } from "./navigation/stair-flow.ts";
-import {createCampusQuery,campusQueryPathOptions,expandedCampusQuery} from "./navigation/query-budget.ts";
-import {escapeLevelAt} from "./escape-floor";
 import { pathMotion } from "./path-following.ts";
 export interface GameWorld {
   manifest: MapManifest;
@@ -183,18 +183,10 @@ export async function loadWorld(
     initPromise,
   ]);
   if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
-  const header = new Uint32Array(collisionData, 0, 2);
-  const positions = new Float32Array(collisionData, 8, header[0]);
-  const indices = new Uint32Array(collisionData, 8 + header[0] * 4, header[1]);
+  const collisionGeometry=readMapCollision(collisionData);
   const physics = new RAPIER.World({ x: 0, y: -18, z: 0 });
   const vision = new VisionGeometry(visionData);
-  physics.createCollider(
-    RAPIER.ColliderDesc.trimesh(
-      positions,
-      indices,
-      RAPIER.TriMeshFlags.FIX_INTERNAL_EDGES,
-    ),
-  );
+  createMapColliders(physics,collisionGeometry);
   const body = physics.createRigidBody(
     RAPIER.RigidBodyDesc.kinematicPositionBased(),
   );
@@ -220,12 +212,13 @@ export async function loadWorld(
     physics.free();
     throw new Error("校园导航资源未能解码，请重新载入。", { cause: error });
   }
-  const query = createCampusQuery(navMesh,manifest);
+  const query = new NavMeshQuery(navMesh,mapNavigationQueryOptions(manifest));
   const root = new THREE.Group();
   root.name = `${manifest.sourceVersion ?? "campus"}-game-campus`;
   scene.add(root);
   let disposed = false;
   // The exported texture names were audited: each name identifies one exact image.
+  const images=new MapImageSources(gameMapSession);
   const resources = new SceneResources(true),
     decodeQueue = new MapDecodeQueue(),
     scenePreparer = new MapScenePreparer(scene,renderContext),
@@ -239,15 +232,17 @@ export async function loadWorld(
     const manager = new THREE.LoadingManager(),
       loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder),
       abort = () => manager.abort();
+    manager.addHandler(/\.webp(?:\?|$)/i,images.handler(signal));
     signal.addEventListener("abort", abort, { once: true });
     let gltf;
     try {
+      await images.prepare(chunk,signal);
       gltf = bundle
         ? await withDeadline(
             gameMapSession
               .read(chunk.url, { signal, priority })
-              .then((bytes) => withValidatedMapTextures(bytes,gameMapSession,signal,resolve=>{
-                manager.setURLModifier(resolve);return decodeQueue.run(
+              .then((bytes) =>
+                decodeQueue.run(
                   () =>
                     loader.parseAsync(
                       bytes,
@@ -255,7 +250,8 @@ export async function loadWorld(
                     ),
                   signal,
                   priority,
-                );},priority)),
+                ),
+              ),
             30000,
             {
               signal,
@@ -286,11 +282,12 @@ export async function loadWorld(
       (p) =>
         onProgress(0.25 + 0.75 * p, `载入出生区域 ${Math.round(p * 100)}%`),
       signal,
+      manifest.floors,
     );
   } catch (error) {
     disposed = true;
     streamer.dispose();
-    scenePreparer.dispose();
+    scenePreparer.dispose();images.dispose();
     root.removeFromParent();
     query.destroy();
     navMesh.destroy();
@@ -305,7 +302,7 @@ export async function loadWorld(
   const navigationGoals = new Map<number, THREE.Vector3>(),
     stairFlow = new StairFlow();
   const stairLines = (manifest.stairRoutes ?? []).map((r) => ({
-    key: r.core + ":" + r.from_floor,
+    key: stairRouteKey(r),route:r,
     points: r.points.map((p) => new THREE.Vector3(...p)),
   }));
   let navigationFrame = 0,
@@ -679,10 +676,7 @@ export async function loadWorld(
     if (!holding || holding.key !== line.key) {
       const landing =
           yieldFor.direction > 0 ? line.points[0] : line.points.at(-1)!,
-        towards = (()=>{const level=escapeLevelAt(landing.toArray(),manifest);return level?new THREE.Vector3((level.bounds.min[0]+level.bounds.max[0])/2,landing.y,(level.bounds.min[2]+level.bounds.max[2])/2):line.points.at(yieldFor.direction>0?-1:0)!.clone();})()
-          .sub(landing)
-          .setY(0)
-          .normalize();
+        towards = new THREE.Vector3(...stairLandingDirection(line.route,yieldFor.direction>0));
       let target: THREE.Vector3 | undefined;
       for (const radius of [1.8, 2.6, 3.4]) {
         for (const angle of [0, 0.45, -0.45, 0.9, -0.9, 1.4, -1.4]) {
@@ -995,7 +989,7 @@ export async function loadWorld(
           point,
           observers.map((p) => p.toArray()),
           low,
-          mapStreamingFloors(manifest),
+          manifest.floors ?? [],
           {
             isDriving: outdoorOnly || !!driving,
             outdoorOnly,
@@ -1006,9 +1000,30 @@ export async function loadWorld(
                 : undefined),
           },
         );
+      const floor = manifest.floors?.reduce((best, f) =>
+          Math.abs(position.y - f.elevation) <
+          Math.abs(position.y - best.elevation)
+            ? f
+            : best,
+        ),
+        bounds = floor?.bounds;
+      const inside =
+        bounds &&
+        position.x >= bounds.min[0] - 1 &&
+        position.x <= bounds.max[0] + 1 &&
+        position.z >= bounds.min[2] - 1 &&
+        position.z <= bounds.max[2] + 1;
       streamer.forEach((asset, chunk, distance) => {
-        const allowed = chunkAllowedAtLevel(chunk,point,manifest,outdoorOnly),
-          visible = streamer.hasCombatLease() && combatStructure(chunk) ? streamer.inCombatView(chunk.url) :
+        if(chunk.farBundle)presentMapFarParts(asset,url=>streamer.visibleLod(url));
+        const allowed =
+            chunk.kind !== "interior" ||
+            (!outdoorOnly &&
+              (!floor ||
+                !chunk.floor ||
+                (inside
+                  ? Math.abs(chunk.floor - floor.id) <= 1
+                  : chunk.floor === 1))),
+          visible = streamer.hasLodSelection ? streamer.visibleLod(chunk.url) : streamer.hasCombatLease() && combatStructure(chunk) ? streamer.inCombatView(chunk.url) :
             streamer.inCombatView(chunk.url) ||
             !!allowed &&
             (distance < (chunk.kind === "interior" ? 19 : low ? 60 : 75) ||
@@ -1020,7 +1035,6 @@ export async function loadWorld(
           asset.visible = visible;
           visibilityRevision++;
         }
-        if(presentMapLod(asset,distance,low))visibilityRevision++;
         if (asset.userData.shadowNear !== shadowNear) {
           asset.userData.shadowNear = shadowNear;
           visibilityRevision++;
@@ -1060,7 +1074,7 @@ export async function loadWorld(
     retry() {
       streamer.retry();
     },
-    checkSafety(position,low,outdoorOnly=false){return streamer.checkSafety(position.toArray(),low,mapStreamingFloors(manifest),{isDriving:outdoorOnly||!!driving,outdoorOnly});},
+    checkSafety(position,low,outdoorOnly=false){return streamer.checkSafety(position.toArray(),low,manifest.floors??[],{isDriving:outdoorOnly||!!driving,outdoorOnly});},
     prepareCombat(signal,onProgress){return streamer.prepareCombat(signal,onProgress);},
     diagnostics(){return {...streamer.diagnostics(),gpu:scenePreparer.diagnostics(),resources:resources.diagnostics(),decode:decodeQueue.diagnostics()};},
     retryView() {
@@ -1224,7 +1238,7 @@ export async function loadWorld(
       if (disposed) return;
       disposed = true;
       streamer.dispose();
-      scenePreparer.dispose();
+      scenePreparer.dispose();images.dispose();
       root.removeFromParent();
       resetActors();
       query.destroy();
@@ -1313,11 +1327,11 @@ export function campusPath(
   const plain = (a: Point, b: Point) => {
     const r = query.computePath(a, b, {
       halfExtents: { x: 3, y: 1.2, z: 3 },
-      ...campusQueryPathOptions(query),
+      maxPathPolys: 512,
+      maxStraightPathPoints: 256,
     });
     return r.success ? r.path : [];
   };
-  if(expandedCampusQuery(query))return plain(from,to);
   const radius = (p: Point) => Math.hypot(p.x - 44, p.z + 124);
   const inside = (p: Point) => p.y < -0.4 && radius(p) < 19;
   const heightAt = (r: number) =>

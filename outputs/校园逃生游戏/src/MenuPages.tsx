@@ -1,7 +1,8 @@
-import {useCallback,useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
+import {Fragment,useCallback,useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import './ui-tokens.css';
 import './menu-pages.css';
 import {BrandLogo} from './BrandLogo';
+import {staticAssetUrl} from './static-assets';
 
 export type MenuPageId='settings'|'help'|'faq'|'about'|'updates'|'credits'|'copyright'|'ranking'|'feedback'|'account'|'assistant';
 const navigationGroups=[{label:'游玩',items:[['start','开始'],['account','账号与档案'],['ranking','排行榜']]},{label:'服务',items:[['assistant','小齐助手'],['settings','设置'],['feedback','反馈与进展']]},{label:'资料',items:[['faq','帮助'],['credits','制作名单'],['about','关于']]}] as const;
@@ -10,7 +11,7 @@ export function MenuNavigation({active,onNavigate,onRoot,rootLabel='开始',feed
  const selected=active==='help'?'faq':['updates','copyright'].includes(active)?'about':active;
  return <aside className={'menu-navigation'+(mobileHome?' menu-navigation-home':'')} aria-label="游戏菜单">
   <div className="menu-navigation-name" aria-hidden="true"><BrandLogo className="menu-logo-dark"/><BrandLogo variant="light" className="menu-logo-light"/></div>
-  <nav aria-label="主菜单">{navigationGroups.map(group=><section key={group.label} className={'menu-nav-group'+(group.label==='资料'?' menu-nav-info':'')} aria-label={group.label}><h2>{group.label}</h2>{group.items.map(([id,label])=><button key={id} className={id==='start'?'menu-home-start':undefined} data-menu-focus={id} aria-current={selected===id?'page':undefined} disabled={disabled} onClick={()=>id==='start'?onRoot():onNavigate(id)}><span>{id==='start'?rootLabel:label}</span>{((id==='feedback'&&feedbackUnread)||(id==='about'&&updatesUnread))&&<i className="menu-update-dot" role="img" aria-label={id==='feedback'?'有新回复':'有未读更新'}/>}<span className="menu-navigation-arrow" aria-hidden="true">›</span></button>)}</section>)}</nav>
+  <nav aria-label="主菜单">{navigationGroups.map(group=><Fragment key={group.label}>{group.label==='资料'&&<a className="menu-qisheng2027-promo" href="https://qs2027.tianhw.top/" target="_blank" rel="noopener noreferrer" aria-label="走进齐盛2027官方网站，在新标签页打开"><img src={staticAssetUrl('/images/branding/qisheng-2027-primary.webp')} alt="齐盛2027" width={2172} height={724} decoding="async"/><span>官方网站 <i aria-hidden="true">↗</i></span></a>}<section className={'menu-nav-group'+(group.label==='资料'?' menu-nav-info':'')} aria-label={group.label}><h2>{group.label}</h2>{group.items.map(([id,label])=><button key={id} className={id==='start'?'menu-home-start':undefined} data-menu-focus={id} aria-current={selected===id?'page':undefined} disabled={disabled} onClick={()=>id==='start'?onRoot():onNavigate(id)}><span>{id==='start'?rootLabel:label}</span>{((id==='feedback'&&feedbackUnread)||(id==='about'&&updatesUnread))&&<i className="menu-update-dot" role="img" aria-label={id==='feedback'?'有新回复':'有未读更新'}/>}<span className="menu-navigation-arrow" aria-hidden="true">›</span></button>)}</section></Fragment>)}</nav>
  </aside>;
 }
 

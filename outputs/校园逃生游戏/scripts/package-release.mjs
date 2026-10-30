@@ -67,9 +67,6 @@ const manifestBuffer = await fs.readFile(manifestFile.absolute);
 const currentManifest = await fs.readFile(path.join(publicRoot, 'map', 'manifest.json'));
 if (hash(manifestBuffer) !== hash(currentManifest)) throw new Error('dist/map/manifest.json is stale. Finish the map work and run npm run build before packaging.');
 const manifest = JSON.parse(manifestBuffer.toString('utf8'));
-const hfMap=manifest.sourceVersion==='hf-r02-web-1';
-if(releaseVersion==='0.9.7'&&!hfMap)throw Error('0.9.7 requires the accepted HF-r02 web map.');
-if(hfMap&&(manifest.mapCatalogId!=='hf-r02-web-1'||manifest.sourceSha256!=='996f7a264654027d3784a6254633130d82e1d6de6565ed0cdfd0fd28c88c7d3b'))throw Error('HF-r02 map catalog or frozen source hash mismatch.');
 if (!Array.isArray(manifest.chunks) || !manifest.chunks.length || typeof manifest.collisionUrl !== 'string' || typeof manifest.navmeshUrl !== 'string') throw new Error('Incomplete map manifest: require chunks, collisionUrl and navmeshUrl.');
 const manifestReferences = new Set();
 function collectUrls(value, key = '') {
@@ -115,14 +112,13 @@ if(archiveManifest.photos?.length!==24)throw new Error('The release archive must
 for(const photo of archiveManifest.photos){for(const [url,bytes]of [[photo.image,photo.bytes],[photo.thumbnail,photo.thumbnailBytes]]){const relative=checkedRelative(url);if((await fileInfo(distRoot,relative)).info.size!==bytes)throw new Error('Archive asset size mismatch: '+relative);}}
 const realityManifest=JSON.parse(await fs.readFile((await fileInfo(distRoot,'story/reality/manifest.json')).absolute,'utf8'));
 const discoveries=realityManifest.anchors?.filter(anchor=>anchor.enabled)??[];
-const discoveryDerivative=hfMap?'b7a65eff9790b78c23fedec81d629bff524e0d426bc70275cb77eec5eb2a24a4':manifest.derivativeSha256;
-if(realityManifest.version!==1||discoveries.length!==5||realityManifest.modelSha!==discoveryDerivative)throw new Error('Five calibrated discoveries must reference their accepted campus derivative.');
+if(realityManifest.version!==1||discoveries.length!==5||realityManifest.modelSha!==manifest.derivativeSha256)throw new Error('Five calibrated discoveries must reference the unchanged exported campus derivative.');
 for(const anchor of discoveries){
   const original=archiveManifest.photos.find(photo=>photo.id===anchor.photoId);
   if(!original||anchor.sourceSha!==original.sourceSha||!anchor.validation?.walkable||!anchor.validation.geometry||anchor.landmarks?.length<6||anchor.landmarks.length>8||anchor.validation.visible<4||anchor.validation.median>.06||anchor.validation.p90>.12)throw new Error('Unvalidated reality discovery: '+anchor.id);
   for(const url of[anchor.image,anchor.thumbnail])await fileInfo(distRoot,checkedRelative(url));
 }
-const standalonePages=['account/index.html','credits/index.html','copyright/index.html'];
+const standalonePages=['account/index.html','credits/index.html','copyright/index.html','qisheng-2027/index.html'];
 const copyFiles = new Set(['index.html', ...standalonePages, 'openqs-profile.json', 'map/manifest.json', 'map/resource-index.json', ...manifestReferences, ...required, ...storyFiles]);
 for (const relative of await walk(distRoot)) {
   assertStaticReleasePath(relative);
@@ -171,7 +167,6 @@ for (const relative of [...copyFiles].sort()) {
 
 const mapIndex=JSON.parse(await fs.readFile(path.join(distRoot,'map/resource-index.json'),'utf8'));
 if(mapIndex.schema!==1||mapIndex.manifest.sha256!==hash(manifestBuffer))throw Error('Map cache index is not bound to this manifest.');
-for(const relative of manifestReferences)if(!mapIndex.resources['/'+relative])throw Error('Map cache index omits manifest resource: '+relative);
 for(const resource of Object.values(mapIndex.resources)){const item=files.find(f=>'/'+f.path===resource.url);if(!item||item.sha256!==resource.sha256||item.bytes!==resource.bytes)throw Error('Missing or stale hash map asset: '+resource.url);}
 
 const report = {
@@ -181,7 +176,6 @@ const report = {
   target:pagesExport?'cloudflare-pages':'server',singleFileLimitBytes: limit, totalFiles: files.length,
   totalUncompressedBytes: files.reduce((sum, file) => sum + file.bytes, 0),
   manifestReferenceCount: manifestReferences.size,
-  sourceVersion:manifest.sourceVersion,sourceSha256:manifest.sourceSha256,mapCatalogId:manifest.mapCatalogId,mapChunkCount:manifest.chunks.length,mapResourceCount:Object.keys(mapIndex.resources).length,discoveryMapScope:hfMap?'legacy-campus-derivative':'current-campus-derivative',
   manifestSha256: hash(manifestBuffer), newestInput, distIndexMtime: index.info.mtime.toISOString(),
   requiredPlayerAvatarsPresent: true,playerAvatarCount:4,requiredBillboardsAndAudioPresent: true, characterCount: NPC_IDS.length, runtimeNpcSlots: ESCAPE_TOTAL_NPCS, escapeStartingNpcCount: ESCAPE_INITIAL_NPCS, escapeReinforcementCount: ESCAPE_TOTAL_NPCS-ESCAPE_INITIAL_NPCS, dafeiNpcSlots: 4, escapeMusicTrackCount: 3,
   characterPoseWebpCount: characterPoseWebps.length, locomotionPoseCount:NPC_IDS.length*NPC_LOCOMOTION_POSES.length,

@@ -28,15 +28,19 @@ export function storyDirectRoute(physics:RAPIER.World,from:THREE.Vector3,to:THRE
  return !hit||hit.time_of_impact>=distance-.02;
 }
 
-/** Returns a bounded desired motion; the original character controller still
- * resolves it against architecture. It never sets an actor's position. */
+/** Bounded assistance over a supported low curb on the current floor. The
+ * character controller still resolves architecture; floor height is not a rule. */
 export function storyCurbLift(physics:RAPIER.World,p:THREE.Vector3,desired:THREE.Vector3){
- if(p.y>.8||desired.lengthSq()<1e-10)return 0;
+ if(![p.x,p.y,p.z,desired.x,desired.y,desired.z].every(Number.isFinite)||desired.lengthSq()<1e-10)return 0;
  const direction=desired.clone();direction.y=0;if(direction.lengthSq()<1e-10)return 0;
  direction.normalize();const current=support(physics,p),supports=[.16,.32,.48].map(distance=>support(physics,p.clone().addScaledVector(direction,distance)));
  // A single distant probe can already be beyond a narrow curb while the front
  // of the capsule still meets it. Sample its whole footprint, not just its end.
  if(current===null||supports.some(height=>height===null))return 0;
+ // A flight continues to rise beyond the short footprint. Keep its normal
+ // controller solve; a single low platform or narrow curb remains eligible.
+ const farSupports=[.64,.80].map(distance=>support(physics,p.clone().addScaledVector(direction,distance)));
+ if(farSupports.some(height=>height!==null&&height-current>.24))return 0;
  const ahead=Math.max(...supports as number[]);
  if(ahead-current<.025||ahead-current>.22||Math.abs(current-p.y)>.24)return 0;
  const delta=ahead-p.y;

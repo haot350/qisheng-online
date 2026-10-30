@@ -7,6 +7,20 @@ export type MapRenderContext={renderer:THREE.WebGLRenderer;camera:THREE.Perspect
 const cancelled=()=>new DOMException('Cancelled','AbortError');
 const yieldTask=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
 
+/** Reuse the actual draw attributes so preparation compiles the same variant. */
+export function mapWarmupProxy(mesh:THREE.Mesh):THREE.Mesh{
+ let proxy:THREE.Mesh;
+ if(mesh instanceof THREE.InstancedMesh){
+  const instanced=new THREE.InstancedMesh(mesh.geometry,mesh.material,0);
+  instanced.count=mesh.count;instanced.instanceMatrix=mesh.instanceMatrix;
+  instanced.instanceColor=mesh.instanceColor;instanced.morphTexture=mesh.morphTexture;
+  proxy=instanced;
+ }else proxy=mesh.clone(false);
+ proxy.matrixAutoUpdate=false;proxy.matrix.copy(mesh.matrixWorld);
+ proxy.frustumCulled=false;proxy.receiveShadow=mesh.receiveShadow;
+ return proxy;
+}
+
 /** Three's compileAsync owns an uncancellable polling timer. Use the same public
  * compile entry point, but own the readiness polling so abort can safely release
  * materials without a later timer dereferencing their disposed renderer state. */
@@ -56,7 +70,7 @@ export class MapScenePreparer{
     valid();const mesh=meshes[i];mesh.receiveShadow=true;mesh.frustumCulled=true;
     const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
     for(const material of materials)if(material instanceof THREE.MeshStandardMaterial){
-     material.envMapIntensity=.65;if(material.transparent&&material.opacity>.95){material.transparent=false;material.depthWrite=true;}
+     material.envMapIntensity=.65;
     }
     mesh.userData.campusShadowCaster=materials.every(m=>!m.transparent&&!/(glass|leaf|leaves|grass|floor|road|ground|玻璃|叶片|灌木|草地|地坪|地面|道路|沥青|跑道|标线|铺装|步道|石板|细缝)/i.test(m.name+' '+mesh.name));
     mesh.castShadow=!!mesh.userData.campusShadowCaster;
@@ -77,7 +91,7 @@ export class MapScenePreparer{
     try{
      for(let offset=0;offset<meshes.length;offset+=24){
       valid();const batch=meshes.slice(offset,offset+24).map(mesh=>{
-       const proxy=new THREE.Mesh(mesh.geometry,mesh.material);proxy.matrixAutoUpdate=false;proxy.matrix.copy(mesh.matrixWorld);proxy.frustumCulled=false;proxy.receiveShadow=mesh.receiveShadow;warm.add(proxy);return proxy;
+       const proxy=mapWarmupProxy(mesh);warm.add(proxy);return proxy;
       });
       // State changes are synchronous and fully restored before yielding to RAF.
       started=performance.now();

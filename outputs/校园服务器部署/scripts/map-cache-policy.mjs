@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {gunzipSync} from 'node:zlib';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const safeLogical=url=>typeof url==='string'&&/^\/(?!\/)[^?#%\\]+$/.test(url)&&!url.split('/').some(p=>p==='.'||p==='..');
 export function mapVerificationBodyTimeout(bytes){
@@ -6,18 +7,37 @@ export function mapVerificationBodyTimeout(bytes){
  return Math.min(90000,Math.max(20000,Math.ceil(bytes/(512*1024))*1000+10000));
 }
 export function validateResourceIndex(index,manifestUrl){
- if(!index||index.schema!==1||index.manifest?.url!==manifestUrl||!/^[a-f0-9]{64}$/.test(index.manifest.sha256)||!index.resources||typeof index.resources!=='object'||Array.isArray(index.resources))throw Error('Invalid versioned map resource index');
+ if(!index||![1,2].includes(index.schema)||index.manifest?.url!==manifestUrl||!/^[a-f0-9]{64}$/.test(index.manifest.sha256)||!index.resources||typeof index.resources!=='object'||Array.isArray(index.resources))throw Error('Invalid versioned map resource index');
  const rows=Object.entries(index.resources);if(!rows.length)throw Error('Empty map resource index');
- for(const [logical,r]of rows){if(!safeLogical(logical)||!r||!/^[a-f0-9]{64}$/.test(r.sha256)||typeof r.url!=='string'||r.url!='/assets/map/'+r.sha256+'.'+r.url.split('.').at(-1)||!/^\/assets\/map\/[a-f0-9]{64}\.[a-z0-9]+$/.test(r.url)||!Number.isSafeInteger(r.bytes)||r.bytes<=0||typeof r.mime!=='string'||!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(r.mime))throw Error('Invalid map resource binding: '+logical);}
+ for(const [logical,r]of rows){
+  if(!safeLogical(logical)||!r||!/^[a-f0-9]{64}$/.test(r.sha256)||typeof r.url!=='string'||r.url!='/assets/map/'+r.sha256+'.'+r.url.split('.').at(-1)||!/^\/assets\/map\/[a-f0-9]{64}\.[a-z0-9]+$/.test(r.url)||!Number.isSafeInteger(r.bytes)||r.bytes<=0||typeof r.mime!=='string'||!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(r.mime))throw Error('Invalid map resource binding: '+logical);
+  const e=r.encoding;
+  if(e!==undefined&&(index.schema!==2||!e||e.format!=='gzip'||r.mime!=='application/gzip'||!r.url.endsWith('.gz')||!Number.isSafeInteger(e.decodedBytes)||e.decodedBytes<=0||e.decodedBytes>128*1024*1024||!/^[a-f0-9]{64}$/.test(e.decodedSha256)||typeof e.decodedUrl!=='string'||!/^\/assets\/map\/[a-f0-9]{64}[.](bin|glb)$/.test(e.decodedUrl)||!e.decodedUrl.startsWith('/assets/map/'+e.decodedSha256+'.')))throw Error('Invalid map compression binding: '+logical);
+ }
  return rows;
+}
+export function decodedMapResourceBinding(resource){const e=resource.encoding;return e?{url:e.decodedUrl,bytes:e.decodedBytes,sha256:e.decodedSha256}:{url:resource.url,bytes:resource.bytes,sha256:resource.sha256};}
+/** The stored gzip and decoded authority bytes have independent identities. */
+export function decodeIndexedMapResource(resource,input){
+ const bytes=Buffer.from(input);if(bytes.length!==resource.bytes||sha(bytes)!==resource.sha256)throw Error('Stored map resource bytes do not match index');
+ if(!resource.encoding)return bytes;
+ const e=resource.encoding;if(e.format!=='gzip'||!Number.isSafeInteger(e.decodedBytes)||e.decodedBytes<=0||e.decodedBytes>128*1024*1024)throw Error('Invalid map compression budget');
+ let decoded;try{decoded=gunzipSync(bytes,{maxOutputLength:e.decodedBytes});}catch{throw Error('Map gzip container is invalid or exceeds its decoded size');}
+ if(decoded.length!==e.decodedBytes||sha(decoded)!==e.decodedSha256)throw Error('Decoded map resource bytes do not match index');return decoded;
 }
 export async function verifyMapCache(base,read){
  const response=await read(base+'/map/resource-index.json');if(!/no-store/.test(response.headers.get('cache-control')??''))throw Error('Map resource index must not be cached');
- const index=await response.json(),manifestUrl=base==='https://game.tianhw.top'?'/map/manifest.json':'/campus.manifest.json',rows=validateResourceIndex(index,manifestUrl),manifest=await read(base+manifestUrl);
+ const index=await response.json(),manifestUrl=base==='https://game.tianhw.top'?'/map/manifest.json':index.manifest?.url;
+ if(!['/map/manifest.json','/campus.manifest.json'].includes(manifestUrl))throw Error('Unexpected public map manifest path');
+ const rows=validateResourceIndex(index,manifestUrl),manifest=await read(base+manifestUrl);
  if(!/no-store/.test(manifest.headers.get('cache-control')??''))throw Error('Map manifest must not be cached');if(sha(Buffer.from(await manifest.arrayBuffer()))!==index.manifest.sha256)throw Error('Map index is not bound to current manifest bytes');
- const samples=[];for(const ext of ['glb','bin','webp']){const row=rows.find(([,r])=>r.url.endsWith('.'+ext));if(row)samples.push(row);}if(!samples.length)samples.push(rows[0]);
- for(const [logical,r]of samples){const asset=await read(base+r.url,200,{bodyTimeoutMs:mapVerificationBodyTimeout(r.bytes)}),cache=asset.headers.get('cache-control')??'';if(!cache.includes('max-age=31536000')||!cache.includes('immutable'))throw Error('Hashed map resource is not immutable');if(asset.headers.get('content-type')?.split(';')[0]!==r.mime)throw Error('Incorrect map resource MIME');const bytes=Buffer.from(await asset.arrayBuffer());if(bytes.length!==r.bytes||sha(bytes)!==r.sha256)throw Error('Hashed map resource bytes do not match index');if(logical!==r.url){const original=await read(base+logical,200,{method:'HEAD'});if(!/no-store/.test(original.headers.get('cache-control')??''))throw Error('Legacy logical map URL must not be immutable');}}
- const first=samples[0][1],last=Math.min(first.bytes-1,15),range=await read(base+first.url,206,{headers:{Range:'bytes=0-'+last}});if(range.headers.get('content-range')!=='bytes 0-'+last+'/'+first.bytes||(await range.arrayBuffer()).byteLength!==last+1)throw Error('Map resource range response is invalid');
+ const samples=[];for(const ext of ['glb','bin','webp']){const row=rows.find(([,r])=>(r.encoding?.decodedUrl??r.url).endsWith('.'+ext));if(row)samples.push(row);}if(!samples.length)samples.push(rows[0]);
+ for(const [logical,r]of samples){
+  const asset=await read(base+r.url,200,{bodyTimeoutMs:mapVerificationBodyTimeout(r.bytes)}),cache=asset.headers.get('cache-control')??'';if(!cache.includes('max-age=31536000')||!cache.includes('immutable'))throw Error('Hashed map resource is not immutable');if(asset.headers.get('content-type')?.split(';')[0]!==r.mime)throw Error('Incorrect map resource MIME');decodeIndexedMapResource(r,Buffer.from(await asset.arrayBuffer()));
+  if(logical!==r.url){const original=await read(base+logical,200,{method:'HEAD'});if(!/no-store/.test(original.headers.get('cache-control')??''))throw Error('Legacy logical map URL must not be immutable');}
+  if(r.encoding){const raw=await read(base+r.encoding.decodedUrl,200,{method:'HEAD'});if(!/immutable/.test(raw.headers.get('cache-control')??''))throw Error('Decoded fallback is not an immutable hash resource');if(raw.headers.get('content-length')!==String(r.encoding.decodedBytes))throw Error('Decoded fallback size mismatch');}
+ }
+ const first=samples[0][1],last=Math.min(first.bytes-1,15),range=await read(base+first.url,206,{headers:{Range:'bytes=0-'+last,'Accept-Encoding':'identity'}});if(range.headers.get('content-range')!=='bytes 0-'+last+'/'+first.bytes||(await range.arrayBuffer()).byteLength!==last+1)throw Error('Map resource range response is invalid');
  return{resources:rows.length,verifiedSamples:samples.map(([logical,r])=>({logical,url:r.url,bytes:r.bytes,sha256:r.sha256})),range:true,manifestBound:true};
 }
 
@@ -28,18 +48,19 @@ export function requiresMapCache(version){
 export function validatePackagedMap(index,manifestUrl,files,prefix){
  const rows=validateResourceIndex(index,manifestUrl),byPath=new Map(files.map(f=>[f.path,f]));
  const bound=byPath.get(prefix+manifestUrl);if(!bound||bound.sha256!==index.manifest.sha256)throw Error('Map index does not match packaged manifest: '+prefix);
- for(const [logical,r]of rows)for(const url of [logical,r.url]){const file=byPath.get(prefix+url);if(!file||file.sha256!==r.sha256||file.size!==r.bytes)throw Error('Map resource binding mismatch: '+prefix+url);}
+ for(const [logical,r]of rows){const decoded=decodedMapResourceBinding(r),bindings=new Map([[logical,decoded],[decoded.url,decoded],[r.url,r]]);for(const [url,binding]of bindings){const file=byPath.get(prefix+url);if(!file||file.sha256!==binding.sha256||file.size!==binding.bytes)throw Error('Map resource binding mismatch: '+prefix+url);}}
  return{resources:rows.length,manifestBound:true};
 }
+export async function validatePackagedMapEncoding(root,index,read){let encoded=0;const seen=new Set();for(const resource of Object.values(index.resources)){if(!resource.encoding||seen.has(resource.url))continue;seen.add(resource.url);decodeIndexedMapResource(resource,await read(root+resource.url));encoded++;}return{encodedResources:encoded,decodedBindingsVerified:true};}
 
 export const REALTIME_MAP_FILES=['manifest.json','collision.bin','navigation.bin','vision.bin'];
 export function requiresReleaseRealtimeMap(version){const [major,minor]=String(version).split('.').map(Number);return major>0||minor>=7;}
-export function mapIdentityFromIndex(manifest,index){
- validateResourceIndex(index,'/map/manifest.json');
+export function mapIdentityFromIndex(manifest,index,manifestUrl='/map/manifest.json'){
+ validateResourceIndex(index,manifestUrl);
  const urls={collisionHash:manifest.collisionUrl,navigationHash:manifest.navmeshUrl??manifest.navigationUrl,visionHash:manifest.visionUrl};
  const identity={sourceVersion:manifest.sourceVersion??manifest.source,manifestHash:index.manifest.sha256};
  if(typeof identity.sourceVersion!=='string'||!identity.sourceVersion)throw Error('Missing map source identity');
- for(const [key,url]of Object.entries(urls)){if(key==='visionHash'&&!url)continue;const row=index.resources[url];if(!row)throw Error('Missing indexed realtime map resource: '+key);identity[key]=row.sha256;}
+ for(const [key,url]of Object.entries(urls)){if(key==='visionHash'&&!url)continue;const row=index.resources[url];if(!row)throw Error('Missing indexed realtime map resource: '+key);identity[key]=decodedMapResourceBinding(row).sha256;}
  return identity;
 }
 export function assertSameMapIdentity(actual,expected){

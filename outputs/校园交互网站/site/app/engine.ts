@@ -4,26 +4,26 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {DEFAULT_ENVIRONMENT, DEFAULT_VIEW, VIEW_ZONES, validateView, type EnvironmentSettings, type ViewState} from './viewer-state';
-import type {CampusFloor} from './site-config';
+import type {CampusFloor,CampusBuildingId} from './site-config';
+import {CampusChunkWorld} from './campus-chunks';
+import {campusLevelPose} from './campus-chunk-selection';
+import {CAMPUS_CAMERAS} from './campus-cameras';
+import type {MapManifest} from '../../../校园逃生游戏/src/types';
 import {decodeResource,ResourceFailure,resourceFailureKind,type ResourceFailureKind} from './resource-loading';
 import {campusMapSession} from './campus-map';
-import {withValidatedMapTextures} from '@qisheng/shared/map-client';
-import type {MapManifest,MapBuilding,MapLevel} from '@qisheng/shared/types';
-import {CampusLayers} from './campus-layers';
-import {CampusTextures} from './campus-textures';
 export type {EnvironmentSettings, ViewState} from './viewer-state';
 export type EngineRetry={kind:'base'}|{kind:'floor';floor:CampusFloor}|{kind:'detail';zone:string};
 export type EngineStatus = {phase:'loading'|'ready'|'detail'|'error';progress?:number;message?:string;captureReady?:boolean;retry?:EngineRetry;errorKind?:ResourceFailureKind|'context';refresh?:boolean};
-export type ViewerUpdate = {zone:string;floor:CampusFloor;levelId?:string;buildings?:MapBuilding[];levels?:MapLevel[];environment:EnvironmentSettings;tour:'stopped'|'playing'|'paused'};
+export type ViewerUpdate = {zone:string;floor:CampusFloor;buildingId:CampusBuildingId;environment:EnvironmentSettings;tour:'stopped'|'playing'|'paused'};
 export type CampusEngine = {
  select:(id:string)=>void; zoom:(ratio:number)=>void; dispose:()=>void;
  setEnvironment:(patch:Partial<EnvironmentSettings>)=>void;
- setFloor:(floor:CampusFloor)=>void; setLevel:(id:string|null)=>void; retry:()=>void;
+ setFloor:(floor:CampusFloor)=>void; setBuilding:(id:CampusBuildingId)=>void; retry:()=>void;
  setTour:(action:'start'|'pause'|'resume'|'stop')=>void;
  capture:()=>Promise<Blob>; getView:()=>ViewState; restoreView:(state:ViewState)=>void; reset:()=>void;
 };
 type CameraPose = {position:number[];target:number[];fov:number};
-type Manifest = Partial<MapManifest>&{baseUrl?:string;overviewCamera:CameraPose;regions:Record<string,{group:string;label:string;camera:CameraPose;detailUrl?:string;bounds:{min:number[];max:number[]}}>;
+type Manifest = Partial<Pick<MapManifest,'chunks'|'buildings'|'levels'|'floors'>> & {baseUrl:string;overviewCamera:CameraPose;regions:Record<string,{group:string;label:string;camera:CameraPose;detailUrl?:string;bounds:{min:number[];max:number[]}}>;
  interior?:{building:string;structureUrl:string;floors:Record<string,{url:string;label:string;camera:CameraPose}>}};
 type Tween = {start:number;fromP:THREE.Vector3;toP:THREE.Vector3;fromT:THREE.Vector3;toT:THREE.Vector3;fromF:number;toF:number};
 type Atmosphere = {sky:THREE.Color;ambient:THREE.Color;ground:THREE.Color;sun:THREE.Color;position:THREE.Vector3;direct:number;fill:number;exposure:number;fog:number;rain:number};
@@ -35,7 +35,7 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  let renderer:THREE.WebGLRenderer;
  try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'})}catch{throw new ResourceFailure('webgl','WebGL initialization failed')}
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;
- renderer.localClippingEnabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
+ renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.shadowMap.autoUpdate=false;
  const canvas=renderer.domElement;canvas.tabIndex=0;canvas.setAttribute('aria-label','校园三维模型。拖动旋转，滚轮缩放，方向键平移。');host.appendChild(canvas);
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(40,1,.25,5000);
  const sky=new THREE.Color(),fog=new THREE.FogExp2(0xebece7,.0004);scene.background=sky;scene.fog=fog;
@@ -54,21 +54,21 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  const rainMaterial=new THREE.LineBasicMaterial({color:0xd8e5ed,transparent:true,opacity:0,depthWrite:false});
  const rain=new THREE.LineSegments(rainGeometry,rainMaterial);rain.frustumCulled=false;rain.visible=false;scene.add(rain);
  let dead=false,raf=0,inFrame=false,until=0,tween:Tween|null=null,base:THREE.Group|null=null,manifest:Manifest|null=null,selected='all',loaded=false;
- let layers:CampusLayers|null=null,selectedLevelId:string|undefined,lastLayerStatus='';
  let loadSerial=0,detailAbort:AbortController|null=null,detail:THREE.Group|null=null,detailId='',contextLost=false;
+ let selectedBuilding:CampusBuildingId='south-teaching',chunkWorld:CampusChunkWorld|null=null;
  let selectedFloor:CampusFloor=0,displayedFloor:CampusFloor=0,interiorSerial=0,interiorAbort:AbortController|null=null,interiorStructure:THREE.Group|null=null,interiorFurniture:THREE.Group|null=null;
  let environment={...DEFAULT_ENVIRONMENT},pendingView:ViewState|null=null,restoreSerial=0;
  let tour:ViewerUpdate['tour']='stopped',tourIndex=0,tourTimer:ReturnType<typeof setTimeout>|null=null,tourDeadline=0,tourRemaining=8000,tourPausedAt:number|null=null;
  let suspendedAt:number|null=document.hidden?performance.now():null,suspendedTotal=0;
  let atmosphereTween:{start:number;from:Atmosphere;to:Atmosphere}|null=null,lastShadow=0;
  let lastStatus:EngineStatus={phase:'loading',message:'准备校园模型'};
- const baseAbort=new AbortController(),textures=new CampusTextures();
+ const baseAbort=new AbortController(),loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
  let frameCount=0,totalTime=0,lastFrame=0,autoLow=false;
  const diagnostics={ready:false,selected:'all',floor:0,renderedFrames:0,drawCalls:0,triangles:0,averageFps:0,pixelRatio:1,detail:'',error:'',contextLost:false,quality:'auto',tour:'stopped',environment:{...environment}};
  (window as unknown as {campusDiagnostics:unknown}).campusDiagnostics=diagnostics;
  const clock=()=> (suspendedAt??performance.now())-suspendedTotal;
- const emit=()=>{diagnostics.tour=tour;diagnostics.floor=selectedFloor;diagnostics.environment={...environment};if(!dead)onUpdate?.({zone:selected,floor:selectedFloor,levelId:selectedLevelId,buildings:manifest?.buildings,levels:manifest?.levels,environment:{...environment},tour})};
- function captureReady(){return loaded&&!dead&&!contextLost&&!interiorAbort&&displayedFloor===selectedFloor&&(!layers||layers.ready())}
+ const emit=()=>{diagnostics.tour=tour;diagnostics.floor=selectedFloor;diagnostics.environment={...environment};if(!dead)onUpdate?.({zone:selected,floor:selectedFloor,buildingId:selectedBuilding,environment:{...environment},tour})};
+ function captureReady(){return loaded&&!dead&&!contextLost&&!interiorAbort&&displayedFloor===selectedFloor}
  function onStatus(s:EngineStatus){lastStatus={...s,captureReady:captureReady()};if(!dead&&!contextLost)publish(lastStatus)}
  function atmosphere(settings:EnvironmentSettings):Atmosphere{
   const angle=(settings.hour-6)/13*Math.PI,height=Math.sin(angle),warm=1-height;
@@ -101,7 +101,7 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   target.x=THREE.MathUtils.clamp(target.x,-210,120);target.y=THREE.MathUtils.clamp(target.y,-4,30);target.z=THREE.MathUtils.clamp(target.z,-230,40);
   const offset=p.clone().sub(target),spherical=new THREE.Spherical().setFromVector3(offset);
   spherical.radius=THREE.MathUtils.clamp(spherical.radius||15,15,2000);spherical.phi=THREE.MathUtils.clamp(spherical.phi,controls.minPolarAngle,controls.maxPolarAngle);
-  p.copy(target).add(offset.setFromSpherical(spherical));p.y=THREE.MathUtils.clamp(p.y,-1.5,2000);camera.fov=THREE.MathUtils.clamp(camera.fov,20,75);camera.updateProjectionMatrix();camera.lookAt(target);
+  p.copy(target).add(offset.setFromSpherical(spherical));p.y=THREE.MathUtils.clamp(p.y,2,2000);camera.fov=THREE.MathUtils.clamp(camera.fov,20,75);camera.updateProjectionMatrix();camera.lookAt(target);
  }
  function request(){if(dead||contextLost)return;until=clock()+350;if(!raf&&!inFrame&&suspendedAt===null)raf=requestAnimationFrame(render)}
  function render(){
@@ -109,11 +109,12 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   if(tween&&tour!=='paused'){
    const p=Math.min(1,(now-tween.start)/(reduced?1:1100)),t=p*p*(3-2*p);camera.position.lerpVectors(tween.fromP,tween.toP,t);controls.target.lerpVectors(tween.fromT,tween.toT,t);camera.fov=THREE.MathUtils.lerp(tween.fromF,tween.toF,t);if(p===1)tween=null;
   }
-  sampleAtmosphere(now);controls.update();constrainCamera();layers?.update(camera,controls.target,environment.smooth||autoLow);
+  sampleAtmosphere(now);controls.update();constrainCamera();
+  chunkWorld?.update(controls.target.toArray() as [number,number,number],environment.smooth||autoLow);
   const raining=rain.visible&&!reduced;
   if(raining&&delta){for(let i=0;i<rainCount;i++){const j=i*6;rainData[j+1]-=delta*60;if(rainData[j+1]<2)rainData[j+1]+=110;rainData[j+4]=rainData[j+1]+3.4}rainGeometry.attributes.position.needsUpdate=true}
   const renderStart=performance.now();renderer.render(scene,camera);diagnostics.renderedFrames++;diagnostics.drawCalls=renderer.info.render.calls;diagnostics.triangles=renderer.info.render.triangles;
-  host.dataset.viewer=JSON.stringify({...diagnostics,camera:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,aspect:camera.aspect,width:host.clientWidth,height:host.clientHeight,renderMs:performance.now()-renderStart});
+  host.dataset.viewer=JSON.stringify({...diagnostics,map:chunkWorld?.diagnostics(),camera:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,aspect:camera.aspect,width:host.clientWidth,height:host.clientHeight,renderMs:performance.now()-renderStart});
   const arrow=document.getElementById('north-arrow');if(arrow)arrow.style.transform=`rotate(${-controls.getAzimuthalAngle()*180/Math.PI}deg)`;
   if(lastFrame){totalTime+=now-lastFrame;frameCount++}lastFrame=now;
   if(frameCount>=60){diagnostics.averageFps=Math.round(frameCount*1000/totalTime);if(!autoLow&&!environment.smooth&&diagnostics.averageFps<27){autoLow=true;applyQuality()}frameCount=0;totalTime=0}
@@ -151,7 +152,7 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  function restore(){contextLost=false;diagnostics.contextLost=false;renderer.shadowMap.needsUpdate=true;onStatus(lastStatus);syncSuspension();request()}
  canvas.addEventListener('webglcontextlost',lose);canvas.addEventListener('webglcontextrestored',restore);
  function motionChanged(){reduced=motionQuery.matches;request()}motionQuery.addEventListener('change',motionChanged);
- function disposeGroup(group:THREE.Object3D){const retained=textures.release(group);const geo=new Set<THREE.BufferGeometry>(),mats=new Set<THREE.Material>(),tex=new Set<THREE.Texture>();group.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;if((m as THREE.InstancedMesh).isInstancedMesh)(m as THREE.InstancedMesh).dispose();geo.add(m.geometry);for(const mat of Array.isArray(m.material)?m.material:[m.material]){mats.add(mat);for(const v of Object.values(mat))if(v instanceof THREE.Texture)tex.add(v)}});geo.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());if(!retained)tex.forEach(t=>{t.dispose();const src=t.source?.data;if(typeof ImageBitmap!=='undefined'&&src instanceof ImageBitmap)src.close()})}
+ function disposeGroup(group:THREE.Object3D){const geo=new Set<THREE.BufferGeometry>(),mats=new Set<THREE.Material>(),tex=new Set<THREE.Texture>();group.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;if((m as THREE.InstancedMesh).isInstancedMesh)(m as THREE.InstancedMesh).dispose();geo.add(m.geometry);for(const mat of Array.isArray(m.material)?m.material:[m.material]){mats.add(mat);for(const v of Object.values(mat))if(v instanceof THREE.Texture)tex.add(v)}});geo.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());tex.forEach(t=>{t.dispose();const src=t.source?.data;if(typeof ImageBitmap!=='undefined'&&src instanceof ImageBitmap)src.close()})}
  // Preserve region roots while consolidating static draws; instanced vegetation stays instanced.
  function prepare(group:THREE.Group){group.updateMatrixWorld(true);
   const boundaries=new Set<THREE.Object3D>(group.children);
@@ -169,12 +170,9 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  }return group}
  async function load(url:string,signal:AbortSignal,progress?:(n:number|undefined)=>void){
   const bytes=await campusMapSession.read(url,{signal,progress,priority:0});
-  const manager=new THREE.LoadingManager(),loader=new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder),abort=()=>manager.abort();signal.addEventListener('abort',abort,{once:true});
-  try{
-   const parsed=await withValidatedMapTextures(bytes,campusMapSession,signal,resolve=>{manager.setURLModifier(resolve);return decodeResource(()=>loader.parseAsync(bytes,new URL('.',new URL(url,location.href)).href),g=>disposeGroup(g.scene),signal);});
-   if(signal.aborted||dead){disposeGroup(parsed.scene);throw new DOMException('Aborted','AbortError')}
-   try{if(manifest?.chunks?.length){parsed.scene.updateMatrixWorld(true);parsed.scene.traverse(o=>{const mesh=o as THREE.Mesh;if(mesh.isMesh){mesh.receiveShadow=true;mesh.castShadow=!(Array.isArray(mesh.material)?mesh.material:[mesh.material]).some(m=>m.transparent);mesh.frustumCulled=true;}});textures.retain(parsed.scene);return parsed.scene;}const prepared=prepare(parsed.scene);textures.retain(prepared);return prepared}catch(error){disposeGroup(parsed.scene);throw error}
-  }finally{signal.removeEventListener('abort',abort)}
+  const parsed=await decodeResource(()=>loader.parseAsync(bytes,new URL('.',new URL(url,location.href)).href),g=>disposeGroup(g.scene),signal);
+  if(signal.aborted||dead){disposeGroup(parsed.scene);throw new DOMException('Aborted','AbortError')}
+  try{return prepare(parsed.scene)}catch(error){disposeGroup(parsed.scene);throw error}
  }
 
  function animatePose(pose:CameraPose,wide=false){
@@ -185,9 +183,10 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  function framePose(id:string){if(!manifest)return;const pose=id==='all'?manifest.overviewCamera:manifest.regions[id]?.camera;if(pose)animatePose(pose,id==='all')}
  function showSouthExterior(show:boolean){for(const group of [base,detail]){const south=group?.getObjectByName('south_teaching_exterior');if(south)south.visible=show}}
  function clearInterior(resetSelection=true){
+  if(chunkWorld)void chunkWorld.selectFloor(selectedBuilding,0,baseAbort.signal);
   ++interiorSerial;interiorAbort?.abort();interiorAbort=null;
   for(const group of [interiorStructure,interiorFurniture])if(group){scene.remove(group);disposeGroup(group)}
-  interiorStructure=null;interiorFurniture=null;displayedFloor=0;if(resetSelection){selectedFloor=0;selectedLevelId=undefined;layers?.select(null);}showSouthExterior(true);emit();renderer.shadowMap.needsUpdate=true;request();
+  interiorStructure=null;interiorFurniture=null;displayedFloor=0;if(resetSelection)selectedFloor=0;showSouthExterior(true);emit();renderer.shadowMap.needsUpdate=true;request();
  }
  function updateFloorVisibility(){
   showSouthExterior(!interiorStructure||selectedFloor===0);
@@ -195,8 +194,20 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   renderer.shadowMap.needsUpdate=true;request();
  }
  async function selectFloorInternal(floor:CampusFloor,frame=true){
-  if(dead||!Number.isInteger(floor)||floor < -1||floor>5)return;
-  if(layers){const building=manifest?.levels?.find(l=>l.id===selectedLevelId)?.buildingId??(selected==='garage'?'garage':'south-teaching'),level=manifest?.levels?.find(l=>l.buildingId===building&&l.floor===floor);selectHfLevel(floor===0?null:level?.id??null,frame);return;}
+  if(dead||!Number.isInteger(floor)||floor< -1||floor>5)return;
+  if(chunkWorld){
+   if(selected!=='teaching')await selectInternal('teaching',false);
+   const serial=++interiorSerial;interiorAbort?.abort();const abort=new AbortController();interiorAbort=abort;selectedFloor=floor;emit();
+   const building=manifest?.buildings?.find(b=>b.id===selectedBuilding),label=building?.label??'教学楼';
+   onStatus({phase:'detail',message:floor===0?'正在准备建筑外观':`正在载入${label}${floor<0?'地下层':floor+'层'}`});
+   try{
+    await chunkWorld.selectFloor(selectedBuilding,floor,abort.signal,p=>{if(serial===interiorSerial&&!dead)onStatus({phase:'detail',message:`正在载入${label}${floor<0?'地下层':floor+'层'}`,progress:Math.round(p*100)});});
+    if(dead||abort.signal.aborted||serial!==interiorSerial)return;
+    displayedFloor=floor;interiorAbort=null;renderer.shadowMap.needsUpdate=true;onStatus({phase:'ready'});
+    const pose=campusLevelPose(chunkWorld.manifest,selectedBuilding,floor);if(frame&&pose)animatePose(pose);emit();request();
+   }catch(error){if(dead||abort.signal.aborted||serial!==interiorSerial)return;selectedFloor=displayedFloor;interiorAbort=null;emit();onStatus({phase:'ready',retry:{kind:'floor',floor},errorKind:resourceFailureKind(error),message:'这一层未能载入，仍保留原来的画面。'});}
+   return;
+  }
   if(floor===0){clearInterior();onStatus({phase:'ready'});if(frame)framePose('teaching');return}
   if(!loaded||!manifest?.interior)return;
   if(selected!=='teaching')await selectInternal('teaching',false);
@@ -214,20 +225,17 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   interiorFurniture=groups[1];if(interiorFurniture)scene.add(interiorFurniture);
   interiorAbort=null;displayedFloor=floor;updateFloorVisibility();onStatus({phase:'ready'});if(frame)animatePose(info.camera);emit();
  }
- function selectHfLevel(id:string|null,frame=true){
-  if(!layers||!manifest)return;const level=manifest.levels?.find(l=>l.id===id);selectedLevelId=level?.id;selectedFloor=(level?.floor??0) as CampusFloor;displayedFloor=0;layers.select(level?.id??null);
-  if(level){selected=level.buildingId==='garage'?'garage':'teaching';diagnostics.selected=selected;}
-  if(frame&&level){const b=level.bounds,cx=(b.min[0]+b.max[0])/2,cz=(b.min[2]+b.max[2])/2,extent=Math.max(b.max[0]-b.min[0],b.max[2]-b.min[2]);animatePose({target:[cx,level.elevation+.5,cz],position:[cx+extent*.3,level.elevation+Math.max(22,extent*.8),cz+extent*.65],fov:40});}
-  else if(frame)framePose(selected==='garage'&&manifest.regions.garage?'garage':'teaching');
-  layers.update(camera,controls.target,environment.smooth||autoLow);const state=layers.status();if(state.ready)displayedFloor=selectedFloor;emit();onStatus({phase:state.ready?'ready':'detail',message:state.ready?undefined:state.failed?'这一处暂未载入，点击重试。':level?'正在载入'+(manifest.buildings?.find(b=>b.id===level.buildingId)?.label??'室内')+' '+(level.label??level.floor+'层'):'正在展开校园',retry:state.failed?{kind:'detail',zone:selected}:undefined});renderer.shadowMap.needsUpdate=true;request();
- }
  function setFloor(floor:CampusFloor){interrupt();void selectFloorInternal(floor)}
- function setLevel(id:string|null){interrupt();selectHfLevel(id)}
+ function setBuilding(id:CampusBuildingId){
+  if(dead||!['south-teaching','middle-teaching','north-teaching','garage'].includes(id))return;
+  interrupt();clearInterior();selectedBuilding=id;selected='teaching';diagnostics.selected=selected;emit();
+  const pose=chunkWorld&&campusLevelPose(chunkWorld.manifest,id,0);if(pose)animatePose(pose);onStatus({phase:'ready'});
+ }
  async function selectInternal(id:string,frame=true){
   if(dead||!VIEW_ZONES.some(zone=>zone===id))return;
-  if(id!=='teaching'&&id!=='garage'&&(selectedFloor!==0||interiorAbort))clearInterior();
+  if(id!=='teaching'&&(selectedFloor!==0||interiorAbort))clearInterior();
   const same=id===selected;selected=id;diagnostics.selected=id;emit();if(!manifest||!loaded)return;
-  if(frame)framePose(id);if(layers){if(id==='garage'&&!selectedLevelId){const level=manifest.levels?.find(l=>l.buildingId==='garage');if(level){selectHfLevel(level.id,frame);return;}}if(id!=='teaching'&&id!=='garage'&&selectedLevelId)clearInterior();layers.update(camera,controls.target,environment.smooth||autoLow);onStatus({phase:layers.ready()?'ready':'detail',message:layers.ready()?undefined:'正在展开这一处校园'});request();return;}if(same&&(detailId===id||detailAbort))return;
+  if(frame)framePose(id);if(chunkWorld){onStatus({phase:'ready'});request();return;}if(same&&(detailId===id||detailAbort))return;
   const serial=++loadSerial;detailAbort?.abort();detailAbort=null;
   if(detail){scene.remove(detail);disposeGroup(detail);detail=null;const previous=base?.getObjectByName(manifest.regions[detailId]?.group||`zone_${detailId}`);if(previous)previous.visible=true;detailId='';diagnostics.detail='';renderer.shadowMap.needsUpdate=true;request()}
   const url=manifest.regions[id]?.detailUrl;if(!url){onStatus({phase:'ready'});return}
@@ -249,7 +257,7 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   atmosphereTween={start:clock(),from:currentAtmosphere,to:atmosphere(environment)};
   if(pendingView)pendingView.environment={...environment};if(qualityChanged)applyQuality();emit();request();
  }
- function getView():ViewState{constrainCamera();return {v:1,zone:selected,floor:selectedFloor,levelId:selectedLevelId,position:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,environment:{...environment}}}
+ function getView():ViewState{constrainCamera();return {v:1,zone:selected,floor:selectedFloor,buildingId:selectedBuilding,position:camera.position.toArray(),target:controls.target.toArray(),fov:camera.fov,environment:{...environment}}}
  function applyPose(state:ViewState){
   tween=null;camera.position.fromArray(state.position);controls.target.fromArray(state.target);camera.fov=state.fov;
   // Drain OrbitControls' previous damping before setting an exact shared pose.
@@ -258,13 +266,12 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  }
  function restoreView(state:ViewState){
   const safe=validateView(state);if(dead||!safe)return;
-  const serial=++restoreSerial;
+  const serial=++restoreSerial;selectedBuilding=safe.buildingId??'south-teaching';
   setTour('stop');setEnvironment(safe.environment);applyPose(safe);pendingView=loaded?null:safe;
-  if(loaded)void selectInternal(safe.zone,false).then(()=>{if(!dead&&serial===restoreSerial){if(layers&&safe.levelId)selectHfLevel(safe.levelId,false);else return selectFloorInternal(safe.floor??0,false)}});
+  if(loaded)void selectInternal(safe.zone,false).then(()=>{if(!dead&&serial===restoreSerial)return selectFloorInternal(safe.floor??0,false)});
  }
- function reset(){if(dead)return;interrupt();clearInterior();setEnvironment({...DEFAULT_ENVIRONMENT});void selectInternal('all')}
+ function reset(){if(dead)return;interrupt();setEnvironment({...DEFAULT_ENVIRONMENT});void selectInternal('all')}
  function capture():Promise<Blob>{
-  layers?.update(camera,controls.target,environment.smooth||autoLow);
   if(!captureReady())return Promise.reject(new Error('请等待当前楼层载入后再生成图片。'));
   if(document.hidden)return Promise.reject(new Error('请回到校园页面后再保存画面。'));
   const size=renderer.getSize(new THREE.Vector2()),pixelRatio=renderer.getPixelRatio();
@@ -292,22 +299,24 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  }
  // Return a disposable owner immediately, including while a request is in flight.
  void (async()=>{try{
-  const {manifestBytes}=await campusMapSession.initialize(baseAbort.signal);manifest=JSON.parse(new TextDecoder().decode(manifestBytes));
-  if(manifest!.chunks?.length){
-   layers=new CampusLayers(manifest as MapManifest,scene,load,disposeGroup,state=>{if(dead)return;if(state.ready)displayedFloor=selectedFloor;const key=[selectedLevelId,state.ready,state.progress,state.failed,state.resident].join('/');if(key!==lastLayerStatus){lastLayerStatus=key;onStatus({phase:loaded?(state.ready?'ready':'detail'):'loading',progress:state.progress,message:state.failed?'这一处暂未载入，点击重试。':state.ready?undefined:'正在载入校园区域',retry:state.failed?{kind:'detail',zone:selected}:undefined});renderer.shadowMap.needsUpdate=true;}request();});
-   layers.update(camera,controls.target,environment.smooth||autoLow);await layers.whenReady(baseAbort.signal);if(dead)return;
+  const {manifestBytes}=await campusMapSession.initialize(baseAbort.signal),raw=JSON.parse(new TextDecoder().decode(manifestBytes));
+  manifest=raw.chunks?.length?{...(raw.viewer??CAMPUS_CAMERAS),...raw}:raw;
+  if(raw.chunks?.length){
+   chunkWorld=new CampusChunkWorld(scene,renderer,camera,raw as MapManifest,()=>{renderer.shadowMap.needsUpdate=true;request();});
+   await chunkWorld.initialize(DEFAULT_VIEW.target as [number,number,number],baseAbort.signal,p=>onStatus({phase:'loading',progress:Math.round(p*100),message:'正在载入校园模型'}));
+   if(dead){chunkWorld.dispose();return;}
   }else{
-   if(!manifest!.baseUrl)throw new Error('Missing campus assets');base=await load(manifest!.baseUrl,baseAbort.signal,n=>onStatus({phase:'loading',progress:n,message:n===100?'正在准备光影与材质':'正在载入校园模型'}));
-   if(dead){disposeGroup(base);return}scene.add(base);
+   base=await load(manifest!.baseUrl,baseAbort.signal,n=>onStatus({phase:'loading',progress:n,message:n===100?'正在准备光影与材质':'正在载入校园模型'}));
+   if(dead){disposeGroup(base);return;}scene.add(base);
   }
   loaded=true;diagnostics.ready=true;renderer.shadowMap.needsUpdate=true;applyAtmosphere(currentAtmosphere);
   finishBaseLoad();
  }catch(e){if(dead||(e as Error).name==='AbortError')return;diagnostics.error=String(e);setTour('stop');onStatus({phase:'error',retry:{kind:'base'},errorKind:resourceFailureKind(e),message:resourceFailureKind(e)==='timeout'?'校园下载暂时没有进展，请重新加载。':resourceFailureKind(e)==='decode'?'校园模型未能打开，请重新加载。':'校园模型未能载入，请检查网络后重新加载。'})}})();
- return {select,zoom,setFloor,setLevel,retry(){if(layers){layers.retry();layers.update(camera,controls.target,environment.smooth||autoLow);request();return;}const target=lastStatus.retry;if(target?.kind==='floor')setFloor(target.floor);else if(target?.kind==='detail')void selectInternal(target.zone)},setEnvironment,setTour,capture,getView,restoreView,reset,dispose(){
-  if(dead)return;dead=true;++interiorSerial;baseAbort.abort();layers?.dispose();detailAbort?.abort();interiorAbort?.abort();clearTourTimer();cancelAnimationFrame(raf);observer.disconnect();
+ return {select,zoom,setFloor,setBuilding,retry(){const target=lastStatus.retry;if(target?.kind==='floor')setFloor(target.floor);else if(target?.kind==='detail')void selectInternal(target.zone)},setEnvironment,setTour,capture,getView,restoreView,reset,dispose(){
+  if(dead)return;dead=true;++interiorSerial;baseAbort.abort();detailAbort?.abort();interiorAbort?.abort();clearTourTimer();cancelAnimationFrame(raf);observer.disconnect();
   document.removeEventListener('visibilitychange',syncSuspension);motionQuery.removeEventListener('change',motionChanged);
   canvas.removeEventListener('keydown',keyboard);canvas.removeEventListener('webglcontextlost',lose);canvas.removeEventListener('webglcontextrestored',restore);
   controls.removeEventListener('change',request);controls.removeEventListener('start',interrupt);controls.removeEventListener('end',request);controls.dispose();
-  disposeGroup(scene);rainGeometry.dispose();rainMaterial.dispose();sun.shadow.dispose();renderer.dispose();canvas.remove();
+  chunkWorld?.dispose();chunkWorld=null;disposeGroup(scene);rainGeometry.dispose();rainMaterial.dispose();sun.shadow.dispose();renderer.dispose();canvas.remove();
  }};
 }

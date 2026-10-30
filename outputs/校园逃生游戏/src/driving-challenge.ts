@@ -1,5 +1,6 @@
-import {drivingRankingRules,drivingRuleVersion,drivingBestKey,drivingOldBestKeys} from '@qisheng/shared/ranking';
+import {drivingRankingRules,drivingRuleVersion} from '@qisheng/shared/ranking';
 import {vehicleDefinition,type DrivingVehicleId} from './vehicles.ts';
+import {DAFEI_BEST_KEY,DAFEI_OLD_BEST_KEYS} from './ranking/shared.ts';
 import {DRIVE_RULES,DriveScore,DriveBoost} from './driving-rules.ts';
 import {DAFEI_COMMENTS} from './dafei-dialogue.ts';
 import type {DriveInput,DrivingSnapshot,Point,Vec3} from './types.ts';
@@ -9,7 +10,7 @@ export class DrivingChallenge {
  readonly score:DriveScore;readonly boost=new DriveBoost();readonly vehicle;readonly rules;private readonly bestKey:string;
  durability:number=DRIVE_RULES.durability;countdown:number=DRIVE_RULES.countdown;elapsed=0;resetProgress=0;repairProgress=0;repairName='';guide='';bestScore:number|null=null;legacyBestScore:number|null=null;
  private resetReady=0;private damaged=false;private used=new Set<string>();private repairId='';private guideUntil=0;private lastGuide=-Infinity;private said=new Set<keyof typeof DAFEI_COMMENTS>();private pendingGuide=new Set<keyof typeof DAFEI_COMMENTS>();private targets=new Map<number,{name:string;position:Vec3;expires:number}>();
- constructor(readonly repairs:Point[],readonly vehicleId:DrivingVehicleId='bao5'){this.vehicle=vehicleDefinition(vehicleId);this.rules=drivingRankingRules(drivingRuleVersion(vehicleId),vehicleId)!;this.score=new DriveScore(this.rules);this.durability=this.vehicle.durability;this.bestKey=drivingBestKey(vehicleId);for(const [key,field] of [[this.bestKey,'bestScore'],...drivingOldBestKeys(vehicleId).map(key=>[key,'legacyBestScore'] as const)] as const)try{const value=localStorage.getItem(key),score=value===null?NaN:Number(value);if(Number.isFinite(score)&&score>=0)this[field]=this[field]===null?score:Math.max(this[field]!,score);}catch{}}
+ constructor(readonly repairs:Point[],readonly vehicleId:DrivingVehicleId='bao5'){this.vehicle=vehicleDefinition(vehicleId);this.rules=drivingRankingRules(drivingRuleVersion(vehicleId),vehicleId)!;this.score=new DriveScore(this.rules);this.durability=this.vehicle.durability;this.bestKey=vehicleId==='bao5'?DAFEI_BEST_KEY:'qisheng-game-dafei-best:'+drivingRuleVersion(vehicleId)+':'+vehicleId;for(const [key,field] of [[this.bestKey,'bestScore'],...(vehicleId==='bao5'?DAFEI_OLD_BEST_KEYS:[]).map(key=>[key,'legacyBestScore'] as const)] as const)try{const value=localStorage.getItem(key),score=value===null?NaN:Number(value);if(Number.isFinite(score)&&score>=0)this[field]=this[field]===null?score:Math.max(this[field]!,score);}catch{}}
  tick(dt:number,input:DriveInput,speed:number,position:Vec3){
   if(this.countdown>0){const remaining=Math.max(0,dt-this.countdown);this.countdown=Math.max(0,this.countdown-dt);if(remaining<1e-9)return {reset:false,repair:false,repairEvent:undefined};dt=remaining;}
   this.elapsed=Math.min(DRIVE_RULES.round,this.elapsed+dt);this.score.update(this.elapsed);this.boost.update(dt);this.resetReady=Math.max(0,this.resetReady-dt);

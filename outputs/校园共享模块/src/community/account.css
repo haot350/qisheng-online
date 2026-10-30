@@ -3,3 +3,8 @@
 
 .account-achievement .account-achievement-progress{margin:8px 0 0;color:#9a4c39;font-size:12px;font-variant-numeric:tabular-nums}.account-rules{overflow-x:auto}.account-rules table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}.account-rules th,.account-rules td{padding:12px;border-bottom:1px solid var(--account-border)}.account-rules th{font-weight:500}.account-rules td{font-variant-numeric:tabular-nums}.account-rules th small{display:block;font-size:11px;color:#7f8277;font-weight:400;overflow-wrap:anywhere}
 .account-login-help{margin-top:20px;padding-top:16px;border-top:1px solid var(--account-line,#d8d5ce)}.account-login-help summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600}.account-login-help .account-actions{padding:8px 0}
+
+.account-hero h2,.account-history strong,.account-sessions strong{overflow-wrap:anywhere}
+.account-stat-grid article,.account-stat-grid dl,.account-stat-grid dt,.account-stat-grid dd{min-width:0}
+@media(max-width:650px){.account-stat-grid dl>div{display:block}.account-stat-grid dd{margin-top:4px;overflow-wrap:anywhere}.account-section-heading{flex-wrap:wrap}}
+@media(max-width:360px){.account-stat-grid{grid-template-columns:minmax(0,1fr)}.account-stat-grid dl>div{display:flex}.account-stat-grid dt{flex:1}.account-stat-grid dd{text-align:right;max-width:65%}.account-avatar-options>button{min-width:64px}}

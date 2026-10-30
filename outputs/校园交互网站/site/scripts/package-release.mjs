@@ -20,20 +20,10 @@ const buildProfile=JSON.parse(await fs.readFile(path.join(root,'openqs-profile.j
 assert(buildProfile.profile==='production'&&!buildProfile.localOnly,'Demo builds cannot be packaged as production.');
 const delivery=path.dirname(site);
 const manifest=JSON.parse(await fs.readFile(path.join(root,'campus.manifest.json'),'utf8'));
+const source=path.resolve(site,'../../总模型_南楼室内整合_v16/齐盛校园_v16_南教学楼室内轻量整合.blend');
 const sha=data=>createHash('sha256').update(data).digest('hex');
-const hfMap=manifest.sourceVersion==='hf-r02-web-1';
-if(releaseVersion==='0.9.7')assert(hfMap,'0.9.7 必须使用已接收的 HF-r02 网页地图');
-if(hfMap){
- assert.equal(manifest.mapCatalogId,'hf-r02-web-1');
- assert.equal(manifest.sourceSha256,'996f7a264654027d3784a6254633130d82e1d6de6565ed0cdfd0fd28c88c7d3b','HF-r02 冻结来源不符');
- const gameManifest=JSON.parse(await fs.readFile(path.resolve(site,'../../校园逃生游戏/public/map/manifest.json'),'utf8'));
- for(const key of Object.keys(gameManifest))assert.deepEqual(manifest[key],gameManifest[key],`两站地图字段不一致 ${key}`);
- assert(Array.isArray(manifest.chunks)&&manifest.chunks.length>0&&Array.isArray(manifest.levels)&&manifest.levels.length>0,'HF-r02 分区与楼层目录缺失');
-}else{
- const source=path.resolve(site,'../../总模型_南楼室内整合_v16/齐盛校园_v16_南教学楼室内轻量整合.blend');
- assert.equal(manifest.sourceVersion,'v16');
- assert.equal(await hashFile(source),manifest.sourceSha256,'原模型哈希或来源版本不符');
-}
+assert.equal(manifest.sourceVersion,'v16');
+assert.equal(await hashFile(source),manifest.sourceSha256,'原模型哈希或来源版本不符');
 assert.equal(sha(await fs.readFile(path.join(root,'campus.manifest.json'))),sha(await fs.readFile(path.join(site,'public/campus.manifest.json'))),'请先重新构建最新资产');
 const files=[];
 async function walk(dir){for(const item of await fs.readdir(dir,{withFileTypes:true})){const full=path.join(dir,item.name),relative=path.relative(root,full).replaceAll('\\','/');assertStaticReleasePath(relative);assert(!item.isSymbolicLink(),'上传包不允许符号链接');if(item.isDirectory())await walk(full);else if(item.isFile()){const data=await fs.readFile(full);assert(data.length>0,`${item.name} 为零字节`);assert(singleFileLimit===null||data.length<=singleFileLimit,`${item.name} 超过 Pages 单文件 25 MiB 上限`);files.push({path:relative,bytes:data.length,sha256:sha(data)});}}}
@@ -65,18 +55,8 @@ const coverHash=sha(await fs.readFile(coverSource));
 assert(gameHtml.includes('https://zbqsgz.tianhw.top/assets/media/'+coverHash+'.webp'),'游戏分享封面必须指向本次内容哈希');
 assert.equal([...gameHtml.matchAll(/property="og:image"/g)].length,1,'游戏分享图片必须唯一');
 assert((await fs.readFile(path.join(root,'index.html'),'utf8')).includes('https://game.tianhw.top'),'首页缺少游戏入口');
-const urls=hfMap?[...manifest.chunks.map(chunk=>chunk.url),manifest.collisionUrl,manifest.navmeshUrl,manifest.visionUrl]:[manifest.baseUrl,...Object.values(manifest.regions).map(r=>r.detailUrl).filter(Boolean),manifest.interior.structureUrl,...Object.values(manifest.interior.floors).map(f=>f.url)];
+const urls=[manifest.baseUrl,...Object.values(manifest.regions).map(r=>r.detailUrl).filter(Boolean),manifest.interior.structureUrl,...Object.values(manifest.interior.floors).map(f=>f.url)];
 for(const url of urls)assert(files.some(f=>f.path===url.replace(/^\//,'')),`缺少模型 ${url}`);
-if(hfMap){
- const index=JSON.parse(await fs.readFile(path.join(root,'map/resource-index.json'),'utf8'));
- assert.equal(index.schema,1);assert.equal(index.manifest.url,'/campus.manifest.json');assert.equal(index.manifest.sha256,sha(await fs.readFile(path.join(root,'campus.manifest.json'))),'地图索引未绑定当前地图');
- for(const url of urls)assert(index.resources[url],`地图索引缺少 ${url}`);
- for(const [logical,resource] of Object.entries(index.resources)){
-  assert(logical.startsWith('/')&&resource.url.startsWith('/')&&!resource.url.startsWith('//')&&!resource.url.includes('..'),'地图索引地址异常');
-  const file=files.find(item=>'/'+item.path===resource.url);
-  assert(file&&file.sha256===resource.sha256&&file.bytes===resource.bytes,`地图哈希资源缺失或失效 ${logical}`);
- }
-}
 const report={version:`campus-v${releaseVersion}`,publicVersion:releaseLabel,publicReleaseDate,createdAt:new Date().toISOString(),origin:'https://zbqsgz.tianhw.top',gameOrigin:'https://game.tianhw.top',published:false,sourceVersion:manifest.sourceVersion,sourceSha256:manifest.sourceSha256,pageCount:pages.length,styles,zipPaths:'POSIX forward slashes',files:files.sort((a,b)=>a.path.localeCompare(b.path)),totalBytes:files.reduce((sum,f)=>sum+f.bytes,0)};
 const reportPath=path.join(delivery,`发行文件清单_v${releaseVersion}.json`);
 await fs.writeFile(reportPath,JSON.stringify(report,null,2));

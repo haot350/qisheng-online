@@ -4,7 +4,7 @@ import type {DriveInput,Point,Vec3,TransmissionMode} from './types';
 import {DRIVE_RULES} from './driving-rules.ts';
 import type {NPCRegion} from './driving-ai.ts';
 import {vehicleDefinition,type DrivingVehicleId} from './vehicles.ts';
-import {alternativeWheelMotion,vehicleBalanceImpulse} from './vehicle-motion.ts';
+import {alternativeWheelMotion,vehicleBalanceImpulse,TANK_STEERING,tankAngularDamping} from './vehicle-motion.ts';
 import {driveAreaAllowed,type DriveExclusion} from './driving-area.ts';
 import {HandbrakeControl,HANDBRAKE_RULES,type HandbrakeStage} from './handbrake.ts';
 import {DRIVING_TUNING,steeringLimit} from './driving-tuning.ts';
@@ -93,7 +93,9 @@ export function createDrivingPhysics(physics:RAPIER.World,map:DriveMap,actors:Ma
   if(VEHICLE.id!=='bao5'){
    const throttle=THREE.MathUtils.clamp(input.throttle,0,1),requestedBrake=Math.max(THREE.MathUtils.clamp(input.brake,0,1),input.handbrake?1:0,throttle>0&&state.speed*(input.reverse?-1:1)<-DRIVING_TUNING.directionChangeSpeed?throttle:0);
    brakeAmount+=THREE.MathUtils.clamp(requestedBrake-brakeAmount,-dt/DRIVING_TUNING.brakeRelease,dt/DRIVING_TUNING.brakeEnter);
-   steering=THREE.MathUtils.damp(steering,THREE.MathUtils.clamp(input.steer,-1,1)*(VEHICLE.id==='tank'?1:steeringLimit(state.horizontalSpeed,VEHICLE.dimensions.wheelbase)),DRIVING_TUNING.steeringResponse,dt);
+   const steeringResponse=VEHICLE.id==='tank'?(Math.abs(input.steer)<.01?TANK_STEERING.releaseResponse:TANK_STEERING.enterResponse):DRIVING_TUNING.steeringResponse;
+   steering=THREE.MathUtils.damp(steering,THREE.MathUtils.clamp(input.steer,-1,1)*(VEHICLE.id==='tank'?1:steeringLimit(state.horizontalSpeed,VEHICLE.dimensions.wheelbase)),steeringResponse,dt);
+   if(VEHICLE.id==='tank')chassis.setAngularDamping(tankAngularDamping(steering));
    coastAmount=throttle<.02&&brakeAmount<.02&&!input.handbrake?Math.min(1,coastAmount+dt/DRIVING_TUNING.coastEnter):0;
    const commands=alternativeWheelMotion(VEHICLE,input,{speed:state.speed,horizontalSpeed:state.horizontalSpeed,steering,brake:brakeAmount,coast:coastAmount},boosted,dt);
    for(let i=0;i<WHEELS.length;i++){const wheel=commands[i];car.setWheelSteering(i,wheel.steering);car.setWheelEngineForce(i,wheel.force);car.setWheelBrake(i,wheel.brake);car.setWheelFrictionSlip(i,HANDBRAKE_RULES.frictionSlip);car.setWheelSideFrictionStiffness(i,wheel.sideFriction);}

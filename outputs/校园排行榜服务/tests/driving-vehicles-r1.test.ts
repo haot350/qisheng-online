@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createApp} from '../dist/app.js';
 import {validateConfig,replay} from '../dist/validation.js';
-import {DRIVING_VEHICLES,DAFEI_RULE_VERSION,LEGACY_DAFEI_RULE_VERSION,DAFEI_VEHICLE_RULE_VERSION,drivingRuleVersion,drivingRankingRules,RankingDriveScore,type DrivingVehicleId,type RankingRunConfig,type RankingEvent,type RankingSummary} from '../dist/shared.js';
+import {DRIVING_VEHICLES,DAFEI_RULE_VERSION,DAFEI_VEHICLE_RULE_VERSION,drivingRuleVersion,drivingRankingRules,RankingDriveScore,type DrivingVehicleId,type RankingRunConfig,type RankingEvent,type RankingSummary} from '../dist/shared.js';
 import {eligibleAchievementIds} from '@qisheng/shared/achievements';
 
 const config=(vehicleId?:DrivingVehicleId):RankingRunConfig=>({mode:'dafei',ruleVersion:drivingRuleVersion(vehicleId),...(vehicleId?{vehicleId}:{}),seed:1,weapon:'vehicle',roster:['jiang','meng','xu','luan'],tasks:[],controls:'keyboard',transmission:'auto'});
@@ -21,14 +21,14 @@ const mixedSummary=summary({vehicleId:'tank',score:300,hits:1,cannonShots:1,cann
 
 test('vehicle identities preserve car rules and bind new vehicle tuning',()=>{
  assert.equal(drivingRuleVersion('bao5'),DAFEI_RULE_VERSION);
- assert.equal(drivingRuleVersion('tank'),DAFEI_RULE_VERSION);
+ assert.equal(drivingRuleVersion('tank'),DAFEI_VEHICLE_RULE_VERSION);
  assert.equal(drivingRankingRules(DAFEI_RULE_VERSION)?.durability,400);
  assert.equal(drivingRankingRules(DAFEI_VEHICLE_RULE_VERSION,'tank')?.durability,800);
  assert.equal(drivingRankingRules(DAFEI_VEHICLE_RULE_VERSION,'scooter')?.durability,160);
  assert.equal(DRIVING_VEHICLES.tank.cannonAmmo,8);
  assert.equal(DRIVING_VEHICLES.tank.cannonCooldown,4);
  assert.equal(DRIVING_VEHICLES.tank.cannonRadius,4);
- assert.equal(drivingRankingRules(LEGACY_DAFEI_RULE_VERSION,'tank'),undefined);
+ assert.equal(drivingRankingRules(DAFEI_RULE_VERSION,'tank'),undefined);
  assert.equal(validateConfig(config()).vehicleId,undefined);
  assert.throws(()=>validateConfig({...config('tank'),vehicleId:'unknown'}));
  assert.throws(()=>validateConfig({...config('tank'),transmission:'manual'}));

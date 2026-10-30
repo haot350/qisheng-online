@@ -1,6 +1,6 @@
 import type { MapChunk, Vec3 } from "./types";
-import {streamFloorForChunk,streamChunkAllowed,type StreamFloor} from './escape-floor.ts';
 import { withDeadline } from "./network.ts";
+import {MapLodSelection,type LodPlan} from "./map-lod-selection.ts";
 export type StreamStatus = {
   blocked: boolean;
   failed: boolean;
@@ -81,7 +81,7 @@ function boundsInPlanes(bounds:ViewBounds,planes:ViewPlane[]):boolean{
 function boundsInPhotoView(bounds: ViewBounds, view: PhotoView): boolean {
   return boundsInPlanes(bounds,viewPlanes(view));
 }
-export const combatStructure = (chunk:MapChunk) => chunk.residency ? chunk.residency==='structure' : chunk.combatOccluder!==false;
+export const combatStructure = (chunk:MapChunk) => chunk.roomCore===true || (chunk.residency ? chunk.residency==='structure' : chunk.combatOccluder!==false);
 export function chunkInPhotoView(chunk: MapChunk, view: PhotoView): boolean {
   return boundsInPhotoView(viewBounds(chunk), view);
 }
@@ -139,6 +139,10 @@ export class ChunkStreamer<T> {
   private combatLeases = new Set<symbol>();
   private cachedStatus:StreamStatus|null=null;
   private combatCore: MapChunk[];
+  private lodSelection:MapLodSelection;
+  private lodPlan?:LodPlan;
+  private selectionPoint:Vec3=[0,0,0];
+  private mapFloors:import('./types').MapManifest['floors']=[];
   private counters = {updates:0, geometryScans:0, loads:0, evictions:0, distanceEvictions:0, budgetEvictions:0, cancelled:0};
   private residencyRevision=-1;
   private residencyAt=-Infinity;
@@ -151,7 +155,10 @@ export class ChunkStreamer<T> {
   private geometryInput?: {
     player: Vec3;
     low: boolean;
-    floors: StreamFloor[];
+    floors: {
+      id: number;
+      elevation: number;
+    }[];
     isDriving: boolean;
     outdoorOnly: boolean;
     lookAhead?: Vec3;
@@ -173,7 +180,7 @@ export class ChunkStreamer<T> {
       ? { ...view, origin: [...view.origin], direction: [...view.direction] }
       : null;
     const planes=view?viewPlanes(view):[];
-    this.viewNeeded = view
+    this.viewNeeded = this.lodSelection.enabled?(view?this.lodPlan?.required??[]:[]):view
       ? this.chunks.filter(
           (c) =>
             c.kind !== "interior" &&
@@ -187,6 +194,7 @@ export class ChunkStreamer<T> {
   }
   /** Only opaque scene structure gates combat; decorations remain optional prefetch. */
   setCombatViews(views: PhotoView[] | null) {
+    if(this.lodSelection.enabled)return;
     const planes=views?.map(viewPlanes);
     const next = new Set(this.chunks.filter(c => combatStructure(c) &&
       !!planes?.some(view => boundsInPlanes(this.bounds.get(c.url)!, view))).map(c => c.url));
@@ -212,6 +220,7 @@ export class ChunkStreamer<T> {
     this.index = new Map(chunks.map((c) => [c.url, c]));
     this.bounds = new Map(chunks.map((c) => [c.url, viewBounds(c)]));
     this.combatCore = chunks.filter(combatStructure);
+    this.lodSelection=new MapLodSelection(chunks);
   }
   distanceTo(url: string) {
     return this.distances.get(url) ?? Infinity;
@@ -252,10 +261,17 @@ export class ChunkStreamer<T> {
     point: Vec3,
     onProgress: (p: number) => void,
     signal?: AbortSignal,
+    floors:import('./types').MapManifest['floors']=[],
   ) {
     // Decoration is streamed after entry; it must never hold the initial safety
     // barrier, including when a nearby book/paper response stalls indefinitely.
-    const first = this.chunks.filter((c) => c.residency !== 'detail' && chunkDistance(c, point) < 38);
+    this.selectionPoint=[...point];
+    this.mapFloors=floors;
+    if(this.lodSelection.enabled){
+      this.lodPlan=this.lodSelection.plan(point,false,floors);
+      this.needed=this.lodPlan.required;this.neededUrls=new Set(this.needed.map(c=>c.url));
+    }
+    const first = this.lodSelection.enabled?this.lodPlan!.required:this.chunks.filter((c) => c.residency !== 'detail' && chunkDistance(c, point) < 38);
     this.initialTotal = first.reduce((n, c) => n + (c.bytes ?? 1), 0) || 1;
     const cancel = () => this.dispose();
     signal?.addEventListener("abort", cancel, { once: true });
@@ -346,7 +362,10 @@ export class ChunkStreamer<T> {
     player: Vec3,
     _observers: Vec3[],
     low: boolean,
-    floors: StreamFloor[] = [],
+    floors: {
+      id: number;
+      elevation: number;
+    }[] = [],
     driving?: StreamDriving,
   ): StreamStatus {
     this.counters.updates++;
@@ -389,7 +408,7 @@ export class ChunkStreamer<T> {
       floors.some(
         (f, i) =>
           f.id !== previous.floors[i].id ||
-          f.elevation !== previous.floors[i].elevation || f.levelId !== previous.floors[i].levelId || f.buildingId !== previous.floors[i].buildingId || f.bounds !== previous.floors[i].bounds,
+          f.elevation !== previous.floors[i].elevation,
       );
     if (changed) {
       this.counters.geometryScans++;
@@ -404,15 +423,39 @@ export class ChunkStreamer<T> {
       }
       const distance = (c: MapChunk) => this.distances.get(c.url)!,
         ahead = (c: MapChunk) => this.aheadDistances.get(c.url)!;
+      const currentFloor = floors.reduce<
+        | {
+            id: number;
+            elevation: number;
+          }
+        | undefined
+      >(
+        (best, f) =>
+          !best ||
+          Math.abs(f.elevation - player[1]) <
+            Math.abs(best.elevation - player[1])
+            ? f
+            : best,
+        undefined,
+      );
       // Interior floors above/below a viewer are preloaded only near stairs/the room boundary.
-      const photoWanted = (c: MapChunk) => this.viewUrls.has(c.url);
+      const photoWanted = (c: MapChunk) => this.viewUrls.has(c.url),
+        floorById = new Map(floors.map((f) => [f.id, f]));
+      this.selectionPoint=[...player];
+      if(this.lodSelection.enabled){
+        this.lodPlan=this.lodSelection.plan(player,low,floors as import('./types').MapManifest['floors'],outdoorOnly,lookAhead);
+        this.needed=this.lodPlan.required;this.wanted=this.lodPlan.wanted;
+        this.neededUrls=new Set(this.needed.map(c=>c.url));this.wantedUrls=new Set(this.wanted.map(c=>c.url));
+        this.combatUrls=new Set(this.neededUrls);
+        if(this.photoView){this.viewNeeded=this.needed;this.viewUrls=new Set(this.neededUrls);}
+      }else{
       this.needed = this.chunks.filter((c) => {
         if(this.combatLeases.size)return combatStructure(c);
         if(c.residency==='detail')return false;
         if(this.combatUrls.has(c.url))return true;
         if (c.kind !== "interior") return distance(c) < (isDriving ? 25 : 20);
         if (outdoorOnly) return false;
-        const floor = streamFloorForChunk(c,floors);
+        const floor = floorById.get(c.floor!);
         return (
           distance(c) < 7 &&
           (!floor || Math.abs(player[1] - floor.elevation) < 2.25)
@@ -425,13 +468,17 @@ export class ChunkStreamer<T> {
           (distance(c) < (c.kind === "interior" ? 18 : low ? 75 : 90) ||
             ahead(c) < (c.kind === "interior" ? 12 : 30) ||
             photoWanted(c) || this.combatUrls.has(c.url)) &&
-          (this.combatUrls.has(c.url) || streamChunkAllowed(c,player,floors,outdoorOnly)),
+          (this.combatUrls.has(c.url) || c.kind !== "interior" ||
+            !currentFloor ||
+            !c.floor ||
+            Math.abs(c.floor - currentFloor.id) <= 1),
       );
       this.wantedUrls = new Set(this.wanted.map((c) => c.url));
+      }
       this.geometryInput = {
         player: [...player],
         low,
-        floors: floors.map((f) => ({ ...f })),
+        floors: floors.map((f) => ({ id: f.id, elevation: f.elevation })),
         isDriving,
         outdoorOnly,
         lookAhead: lookAhead ? [...lookAhead] : undefined,
@@ -453,6 +500,7 @@ export class ChunkStreamer<T> {
       }
       if (
         !this.pinned(url) &&
+        (!this.lodSelection.enabled || !this.neededUrls.has(url)&&!this.wantedUrls.has(url)) &&
         !this.combatUrls.has(url) &&
         !photoWanted(chunk) &&
         ((driving?.outdoorOnly && chunk.kind === "interior") ||
@@ -473,7 +521,7 @@ export class ChunkStreamer<T> {
     const idle = [...this.assets.keys()]
       .filter(
         (url) =>
-          this.index.get(url)!.kind === "interior" &&
+          (this.lodSelection.enabled || this.index.get(url)!.kind === "interior") &&
           !this.wantedUrls.has(url) &&
           !this.neededUrls.has(url) &&
           !this.pinned(url),
@@ -484,15 +532,15 @@ export class ChunkStreamer<T> {
     const idleSet=new Set(idle),protectedTextures=new Set<string>(),textureRefs=new Map<string,{bytes:number;refs:number}>();
     for(const url of this.assets.keys())if(!idleSet.has(url))for(const texture of this.index.get(url)!.textureResources??[])protectedTextures.add(texture.id);
     for(const url of idle)for(const texture of this.index.get(url)!.textureResources??[]){const entry=textureRefs.get(texture.id);if(entry)entry.refs++;else textureRefs.set(texture.id,{bytes:texture.bytes,refs:1});}
-    let idleBytes = idle.reduce(
+    let idleBytes = (this.lodSelection.enabled?[...this.assets.keys()]:idle).reduce(
         (sum, url) => sum + (this.index.get(url)!.decodedGeometryBytes ?? this.index.get(url)!.bytes ?? 0),
         0,
-      )+[...textureRefs].reduce((sum,[id,value])=>sum+(protectedTextures.has(id)?0:value.bytes),0),
+      )+(this.lodSelection.enabled?[...new Map([...this.assets.keys()].flatMap(url=>(this.index.get(url)!.textureResources??[]).map(t=>[t.id,t.bytes] as const))).values()].reduce((a,b)=>a+b,0):[...textureRefs].reduce((sum,[id,value])=>sum+(protectedTextures.has(id)?0:value.bytes),0)),
       idleTriangles = idle.reduce(
         (sum, url) => sum + (this.index.get(url)!.triangles ?? 0),
         0,
       );
-    const byteBudget = (low ? 12 : 24) * 1024 * 1024,
+    const byteBudget = (this.lodSelection.enabled?(low?128:192):(low?12:24)) * 1024 * 1024,
       triangleBudget = low ? 450000 : 850000;
     for (const url of idle) {
       if (idleBytes <= byteBudget && idleTriangles <= triangleBudget) break;
@@ -568,12 +616,12 @@ export class ChunkStreamer<T> {
   }
   status(): StreamStatus {
     if(this.cachedStatus)return this.cachedStatus;
-    const needed=this.combatLeases.size?this.combatCore:this.needed;
+    const needed=this.combatLeases.size&&!this.lodSelection.enabled?this.combatCore:this.needed;
     let loaded=0,failed=false,viewLoaded=0,viewFailed=false,combatLoaded=0;
     for(const c of needed){if(this.assets.has(c.url))loaded++;if(this.failures.has(c.url))failed=true;}
     for(const c of this.viewNeeded){if(this.assets.has(c.url))viewLoaded++;if(this.failures.has(c.url))viewFailed=true;}
     if(this.combatLeases.size)combatLoaded=loaded;else for(const url of this.combatUrls)if(this.assets.has(url))combatLoaded++;
-    const blocked=loaded<needed.length,combatCount=this.combatLeases.size?this.combatCore.length:this.combatUrls.size;
+    const blocked=loaded<needed.length,combatCount=this.combatLeases.size&&!this.lodSelection.enabled?this.combatCore.length:this.combatUrls.size;
     return this.cachedStatus={
       blocked,
       failed,
@@ -598,7 +646,7 @@ export class ChunkStreamer<T> {
     };
   }
   retry() {
-    for (const c of this.combatLeases.size?this.combatCore:this.needed) this.failures.delete(c.url);
+    for (const c of this.combatLeases.size&&!this.lodSelection.enabled?this.combatCore:this.needed) this.failures.delete(c.url);
     this.pump();
   }
   retryView() {
@@ -615,6 +663,14 @@ export class ChunkStreamer<T> {
     onProgress?: (progress: number) => void,
     combat = false,
   ): Promise<() => void> {
+    if(this.lodSelection.enabled){
+      const urls=new Map<string,MapChunk>();
+      for(const view of views){
+        const selection=new MapLodSelection(this.chunks),point:Vec3=[view.origin[0],view.origin[1]-1.62,view.origin[2]];
+        for(const c of selection.plan(point,false,this.mapFloors).required)urls.set(c.url,c);
+      }
+      return this.prepareSelection([...urls.values()],signal,onProgress,false);
+    }
     const planes=views.map(viewPlanes);
     const selected = this.chunks.filter(c =>
       (combat ? combatStructure(c) : c.kind !== 'interior') && views.some((view,index)=>
@@ -622,8 +678,13 @@ export class ChunkStreamer<T> {
     return this.prepareSelection(selected,signal,onProgress,false);
   }
   /** A finite session lease, independent of direction or render visibility. */
+  prepareChunks(selected:MapChunk[],signal:AbortSignal,onProgress?:(progress:number)=>void):Promise<()=>void>{
+    const verified=[...new Set(selected.map(c=>c.url))].map(url=>{const chunk=this.index.get(url);if(!chunk)throw Error('资源不属于当前校园。');return chunk;});
+    return this.prepareSelection(verified,signal,onProgress,false);
+  }
   prepareCombat(signal:AbortSignal,onProgress?:(progress:number)=>void):Promise<()=>void>{
-    return this.prepareSelection(this.combatCore,signal,onProgress,true);
+    const selected=this.lodSelection.enabled?(this.lodPlan??this.lodSelection.plan(this.selectionPoint,false)).required:this.combatCore;
+    return this.prepareSelection(selected,signal,onProgress,true);
   }
   private prepareSelection(selected:MapChunk[],signal:AbortSignal,onProgress:((p:number)=>void)|undefined,combat:boolean):Promise<()=>void>{
     if (!this.alive || signal.aborted)
@@ -698,6 +759,9 @@ export class ChunkStreamer<T> {
         if (selected.every((c) => this.assets.has(c.url))) {
           settled = true;
           this.listeners.delete(check);
+          if(combat&&this.lodSelection.enabled){
+            this.leases.set(key,new Set(this.lodPlan?.baseline??[]));this.rebuildPins();
+          }
           resolve(() => {
             signal.removeEventListener("abort", abort);
             release();
@@ -711,13 +775,21 @@ export class ChunkStreamer<T> {
     });
   }
   /** Physics calls this before advancing. It does not sort, evict, schedule or render. */
-  checkSafety(point:Vec3,_low:boolean,floors:StreamFloor[]=[],driving?:StreamDriving):StreamStatus{
+  checkSafety(point:Vec3,_low:boolean,floors:{id:number;elevation:number}[]=[],driving?:StreamDriving):StreamStatus{
+    if(this.lodSelection.enabled){
+      if(Math.hypot(...point.map((v,i)=>v-this.selectionPoint[i]))>.35){
+        this.selectionPoint=[...point];this.lodPlan=this.lodSelection.plan(point,_low,floors as import('./types').MapManifest['floors'],!!driving?.outdoorOnly,driving?.lookAhead);
+        this.needed=this.lodPlan.required;this.neededUrls=new Set(this.needed.map(c=>c.url));this.combatUrls=new Set(this.neededUrls);
+        this.geometryDirty=this.queueDirty=true;this.cachedStatus=null;
+      }
+      return this.status();
+    }
     if(this.combatLeases.size)return this.status();
     const required=this.chunks.filter(c=>{
       if(c.residency==='detail')return false;
       if(this.combatUrls.has(c.url))return true;
       if(c.kind!=='interior')return chunkDistance(c,point)<(driving?.isDriving?25:20);
-      const floor=streamFloorForChunk(c,floors);
+      const floor=floors.find(f=>f.id===c.floor);
       return !driving?.outdoorOnly && chunkDistance(c,point)<7 && (!floor||Math.abs(point[1]-floor.elevation)<2.25);
     });
     if(required.every(c=>this.assets.has(c.url)))return this.status();
@@ -726,6 +798,8 @@ export class ChunkStreamer<T> {
     this.cachedStatus=null;
     return this.status();
   }
+  visibleLod(url:string){return !this.lodSelection.enabled||this.lodSelection.visible(url,url=>this.assets.has(url));}
+  get hasLodSelection(){return this.lodSelection.enabled;}
   diagnostics(){
     let geometryBytes=0,downloadBytes=0,triangles=0,structures=0;
     const textures=new Map<string,number>();
@@ -733,7 +807,7 @@ export class ChunkStreamer<T> {
       const c=this.index.get(url)!;downloadBytes+=c.bytes??0;geometryBytes+=c.decodedGeometryBytes??0;triangles+=c.triangles??0;
       if(combatStructure(c))structures++;for(const t of c.textureResources??[])textures.set(t.id,t.bytes);
     }
-    return {...this.counters,resident:this.assets.size,structureResident:structures,structureTotal:this.combatCore.length,combatLeases:this.combatLeases.size,pending:this.pending.size,downloadBytes,decodedGeometryBytes:geometryBytes,uniqueTextureBytes:[...textures.values()].reduce((a,b)=>a+b,0),manifestTriangles:triangles};
+    return {...this.counters,resident:this.assets.size,structureResident:structures,structureTotal:this.combatCore.length,combatLeases:this.combatLeases.size,pending:this.pending.size,downloadBytes,decodedGeometryBytes:geometryBytes,uniqueTextureBytes:[...textures.values()].reduce((a,b)=>a+b,0),manifestTriangles:triangles,lod:this.lodSelection.enabled?{baseline:this.lodPlan?.baseline.size??0,required:this.needed.length,wanted:this.wanted.length,missing:this.needed.filter(c=>!this.assets.has(c.url)).map(c=>c.id??c.url).slice(0,12),budgetMiB:this.geometryInput?.low?128:192}:undefined};
   }
   forEach(fn: (asset: T, chunk: MapChunk, distance: number) => void) {
     for (const [url, asset] of this.assets)

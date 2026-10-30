@@ -20,16 +20,16 @@ class MemoryCaches {
 test('validated bytes are reused across cache owners and corrupt entries are replaced',async()=>{
  const storage=new MemoryCaches(),r=await resource('collision-data');let requests=0;
  const env={origin,caches:storage.asStorage(),fetch:async()=>{requests++;return new Response(bytes('collision-data'));}};
- const first=new MapByteCache(env);await first.read(r);assert.equal(requests,1);
+ const first=new MapByteCache(env);await first.read(r,{waitForPersistence:true});assert.equal(requests,1);
  const second=new MapByteCache(env);assert.deepEqual(await second.read(r),bytes('collision-data'));assert.equal(requests,1);assert.equal(second.stats().hits,1);
  const cache=await storage.open(MAP_CACHE_NAME);await cache.put(new URL(r.url,origin),new Response('corrupt',{headers:{'X-Map-Bytes':'7'}}));
- await second.read(r);assert.equal(requests,2);assert.equal((await cache.match(new URL(r.url,origin)))?.headers.get('X-Map-Bytes'),String(r.bytes));
+ await second.read(r,{waitForPersistence:true});assert.equal(requests,2);assert.equal((await cache.match(new URL(r.url,origin)))?.headers.get('X-Map-Bytes'),String(r.bytes));
 });
 
 test('quota is bounded at 192 MiB, adapts to free storage, and evicts least recently used map entries',async()=>{
  const storage=new MemoryCaches(),a=await resource('aaaa'),b=await resource('bbbb'),c=await resource('cccc'),data=new Map([[a.url,'aaaa'],[b.url,'bbbb'],[c.url,'cccc']]);
  const cache=new MapByteCache({origin,caches:storage.asStorage(),storage:{estimate:async()=>({quota:20,usage:4+[...(storage.stores.get(MAP_CACHE_NAME)?.values()??[])].reduce((n,r)=>n+Number(r.headers.get('X-Map-Bytes')),0)})},fetch:async input=>new Response(data.get(String(input)))});
- await cache.read(a);await cache.read(b);await cache.read(a);await cache.read(c);
+ await cache.read(a,{waitForPersistence:true});await cache.read(b,{waitForPersistence:true});await cache.read(a,{waitForPersistence:true});await cache.read(c,{waitForPersistence:true});
  const stored=await storage.open(MAP_CACHE_NAME);assert(await stored.match(new URL(a.url,origin)));assert(await stored.match(new URL(c.url,origin)));assert.equal(await stored.match(new URL(b.url,origin)),undefined);assert(cache.stats().bytes<=cache.stats().budget);assert(cache.stats().budget<=MAP_CACHE_LIMIT);
 });
 
@@ -101,16 +101,16 @@ test('prefetch cancellation retains completed files and continuation skips netwo
 test('current map coverage intersects stored content addresses and survives a new cache owner',async()=>{
  const storage=new MemoryCaches(),a=await resource('current-a'),b=await resource('current-b'),old=await resource('old-map'),content=new Map([[a.url,'current-a'],[b.url,'current-b'],[old.url,'old-map']]);let requests=0;
  const env={origin,caches:storage.asStorage(),fetch:async(input:RequestInfo|URL)=>{requests++;return new Response(content.get(String(input)));}};
- const first=new MapByteCache(env);await first.read(a);await first.read(old);const refreshed=new MapByteCache(env);assert.equal(refreshed.stats().ready,false);
+ const first=new MapByteCache(env);await first.read(a,{waitForPersistence:true});await first.read(old,{waitForPersistence:true});const refreshed=new MapByteCache(env);assert.equal(refreshed.stats().ready,false);
  await refreshed.refresh([a,b,a]);assert.deepEqual(refreshed.stats().current,{bytes:a.bytes,files:1,totalBytes:a.bytes+b.bytes,totalFiles:2,remainingBytes:b.bytes,oldBytes:old.bytes,oldFiles:1,complete:false});assert.equal(requests,2);assert.equal(refreshed.stats().ready,true);
- await refreshed.read(b);assert.equal(refreshed.stats().current?.complete,true);assert.equal(refreshed.stats().current?.remainingBytes,0);assert.equal(refreshed.stats().current?.oldBytes,old.bytes);
+ await refreshed.read(b,{waitForPersistence:true});assert.equal(refreshed.stats().current?.complete,true);assert.equal(refreshed.stats().current?.remainingBytes,0);assert.equal(refreshed.stats().current?.oldBytes,old.bytes);
  const reload=new MapByteCache(env);await reload.refresh([a,b]);assert.equal(reload.stats().current?.complete,true);assert.equal(requests,3);
 });
 
 test('checking completeness removes a corrupt stored body instead of claiming the map is ready',async()=>{
  const storage=new MemoryCaches(),r=await resource('correct-map'),stored=await storage.open(MAP_CACHE_NAME);await stored.put(new URL(r.url,origin),new Response('broken-map!',{headers:{'X-Map-Bytes':String(r.bytes)}}));
  const cache=new MapByteCache({origin,caches:storage.asStorage(),fetch:async()=>new Response('correct-map')});await cache.refresh([r]);assert.equal(cache.stats().current?.bytes,0);assert.equal(cache.stats().current?.complete,false);assert.equal(await stored.match(new URL(r.url,origin)),undefined);
- await cache.read(r);assert.equal(cache.stats().current?.complete,true);await stored.put(new URL(r.url,origin),new Response('broken-map!',{headers:{'X-Map-Bytes':String(r.bytes)}}));await cache.refresh([r]);assert.equal(cache.stats().current?.complete,false);
+ await cache.read(r,{waitForPersistence:true});assert.equal(cache.stats().current?.complete,true);await stored.put(new URL(r.url,origin),new Response('broken-map!',{headers:{'X-Map-Bytes':String(r.bytes)}}));await cache.refresh([r]);assert.equal(cache.stats().current?.complete,false);
 });
 
 test('map download distinguishes initial checking, index retry, cache denial and a complete map',async()=>{

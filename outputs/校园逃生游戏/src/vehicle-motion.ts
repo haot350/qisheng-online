@@ -9,6 +9,14 @@ const speedFade = (speed: number, limit: number) => {
   return amount * (2 - amount);
 };
 
+export const TANK_STEERING = Object.freeze({ enterResponse: 5.5, releaseResponse: 9, turningDamping: .85, straightDamping: 2.8 });
+
+/** Track yaw is produced by wheel forces; damping only settles their residual spin. */
+export function tankAngularDamping(steering: number) {
+  const turning = clamp(Math.abs(steering) * 2, 0, 1);
+  return TANK_STEERING.straightDamping + (TANK_STEERING.turningDamping - TANK_STEERING.straightDamping) * turning;
+}
+
 /** Raycast wheels provide support; tracks and a balanced rear-drive scooter use separate controls. */
 export function alternativeWheelMotion(vehicle: VehicleDefinition, input: DriveInput, sample: MotionSample, boosted: boolean, dt: number): WheelMotion[] {
   const count = vehicle.physics.wheels.length;
@@ -20,19 +28,22 @@ export function alternativeWheelMotion(vehicle: VehicleDefinition, input: DriveI
   const force = boosted && vehicle.boost ? vehicle.physics.boostForce : vehicle.physics.engineForce;
   const rolling = vehicle.physics.mass * .15 * sample.coast * dt / count;
   if (vehicle.id === 'tank') {
-    const steering = clamp(sample.steering, -1, 1);
-    const turn = steering * clamp(1 - sample.horizontalSpeed / 22, .35, 1);
-    // The speed governor limits forward drive, not differential track steering.
-    const drive = reversing ? 0 : direction * throttle * available * (1 - .5 * Math.abs(steering));
+    const intent = clamp(sample.steering, -1, 1);
+    const turn = intent * (1 - .45 * clamp(sample.horizontalSpeed / (vehicle.maximumSpeed / 3.6), 0, 1));
+    // Reserve the difference between tracks before allocating straight-line power.
+    // The longitudinal limiter must never erase steering at maximum speed.
+    const drive = reversing ? 0 : clamp(direction * throttle * available, -1 + Math.abs(turn), 1 - Math.abs(turn));
+    const turnAmount = 1 - (1 - Math.abs(intent)) ** 3;
     return vehicle.physics.wheels.map(point => {
-      const track = clamp(drive + (point[0] < 0 ? turn : -turn), -1, 1);
+      const track = drive + (point[0] < 0 ? turn : -turn);
+      const turningGrip = Math.abs(point[2]) < .1 ? .28 : .06;
       return {
-        force: brake > .01 ? 0 : -force * track / count,
+        force: brake > .01 || reversing ? 0 : -force * track / count,
         brake: vehicle.physics.mass * 7.5 * brake * dt / count + rolling,
         steering: 0,
-        // Skid steering needs lateral scrub at all six contacts. Increasing grip
-        // with road speed otherwise cancels the very torque used to turn.
-        sideFriction: .06 + .66 * (1 - Math.abs(steering)) ** 2,
+        // End wheels must slip laterally for tracks to yaw; centre wheels retain
+        // lateral support rather than lowering grip across all six contacts.
+        sideFriction: .72 + (turningGrip - .72) * turnAmount,
       };
     });
   }

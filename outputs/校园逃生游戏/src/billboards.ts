@@ -6,7 +6,7 @@ import {NPC_LAYOUT} from './npc-layout.ts';
 import {NPC_LAYOUT_V13} from './npc-layout-v13.ts';
 import {NPC_LAYOUT_MOTION} from './npc-layout-motion.ts';
 import {NPC_LAYOUT_COMBAT} from './npc-layout-combat.ts';
-import {NpcLocomotion,chooseNpcPose,isNpcMovingPose,isNpcArmedPose,type NpcMotionPose} from './npc-locomotion.ts';
+import {NpcLocomotion,chooseNpcPose,isNpcMovingPose,npcWeaponRaised,npcDisplaySkill,type NpcMotionPose} from './npc-locomotion.ts';
 import {NPC_IDENTITY,npcPoseFilename,type NpcIdentityId,type NpcPose} from './npc-roster.ts';
 import {withDeadline} from './network.ts';
 import {resourceWorkQueue,fetchResource,decodeResourceImage,abortResource,waitForResource} from './resource-leases.ts';
@@ -105,13 +105,14 @@ export function createBillboardCharacter(identityId:NpcIdentityId,mobile=false){
   if(disposed)return;suppressed=THREE.MathUtils.damp(suppressed,state.suppressed>0?1:0,8,dt);
   if(state.suppressed>0)gait.reset(root.position);
   const motion=gait.update(dt,state.speed,root.position);
-  const next=state.portraitPose&&Object.hasOwn(poses,state.portraitPose)?state.portraitPose:chooseNpcPose(motion,{...state,skill:state.skill===def.skill?state.skill:undefined},!!poses.skill);
+  const displaySkill=npcDisplaySkill(identityId,state.skill,def.skill);
+  const next=state.portraitPose&&Object.hasOwn(poses,state.portraitPose)?state.portraitPose:chooseNpcPose(motion,{...state,skill:displaySkill},!!poses.skill);
   if(next!==variant){variant=next;plane.geometry=geometries[variant];material.map=poses[variant].texture;}plane.userData.pose=variant;
   plane.scale.y=1-suppressed*.38;plane.position.y=isNpcMovingPose(variant)&&suppressed<.1?(state.portraitBob??motion.bob):0;
   if(camera){camera.getWorldPosition(cameraPosition);plane.rotation.y=Math.atan2(cameraPosition.x-root.position.x,cameraPosition.z-root.position.z)-root.rotation.y;}
   material.color.setHex(state.hit>0?0xffd8c7:state.suppressed>0?0xb4b6bb:0xffffff);
   desiredGrip.fromArray(poses[variant].hand);desiredGrip.y=desiredGrip.y*plane.scale.y+plane.position.y;desiredGrip.applyAxisAngle(verticalAxis,plane.rotation.y);gun.root.position.copy(desiredGrip);root.updateWorldMatrix(true,true);
-  gun.update(dt,{aimTarget:state.aimTarget,gripWorld:gripWorld.copy(desiredGrip).applyMatrix4(root.matrixWorld),reloadProgress:state.reloadProgress??0,shotSerial:state.shotSerial??0,lowered:!isNpcArmedPose(variant)||state.suppressed>0||state.reloading||!!state.skill,action:state.action});
+  gun.update(dt,{aimTarget:state.aimTarget,gripWorld:gripWorld.copy(desiredGrip).applyMatrix4(root.matrixWorld),reloadProgress:state.reloadProgress??0,shotSerial:state.shotSerial??0,lowered:!npcWeaponRaised(variant,state),action:state.action});
   gun.root.position.copy(desiredGrip).sub(gun.getAnchorLocal('grip',gripOffset).applyQuaternion(gun.root.quaternion));root.updateWorldMatrix(true,true);
  };
  return{root,update,preparationTextures:Object.values(poses).map(pose=>pose.texture),resetPresentation(){gait.reset();suppressed=0;variant='idle';plane.geometry=geometries.idle;material.map=poses.idle.texture;material.color.setHex(0xffffff);plane.position.set(0,0,0);plane.rotation.set(0,0,0);plane.scale.set(1,1,1);for(const value of [cameraPosition,desiredGrip,gripOffset,gripWorld])value.set(0,0,0);gun.update(0,{reloadProgress:0,shotSerial:0,resetShot:true,lowered:true});},setWeapon(id:WeaponKind){gun.setWeapon(id);},getMuzzleWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleWorld();},getMuzzleDirectionWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleDirectionWorld();},getEjectionWorld(){root.updateWorldMatrix(true,true);return gun.getEjectionWorld();},getAimReady(toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.getAimReady(toleranceRadians);},isAimReady(target:THREE.Vector3,toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.isAimReady(target,toleranceRadians);},hitTest(origin:THREE.Vector3,direction:THREE.Vector3){return portraitHit(origin,direction,plane,poses[variant].shape,poses[variant].alpha);},dispose(){if(disposed)return;disposed=true;gun.dispose();Object.values(geometries).forEach(g=>g.dispose());material.dispose();shade.geometry.dispose();(shade.material as THREE.Material).dispose();root.clear();retained.forEach(releaseEntry);}};

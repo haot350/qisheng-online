@@ -26,7 +26,7 @@ export function NativeDownloads(){
  return <section className="menu-native-downloads" aria-label="客户端下载">
   <h2>客户端下载</h2>
   <article className="menu-native-current">
-   <div><img className="menu-native-product-logo" src={staticAssetUrl(UE_WINDOWS_PREVIEW.logoPath)} width={2172} height={724} alt="齐盛：2027" decoding="async"/><h3>{UE_WINDOWS_PREVIEW.productName}</h3><span className="menu-native-meta">{UE_WINDOWS_PREVIEW.title} · Preview {UE_WINDOWS_PREVIEW.version} · {(UE_WINDOWS_PREVIEW.bytes/1_000_000).toFixed(1)} MB</span><p>{UE_WINDOWS_PREVIEW.description}</p><p className="menu-native-installation">{UE_WINDOWS_PREVIEW.installation}</p></div>
+   <div><img className="menu-native-product-logo" src={staticAssetUrl(UE_WINDOWS_PREVIEW.logoPath)} width={2172} height={724} alt="齐盛：2027" decoding="async"/><h3>{UE_WINDOWS_PREVIEW.productName}</h3><span className="menu-native-meta">{UE_WINDOWS_PREVIEW.title} · Preview {UE_WINDOWS_PREVIEW.version} · {(UE_WINDOWS_PREVIEW.bytes/1_000_000).toFixed(1)} MB</span><p>{UE_WINDOWS_PREVIEW.description}</p><p className="menu-native-installation">{UE_WINDOWS_PREVIEW.installation}</p><a className="menu-native-about" href="https://qs2027.tianhw.top/" target="_blank" rel="noopener noreferrer">走进《齐盛：2027》 <span aria-hidden="true">↗</span></a></div>
    <a className="menu-native-download" href={UE_WINDOWS_PREVIEW.downloadPath} download>下载 Windows 版 <span aria-hidden="true">↓</span></a>
   </article>
   <details className="menu-native-history" onToggle={event=>setHistoryOpen(event.currentTarget.open)}>

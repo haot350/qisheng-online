@@ -361,7 +361,7 @@ function HelpContent({
     <div className="help-columns">
       <div>
         <h3>自由走一走</h3>
-        <p>这里没有追逐和倒计时。沿道路走进庭院，打开地图寻找可以进入的楼栋与楼层。</p>
+        <p>这里没有追逐和倒计时。道路、庭院和南楼一至四层可以探索。</p>
         <p>
           {touchLayout
             ? "左侧摇杆移动，右侧空白处拖动观察；跳跃、蹲伏和跑操使用对应按钮。"
@@ -379,6 +379,7 @@ function HelpContent({
     </div>
   );
 }
+const QaMapControls=import.meta.env.DEV?lazy(()=>import('./qa/MapControls')):null;
 export default function App() {
   const operational = useGameOperations();
   const localRoundAccepted = useRef(false);
@@ -1429,6 +1430,7 @@ export default function App() {
       }
     >
       <div className="world" ref={host} />
+      {QaMapControls&&<Suspense fallback={null}><QaMapControls api={game.current} snapshot={snapshot} settings={settings}/></Suspense>}
       <input
         ref={importInput}
         hidden

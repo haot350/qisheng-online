@@ -6,6 +6,16 @@ const LEGACY='campus-v17-web-1';
 const json=async(file)=>JSON.parse(await readFile(file,'utf8'));
 const canonical=value=>JSON.stringify([...value].sort((a,b)=>a.id.localeCompare(b.id)));
 
+function validateSites(sites){
+ if(!Array.isArray(sites)||!sites.length)throw Error('Map catalog contains no calibrated sites');
+ const seen=new Set();
+ for(const site of sites){
+  if(!site||typeof site.id!=='string'||site.id.length<1||site.id.length>100||seen.has(site.id)||typeof site.label!=='string'||site.label.length<1||site.label.length>120||typeof site.region!=='string'||site.region.length<1||site.region.length>100||!Array.isArray(site.position)||site.position.length!==3||!site.position.every(value=>Number.isFinite(value)&&Math.abs(value)<=1000)||!Number.isInteger(site.floor??0)||(site.floor??0)<-1||(site.floor??0)>5)throw Error('Invalid calibrated map site');
+  for(const key of ['buildingId','levelId'])if(site[key]!==undefined&&(typeof site[key]!=='string'||site[key].length<1||site[key].length>100))throw Error('Invalid map building or level identity');
+  seen.add(site.id);
+ }
+}
+
 /** Keep the coordinates used to sign older runs when building a different map. */
 export async function prepareSiteCatalogs({root=new URL('../',import.meta.url),source=new URL('../../校园逃生游戏/src/escape/validated.ts',import.meta.url)}={}){
  const sitesFile=new URL('src/sites.json',root),catalogFile=new URL('src/site-catalogs.json',root);
@@ -19,11 +29,7 @@ export async function prepareSiteCatalogs({root=new URL('../',import.meta.url),s
  if(sourceExists)incoming=await import(source.href);
  const id=incoming?.VALIDATED_ESCAPE_MAP_CATALOG_ID??data.current,sites=incoming?.VALIDATED_ESCAPE_SITES??oldSites;
  if(!/^[a-zA-Z0-9_-]{1,80}$/.test(id)||!Array.isArray(sites)||!sites.length)throw Error('Invalid map site catalog');
- const seen=new Set();
- for(const site of sites){
-  if(!site||typeof site.id!=='string'||seen.has(site.id)||!Array.isArray(site.position)||site.position.length!==3||!site.position.every(Number.isFinite)||!Number.isInteger(site.floor??0))throw Error('Invalid calibrated map site');
-  seen.add(site.id);
- }
+ validateSites(sites);
  const existing=data.catalogs[id];
  if(existing&&canonical(existing)!==canonical(sites))throw Error('Refusing to change frozen site catalog '+id+'; use a new catalog identity');
  const next={...data,current:id,catalogs:{...data.catalogs,[id]:sites}};
@@ -38,6 +44,7 @@ export async function selectSiteCatalog({root=new URL('../',import.meta.url),map
  if(!['src','dist'].includes(directory))throw Error('Select src or dist explicitly');
  const catalogFile=new URL(directory+'/site-catalogs.json',root),data=await json(catalogFile),sites=data.catalogs?.[mapCatalogId];
  if(data.schema!==1||!Array.isArray(sites)||!sites.length)throw Error('The requested map catalog is not installed');
+ validateSites(sites);
  await writeFile(new URL(directory+'/sites.json',root),JSON.stringify(sites));
  await writeFile(catalogFile,JSON.stringify({...data,current:mapCatalogId},null,2)+'\n');
  return {current:mapCatalogId,catalogs:Object.keys(data.catalogs),sites:sites.length};

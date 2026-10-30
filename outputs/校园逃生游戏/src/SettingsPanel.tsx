@@ -1,6 +1,6 @@
 import type {WeatherPreset} from '@qisheng/shared/weather';
 import {WeatherChoice,RoomWeather} from './WeatherChoice';
-import {useRef, useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ReactNode} from 'react';
 import CacheSettingsUI from './CacheSettingsUI';
 import {TransmissionChoice} from './DrivingUI';
 import {EscapeMusicChoice, EscapeTouchSettings} from './EscapeUI';
@@ -23,7 +23,18 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
   canChangeTransmission:boolean; onEditTouch:()=>void; onlineWeather?:WeatherPreset;
 }) {
   const [section,setSection]=useState<Section>('controls');
-  const nav=useRef<HTMLElement>(null);
+  const nav=useRef<HTMLElement>(null),workspace=useRef<HTMLDivElement>(null),changedSection=useRef(false);
+  const chooseSection=(value:Section)=>{if(value===section)return;changedSection.current=true;setSection(value);};
+  useEffect(()=>{
+    if(!changedSection.current)return;
+    changedSection.current=false;
+    const frame=requestAnimationFrame(()=>{
+      const target=workspace.current,scroller=target?.closest<HTMLElement>('.menu-page');
+      if(!target||!scroller)return;
+      scroller.scrollTo({top:0,behavior:'instant'});
+    });
+    return()=>cancelAnimationFrame(frame);
+  },[section]);
   const field=(title:string,description:string|undefined,content:ReactNode)=>
     <div className="settings-field"><div className="settings-field-copy"><span>{title}</span>{description&&<p>{description}</p>}</div>{content}</div>;
   const range=(key:'sensitivity'|'fov'|'music'|'sfx'|'crosshairSize'|'uiTextScale',label:string,min:number,max:number,step:number,display:string)=>
@@ -31,12 +42,12 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
   const toggle=(key:'headBob'|'recoilShake'|'aimAssist'|'realityHints'|'onlinePing'|'reducedMotion'|'crosshairOutline',label:string,description?:string)=>
     <label className="settings-toggle"><span><strong>{label}</strong>{description&&<small>{description}</small>}</span><input type="checkbox" role="switch" checked={!!settings[key]} onChange={e=>onChange({...settings,[key]:e.target.checked})}/></label>;
   const current=sections.find(s=>s.id===section)!;
-  return <div className="settings-workspace">
+  return <div ref={workspace} className="settings-workspace">
     <nav ref={nav} className="settings-sections" role="tablist" aria-label="设置分类" onKeyDown={e=>{
       if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
       const index=sections.findIndex(s=>s.id===section),next=e.key==='Home'?0:e.key==='End'?sections.length-1:(index+(['ArrowRight','ArrowDown'].includes(e.key)?1:sections.length-1))%sections.length;
-      e.preventDefault();setSection(sections[next].id);nav.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
-    }}>{sections.map(item=><button key={item.id} id={'settings-tab-'+item.id} role="tab" type="button" aria-selected={section===item.id} aria-controls={'settings-section-'+item.id} tabIndex={section===item.id?0:-1} onClick={()=>setSection(item.id)}><span>{item.name}</span><small>{item.detail}</small><i aria-hidden="true">›</i></button>)}</nav>
+      e.preventDefault();chooseSection(sections[next].id);nav.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({preventScroll:true});
+    }}>{sections.map(item=><button key={item.id} id={'settings-tab-'+item.id} role="tab" type="button" aria-selected={section===item.id} aria-controls={'settings-section-'+item.id} tabIndex={section===item.id?0:-1} onClick={()=>chooseSection(item.id)}><span>{item.name}</span><small>{item.detail}</small><i aria-hidden="true">›</i></button>)}</nav>
     <div className="settings-body"><header className="settings-section-heading"><h2>{current.name}</h2></header>
       <section id={'settings-section-'+section} role="tabpanel" aria-labelledby={'settings-tab-'+section} className="settings-section-content" key={section}>
         {section==='controls'&&<>

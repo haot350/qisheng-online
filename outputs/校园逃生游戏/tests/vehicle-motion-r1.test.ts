@@ -10,12 +10,12 @@ import type { DriveInput } from '../src/types.ts';
 const IDLE: DriveInput = { steer: 0, throttle: 0, brake: 0, handbrake: false, reverse: false, boost: false, reset: false };
 await RAPIER.init();
 
-function fixture(id: DrivingVehicleId) {
+function fixture(id: DrivingVehicleId, slope = 0) {
   const world = new RAPIER.World({ x: 0, y: -18, z: 0 });
-  world.createCollider(RAPIER.ColliderDesc.cuboid(1000, .1, 1000).setTranslation(0, -.1, 0));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(1000, .1, 1000).setTranslation(0, -.1 / Math.cos(slope), 0).setRotation(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), slope)));
   world.step();
   const actors = new Map<number, PhysicsActor>();
-  const map: DriveMap = { version: 12, spawn: [0, 0, 12], spawnYaw: 0, npcSpawns: [], repairs: [], barriers: [], bounds: { min: [-1000, -4, -1000], max: [1000, 30, 1000] } };
+  const map: DriveMap = { version: 12, spawn: [0, -Math.tan(slope) * 12, 12], spawnYaw: 0, npcSpawns: [], repairs: [], barriers: [], bounds: { min: [-1000, -4, -1000], max: [1000, 30, 1000] } };
   const car = createDrivingPhysics(world, map, actors, () => world.createCharacterController(.015), () => {}, id);
   let chassis!: RAPIER.RigidBody;
   world.bodies.forEach(body => { if (body.isDynamic()) chassis = body; });
@@ -76,6 +76,74 @@ test('坦克六点支撑，原地差速转向由真实物理积分产生', () =>
     assert.equal(f.car.read().transmission, 'auto');
     assert.equal(f.car.reset(), true);
   } finally { f.dispose(); }
+});
+
+test('坦克满油门从10、25、40km/h转向仍有真实差速，松手后角速度收尾', () => {
+  for (const kmh of [10, 25, 40]) {
+    const f = fixture('tank');
+    try {
+      f.chassis.setLinvel({ x: 0, y: 0, z: -kmh / 3.6 }, true);
+      f.run(120, { ...IDLE, throttle: 1, steer: 1 });
+      const turned = f.car.read(), turning = Math.abs(f.chassis.angvel().y);
+      console.log('tank-turn', JSON.stringify({ kmh, yaw: turned.yaw, speed: turned.horizontalSpeed * 3.6, lateral: turned.lateralSpeed, angular: turning, contacts: turned.wheelContacts }));
+      assert.ok(turned.yaw < -.25, `${kmh}km/h yaw ${turned.yaw}`);
+      assert.ok(turned.horizontalSpeed * 3.6 < 40.8, `${kmh}km/h limiter ${turned.horizontalSpeed * 3.6}`);
+      assert.ok(turned.wheelContacts >= 4, `${kmh}km/h contacts ${turned.wheelContacts}`);
+      assert.ok(new THREE.Vector3(0, 1, 0).applyQuaternion(turned.rotation).y > .94);
+      f.run(90, { ...IDLE, throttle: 1 });
+      assert.ok(Math.abs(f.chassis.angvel().y) < turning * .25 + .01, `${kmh}km/h steering release ${f.chassis.angvel().y}`);
+    } finally { f.dispose(); }
+  }
+});
+
+test('坦克达到限速后仍可部分转向，左右满油门请求保留对称差速', () => {
+  const vehicle = vehicleDefinition('tank');
+  const command = (steering: number) => alternativeWheelMotion(vehicle, { ...IDLE, throttle: 1, steer: steering }, { speed: 40 / 3.6, horizontalSpeed: 40 / 3.6, steering, brake: 0, coast: 0 }, false, 1 / 60);
+  const right = command(.35), left = command(-.35);
+  assert.ok(right[0].force < 0 && right[1].force > 0);
+  assert.equal(left[0].force, right[1].force);
+  assert.equal(left[1].force, right[0].force);
+  assert.ok(right.every(wheel => Math.abs(wheel.force) <= vehicle.physics.engineForce / right.length));
+});
+
+test('坦克部分转向保留渐进响应，倒车、反打与脚刹继续通过真实接地力执行', () => {
+  for (const reverse of [false, true]) {
+    const f = fixture('tank');
+    try {
+      f.chassis.setLinvel({ x: 0, y: 0, z: reverse ? 3 : -40 / 3.6 }, true);
+      f.run(120, { ...IDLE, throttle: 1, steer: .5, reverse });
+      const turned = f.car.read(), firstAngular = f.chassis.angvel().y;
+      assert.ok(turned.yaw < -.08, `${reverse ? 'reverse' : '40km/h partial'} yaw ${turned.yaw}`);
+      assert.ok(firstAngular < -.05);
+      if (reverse) assert.ok(turned.speed < -1, `reverse speed ${turned.speed}`);
+      f.run(120, { ...IDLE, throttle: 1, steer: -.75, reverse });
+      assert.ok(f.chassis.angvel().y > .07, `counter-steer ${f.chassis.angvel().y}`);
+      f.run(120, { ...IDLE, throttle: 1, steer: -.75, brake: 1, reverse });
+      assert.ok(f.car.read().horizontalSpeed < .5, `foot brake ${f.car.read().horizontalSpeed}`);
+      assert.ok(Math.abs(f.chassis.angvel().y) < .03, `brake yaw ${f.chassis.angvel().y}`);
+    } finally { f.dispose(); }
+  }
+});
+
+test('坦克坡道转向保持支撑，悬空时转向不会凭空增加偏航', () => {
+  const slope = fixture('tank', 6 * Math.PI / 180);
+  try {
+    slope.run(120, { ...IDLE, throttle: 1, steer: .7 });
+    const state = slope.car.read();
+    assert.ok(state.yaw < -.2, `slope yaw ${state.yaw}`);
+    assert.ok(state.wheelContacts >= 4, `slope support ${state.wheelContacts}`);
+    assert.ok(new THREE.Vector3(0, 1, 0).applyQuaternion(state.rotation).y > .94);
+  } finally { slope.dispose(); }
+  const air = fixture('tank');
+  try {
+    const position = air.chassis.translation();
+    air.chassis.setTranslation({ x: position.x, y: 10, z: position.z }, true);
+    air.chassis.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    air.run(15, { ...IDLE, throttle: 1, steer: 1 });
+    assert.equal(air.car.read().wheelContacts, 0);
+    assert.ok(Math.abs(air.chassis.angvel().y) < .001);
+    assert.ok(Math.abs(air.car.read().yaw) < .001);
+  } finally { air.dispose(); }
 });
 
 test('新车可前进、制动和倒车，滑板车双轮保持平衡且最高速度受车型约束', () => {

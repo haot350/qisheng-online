@@ -1,6 +1,7 @@
 import {CombatTraining,trainingPlan} from './training';
 import {WeatherScene} from './weather-scene';
 import {stairGuideForRoute,type StairGuide} from './escape-stair-guidance';
+import {NpcPathBudget} from './escape/path-budget.ts';
 import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGadget,cycleGadget,helmetDamage,grenadeDamage,useCards,confiscatedHealth,type GadgetId,type GadgetLoot,type GrenadeState} from '@qisheng/shared/gadgets';
 import {GadgetScene} from './gadget-scene';
 import {selectEscapeRoster as orderedEscapeRoster} from './npc-roster';
@@ -43,7 +44,7 @@ import {
 } from "./driving-presentation.ts";
 import { RESPAWN_RULES, chooseDrivingRespawn } from "./driving-respawn.ts";
 import { DRIVE_RULES } from "./driving-rules.ts";
-import { escapeFloorAt,escapeLevelAt,mapLayoutFromManifest,mapLevels } from "./escape-floor";
+import { escapeFloorAt } from "./escape-floor";
 import { EscapeContacts } from "./escape/contacts.ts";
 import { ExtractionDefense } from "./escape/extraction-defense.ts";
 import {
@@ -243,6 +244,7 @@ type NPC = {
   lastEntry?: string;
   heardStep?: number;
   tacticalSeen?: boolean;
+  lastVisualAt?: number;
   tacticalDecision?: TacticalDecision;
   actualSpeed: number;
   movingAccuracy: NpcMovingAccuracy;
@@ -563,6 +565,7 @@ export async function createGame(
   let pickupRequest = 0,
     pickupController: AbortController | null = null;
   const callouts: NPC[] = [];
+  const npcPaths = new NpcPathBudget(2);
   const escapeTactics = new EscapeTactics(),
     extractionDefense = new ExtractionDefense(),
     escapeContacts = new EscapeContacts();
@@ -1021,22 +1024,19 @@ export async function createGame(
       ...snap,
       interactionAvailable,
       mapOpen: escapeMapOpen,
-      mapLayout: mapLayoutFromManifest(world.manifest),
       playerPosition: position.toArray() as Vec3,
       playerYaw: yaw,
       playerFloor: escapeFloor(position),
-      playerLevelId: escapeLevelAt(position.toArray(),world.manifest)?.id,
       mapFloor: escapeFloor(position),
-      mapFloors: [0, ...mapLevels(world.manifest).map((f) => f.floor)],
+      mapFloors: [0, ...(world.manifest.floors ?? []).map((f) => f.id)],
       enemyContacts: escapeContacts
         .read(elapsed)
-        .map((c) => ({ ...c, floor: escapeFloor(v(c.position)),levelId:escapeLevelAt(c.position,world.manifest)?.id })),
+        .map((c) => ({ ...c, floor: escapeFloor(v(c.position)) })),
       supplies: supplies.map((p) => ({
         id: p.point.id,
         name: p.point.label,
         position: p.point.position,
         floor: escapeFloor(v(p.point.position)),
-        levelId: escapeLevelAt(p.point.position,world.manifest)?.id,
         used: p.collected,
       })),
       best: escapeBest,
@@ -1045,7 +1045,7 @@ export async function createGame(
     };
   }
   function escapeFloor(point: THREE.Vector3): number {
-    return escapeFloorAt(point.toArray() as Vec3, world.manifest);
+    return escapeFloorAt(point.toArray() as Vec3, world.manifest.floors);
   }
   function escapeTarget() {
     const snap = escapeRound?.snapshot(),
@@ -1140,7 +1140,7 @@ export async function createGame(
       return;
     input.reset();
     aiming = false;
-    escapeFire.reset();
+    escapeFire.reset();npcPaths.reset();
     for (const n of npcs) n.escapeAttack?.cancel();
     accumulator = 0;
     if (open) {
@@ -1225,7 +1225,7 @@ export async function createGame(
     escapePlan = null;
     escapeMapOpen = false;
     escapeMapClosing = false;
-    escapeFire.reset();
+    escapeFire.reset();npcPaths.reset();
     escapeMovement.reset();
     escapeRecovery.reset();
     escapeMotion = null;
@@ -1837,6 +1837,11 @@ export async function createGame(
                 ) + 0.05,
             ),
           visible: (a, b) => npcVisible(v(a), v(b)),
+          muzzleVisible: (feet, target) => {
+            const actual=n.rig.getMuzzleWorld().sub(n.position),delta=v(target).sub(v(feet)),current=npcTarget().sub(n.position);
+            actual.applyAxisAngle(new THREE.Vector3(0,1,0),Math.atan2(delta.x,delta.z)-Math.atan2(current.x,current.z));
+            return npcVisible(v(feet).add(actual),v(target));
+          },
           geometryVisible: tacticalGeometryVisible,
           obstacle: (a,b) => {const origin=v(a),delta=v(b).sub(origin),length=delta.length();if(length<.01)return null;delta.divideScalar(length);const hit=world.rayDistance(origin,delta,length);return hit<length-.12?origin.addScaledVector(delta,hit).toArray() as Vec3:null;},
         },
@@ -1850,11 +1855,8 @@ export async function createGame(
           n.destination.distanceToSquared(target) > 0.8;
       n.tacticalDecision = decision;
       if (changed || n.repath <= 0) {
-        n.repath = 0.65 + n.id * 0.08;
-        n.destination.copy(target);
-        n.path = decision.moving
-          ? world.actorPath(n.id, n.position, target)
-          : [];
+        const route=decision.moving?npcPaths.run('route-'+n.id,()=>world.actorPath(n.id,n.position,target)):[];
+        if(route!==undefined){n.repath=0.65+n.id*.08;n.destination.copy(target);n.path=route;}
       }
     }
     let speed = n.identity==='meng'&&cardsPursuit.windup>0?0:n.skill?.busy
@@ -1954,6 +1956,7 @@ export async function createGame(
           reloading: n.gun.reloadLeft > 0,
           automatic: WEAPONS[n.gun.id].automatic,
           attack: n.escapeAttack!,
+          ready: n.gun.action.ready && n.rig.isAimReady(target),
         };
       });
     escapeFire.update(dt, agents, { grace: elapsed < 10 });
@@ -2212,7 +2215,7 @@ export async function createGame(
       try {
         const stored = Number(
           localStorage.getItem(
-            "qisheng-escape-" + rankingRuleVersion("escape") + "-" + escapeSelectedDifficulty,
+            "qisheng-escape-0.3.0-" + escapeSelectedDifficulty,
           ),
         );
         if (stored > 0 && Number.isFinite(stored)) escapeBest = stored;
@@ -2773,7 +2776,7 @@ export async function createGame(
     });
   }
   async function start(next: Mode, loadout?: Loadout) {
-    if (import.meta.env.DEV) { (window as any).__gameStartError = null; delete canvas.dataset.startError; }
+    if (import.meta.env.DEV) (window as any).__gameStartError = null;
     if (dead) return;
     gameOperations.assert(entryFor(next));
     const permission = gameOperations.check(entryFor(next));
@@ -2912,14 +2915,12 @@ export async function createGame(
       return enter(false);
     } catch (error) {
       if (dead || token !== enterToken) return;
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV)
         (window as any).__gameStartError = {
           next,
           ids: value?.roster.ids,
           message: error instanceof Error ? error.message : String(error),
         };
-        canvas.dataset.startError = JSON.stringify((window as any).__gameStartError);
-      }
       cancelPreparation();
       cancelModePreparation();
       resetTransient();
@@ -3034,7 +3035,7 @@ export async function createGame(
     storyAudio.pause();
     if (mode === "story") saveStory();
     driveFire.reset();
-    escapeFire.reset();
+    escapeFire.reset();npcPaths.reset();
     escapeMapOpen = false;
     escapeMapClosing = false;
     for (const n of npcs) {
@@ -3565,7 +3566,7 @@ export async function createGame(
         escapeBest = result.score;
         try {
           localStorage.setItem(
-            "qisheng-escape-" + rankingRuleVersion("escape") + "-" + escapeSelectedDifficulty,
+            "qisheng-escape-0.3.0-" + escapeSelectedDifficulty,
             String(escapeBest),
           );
         } catch {}
@@ -4129,6 +4130,7 @@ export async function createGame(
     );
   }
   function senseNPCs(dt: number) {
+    if(mode === "escape")npcPaths.begin(dt);
     for (const n of npcs) {
       if (
         n.disabled > 0 ||
@@ -4202,7 +4204,8 @@ export async function createGame(
               ? npcSightEligible(eye.toArray() as Vec3,target.toArray() as Vec3,n.rig.root.rotation.y+Math.PI,crouched,true) && npcVisible(eye,target)
               : dist < (crouched ? 24 : 40) && (facing < 1.28 || dist < 5 || n.alert) && visible(eye, target);
           if (sees) {
-            if (!n.sees) n.reaction = mode==='escape'?npcReaction(escapeSelectedDifficulty,random):0.7+random()*.45;
+            if (!n.sees&&(mode!=='escape'||elapsed-(n.lastVisualAt??-Infinity)>=.3)) n.reaction = mode==='escape'?npcReaction(escapeSelectedDifficulty,random):0.7+random()*.45;
+            n.lastVisualAt=elapsed;
             n.lastKnown = position.clone();
             n.memory = mode==='escape'?NPC_COMBAT_PROFILES[escapeSelectedDifficulty].memory:7;
             n.alert = true;
@@ -4267,6 +4270,7 @@ export async function createGame(
         return {
           id: n.id,
           weapon: n.gun.id,
+          aimPoint: n.sees ? npcTarget().toArray() as Vec3 : undefined,
           position: n.position.toArray() as Vec3,
           known:
             n.team.target && !n.sees
@@ -4335,6 +4339,7 @@ export async function createGame(
       const path =
         mode === "dafei"
           ? world.pathOutdoor(candidate.position, target)
+          : mode === "escape" ? npcPaths.run('route-'+candidate.id,()=>world.actorPath(candidate.id,candidate.position,target,false))??[]
           : world.actorPath(candidate.id, candidate.position, target, false);
       if (path.length < 2 || path.at(-1)!.distanceTo(target) > 1.5) continue;
       if (
@@ -4455,8 +4460,9 @@ export async function createGame(
         const path =
           mode === "dafei"
             ? world.pathOutdoor(n.position, position)
+            : mode === "escape" ? npcPaths.run('route-'+n.id,()=>world.actorPath(n.id,n.position,position))??[]
             : world.actorPath(n.id, n.position, position);
-        if (!world.npcRouteSafe([n.position, ...path])) continue;
+        if (path.length<2||!world.npcRouteSafe([n.position, ...path])) continue;
         n.path = path;
         n.destination.copy(position);
         n.repath = 0.5;
@@ -4478,10 +4484,7 @@ export async function createGame(
         chosen = calloutRecipient(source, target);
       if (chosen) {
         const n = chosen.npc,
-          path =
-            mode === "dafei"
-              ? chosen.path
-              : world.actorPath(n.id, n.position, target);
+          path = chosen.path;
         if (
           path.length >= 2 &&
           (!n.driveAI ||

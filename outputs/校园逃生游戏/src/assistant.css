@@ -46,3 +46,14 @@
 @media(orientation:landscape) and (max-height:500px){.assistant-turn{margin-bottom:8px}.assistant-conversation{padding-bottom:8px}}
 
 .assistant-consent{flex-wrap:wrap;cursor:default;border:1px solid #d9d2c5;border-radius:var(--radius-card,12px);background:#f9f6ee}.assistant-consent>span{flex:1 1 220px}.assistant-consent>button{font:inherit;min-height:44px;padding:8px 12px;border:1px solid #bda68e;border-radius:var(--radius-control,3px);background:#fffcf5;color:#784935;cursor:pointer}.assistant-consent>.assistant-text-button{border-color:transparent;background:transparent;color:#666d60}
+
+/* The page owns the viewport; only the conversation scrolls. */
+.assistant-page{height:var(--assistant-available-height,calc(100dvh - 170px));min-height:0;min-width:0}
+.assistant-conversation{min-height:0;max-height:none;padding-bottom:18px}
+.assistant-toolbar,.assistant-composer-area{flex-shrink:0}
+.assistant-notices{padding-top:12px}.assistant-notices:empty{display:none}
+.assistant-page[data-keyboard=open] .assistant-composer-area{padding-top:8px;padding-bottom:4px}
+.assistant-page[data-keyboard=open] .assistant-composer textarea{max-height:80px}
+.assistant-page[data-keyboard=open] .assistant-footer-note{display:none}
+@media(max-width:650px){.assistant-page{height:var(--assistant-available-height,calc(100dvh - 140px));min-height:0}.assistant-conversation{min-height:0}.assistant-composer-area{padding-top:12px}.assistant-footer-note span:last-child{white-space:normal}.assistant-notices .assistant-consent{padding:10px}}
+@media(orientation:landscape) and (max-height:500px){.assistant-page{height:var(--assistant-available-height,calc(100dvh - 96px));min-height:0}}

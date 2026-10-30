@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "current": "hf-r02-web-1",
+  "current": "web-r01-campus-1",
   "catalogs": {
     "campus-v17-web-1": [
       {
@@ -296,6 +296,168 @@
           "take",
           "deliver"
         ]
+      }
+    ],
+    "web-r01-campus-1": [
+      {
+        "id": "yard",
+        "label": "示例地点 1",
+        "region": "teaching",
+        "position": [
+          -15.5,
+          0,
+          -16
+        ],
+        "floor": 0
+      },
+      {
+        "id": "teaching-supply",
+        "label": "示例地点 2",
+        "region": "teaching",
+        "position": [
+          -7.5,
+          0,
+          -16
+        ],
+        "floor": 0
+      },
+      {
+        "id": "library-west",
+        "label": "示例地点 3",
+        "region": "teaching",
+        "position": [
+          0.5,
+          0,
+          -16
+        ],
+        "floor": 0
+      },
+      {
+        "id": "sports-north",
+        "label": "示例地点 4",
+        "region": "sports",
+        "position": [
+          8.5,
+          0,
+          -16
+        ],
+        "floor": 0
+      },
+      {
+        "id": "sports-road",
+        "label": "示例地点 5",
+        "region": "sports",
+        "position": [
+          16.5,
+          0,
+          -16
+        ],
+        "floor": 0
+      },
+      {
+        "id": "canteen-north",
+        "label": "示例地点 6",
+        "region": "canteen",
+        "position": [
+          -15.5,
+          0,
+          -8
+        ],
+        "floor": 0
+      },
+      {
+        "id": "dorm-road",
+        "label": "示例地点 7",
+        "region": "dorm",
+        "position": [
+          -7.5,
+          0,
+          -8
+        ],
+        "floor": 0
+      },
+      {
+        "id": "dorm-yard",
+        "label": "示例地点 8",
+        "region": "dorm",
+        "position": [
+          0.5,
+          0,
+          -8
+        ],
+        "floor": 0,
+        "roles": [
+          "take",
+          "deliver"
+        ]
+      },
+      {
+        "id": "south-floor-1",
+        "label": "示例地点 9",
+        "region": "teaching",
+        "position": [
+          8.5,
+          3.8,
+          -8
+        ],
+        "floor": 1,
+        "roles": [
+          "take",
+          "activate",
+          "deliver"
+        ],
+        "buildingId": "south-teaching",
+        "levelId": "south-f1"
+      },
+      {
+        "id": "south-floor-2",
+        "label": "示例地点 10",
+        "region": "teaching",
+        "position": [
+          16.5,
+          7.6,
+          -8
+        ],
+        "floor": 2,
+        "roles": [
+          "take",
+          "activate",
+          "deliver"
+        ],
+        "buildingId": "south-teaching",
+        "levelId": "south-f2"
+      },
+      {
+        "id": "south-floor-1-west",
+        "label": "示例地点 11",
+        "region": "teaching",
+        "position": [
+          -15.5,
+          3.8,
+          0
+        ],
+        "floor": 1,
+        "roles": [
+          "activate"
+        ],
+        "buildingId": "south-teaching",
+        "levelId": "south-f1"
+      },
+      {
+        "id": "south-floor-2-west",
+        "label": "示例地点 12",
+        "region": "teaching",
+        "position": [
+          -7.5,
+          7.6,
+          0
+        ],
+        "floor": 2,
+        "roles": [
+          "activate"
+        ],
+        "buildingId": "south-teaching",
+        "levelId": "south-f2"
       }
     ]
   }
