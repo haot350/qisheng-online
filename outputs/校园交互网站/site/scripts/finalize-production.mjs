@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {assertStaticReleasePath} from './guard-static-release.mjs';
+import {gunzipSync} from 'node:zlib';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const source=path.join(root,'public'),output=path.join(root,'dist/client');
@@ -21,7 +22,16 @@ function include(url,expected){
  requested.set(relative,expected??previous);
 }
 include('/map/manifest.json',hash(manifestBytes));include('/map/resource-index.json',hash(indexBytes));
-for(const [logical,resource] of Object.entries(index.resources)){include(logical,resource.sha256);include(resource.url,resource.sha256);}
+for(const [logical,resource] of Object.entries(index.resources)){
+ const encoding=resource.encoding;
+ if(encoding){
+  if(encoding.format!=='gzip'||!Number.isSafeInteger(encoding.decodedBytes)||encoding.decodedBytes<0||encoding.decodedBytes>128*1024*1024)throw Error('Invalid encoded map resource.');
+  const compressed=await readFile(path.join(source,resource.url)),decoded=gunzipSync(compressed,{maxOutputLength:encoding.decodedBytes});
+  if(decoded.length!==encoding.decodedBytes||hash(decoded)!==encoding.decodedSha256)throw Error('Encoded map resource does not match its decoded identity.');
+  include(logical,encoding.decodedSha256);include(encoding.decodedUrl,encoding.decodedSha256);
+ }else include(logical,resource.sha256);
+ include(resource.url,resource.sha256);
+}
 const staticAssets=JSON.parse(await readFile(path.join(root,'lib/generated/static-assets.json'),'utf8'));
 for(const url of Object.values(staticAssets)){include(url,path.basename(url).match(/^([a-f0-9]{64})\./)?.[1]);}
 for(const url of ['/favicon.svg','/_headers','/spaces.json'])if(await stat(path.join(source,url)).catch(()=>null))include(url);

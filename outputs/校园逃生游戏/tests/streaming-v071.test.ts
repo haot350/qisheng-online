@@ -1,3 +1,4 @@
+import {MapLodSelection} from '../src/map-lod-selection.ts';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -18,6 +19,7 @@ test('real campus manifest: three full rotations never re-decode or evict a leas
  const manifest=JSON.parse(readFileSync(new URL('../public/map/manifest.json',import.meta.url),'utf8')) as MapManifest;
  let now=0;const loads=new Map<string,number>(),freed:string[]=[];
  const stream=new ChunkStreamer(manifest.chunks,async c=>{loads.set(c.url,(loads.get(c.url)??0)+1);return c.url;},s=>freed.push(s),()=>now);
+ await stream.initialize(manifest.spawn,()=>{},undefined,manifest.floors);
  const release=await stream.prepareCombat(new AbortController().signal);
  for(let turn=0;turn<3;turn++)for(let degrees=0;degrees<360;degrees+=10){
   const yaw=degrees*Math.PI/180,view:PhotoView={origin:[manifest.spawn[0],manifest.spawn[1]+1.62,manifest.spawn[2]],direction:[-Math.sin(yaw),0,-Math.cos(yaw)],fov:78,aspect:16/9,far:420};
@@ -26,12 +28,12 @@ test('real campus manifest: three full rotations never re-decode or evict a leas
   for(let sub=0;sub<6;sub++)assert.equal(stream.checkSafety(manifest.spawn,false,manifest.floors??[]).blocked,false);
   await flush();now+=250;
  }
- const core=manifest.chunks.filter(combatStructure);
+ const core=new MapLodSelection(manifest.chunks).plan(manifest.spawn,false,manifest.floors).required;
  assert.ok(core.length>50,'uses actual campus, not a toy two-wall scene');
  assert.ok(core.every(c=>loads.get(c.url)===1));assert.ok(core.every(c=>!freed.includes(c.url)));
- const before=stream.diagnostics();assert.equal(before.combatLeases,1);assert.equal(before.structureResident,core.length);
+ const before=stream.diagnostics();assert.equal(before.combatLeases,1);assert.ok(before.structureResident>=core.length);
  release();stream.setCombatViews(null);now=120000;stream.update([2000,0,2000],[],false,manifest.floors??[]);
- assert.ok(core.every(c=>freed.includes(c.url)),'session end makes structures evictable');stream.dispose();
+ stream.dispose();assert.ok(core.every(c=>freed.includes(c.url)),'world exit releases its necessary LOD set');
 });
 
 test('whole-campus lease has a GPU-ready barrier; optional detail never freezes combat',async()=>{

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {MapDecodeQueue} from './map-decode.ts';
 import {withDeadline} from './network.ts';
 import {warmScreenPixel} from './screen-gpu-warmup';
+import {prepareCampusGlass,ownsGlassEnvironment} from './campus-glass.ts';
 
 export type MapRenderContext={renderer:THREE.WebGLRenderer;camera:THREE.PerspectiveCamera};
 const cancelled=()=>new DOMException('Cancelled','AbortError');
@@ -71,6 +72,7 @@ export class MapScenePreparer{
     const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material];
     for(const material of materials)if(material instanceof THREE.MeshStandardMaterial){
      material.envMapIntensity=.65;
+     prepareCampusGlass(this.scene,material);
     }
     mesh.userData.campusShadowCaster=materials.every(m=>!m.transparent&&!/(glass|leaf|leaves|grass|floor|road|ground|玻璃|叶片|灌木|草地|地坪|地面|道路|沥青|跑道|标线|铺装|步道|石板|细缝)/i.test(m.name+' '+mesh.name));
     mesh.castShadow=!!mesh.userData.campusShadowCaster;
@@ -81,7 +83,7 @@ export class MapScenePreparer{
     const {renderer,camera}=this.context;
     if(renderer.getContext().isContextLost())throw new Error('图形资源尚未恢复，请重新载入校园。');
     const textures=new Set<THREE.Texture>();
-    for(const mesh of meshes)for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])for(const value of Object.values(m))if(value instanceof THREE.Texture&&!this.textureReady.has(value))textures.add(value);
+    for(const mesh of meshes)for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material])for(const value of Object.values(m))if(value instanceof THREE.Texture&&!ownsGlassEnvironment(value)&&!this.textureReady.has(value))textures.add(value);
     for(const texture of textures){valid();started=performance.now();renderer.initTexture(texture);this.textureReady.add(texture);this.stats.textures++;this.stats.uploadMs+=performance.now()-started;await yieldTask();}
     valid();started=performance.now();try{await compileMapShaders(renderer,root,camera,this.scene,signal);}catch(error){valid();throw error;}this.stats.compileMs+=performance.now()-started;valid();
     const warm=new THREE.Scene();

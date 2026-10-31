@@ -25,13 +25,13 @@ export class OnlineVisualWorld {
  readonly streamer:ChunkStreamer<THREE.Group>;
  constructor(readonly manifest:MapManifest,scene:THREE.Scene,context?:MapRenderContext){
   scene.add(this.root);this.root.name='online-campus';this.preparer=new MapScenePreparer(scene,context);
-  this.streamer=new ChunkStreamer(manifest.chunks,async(chunk,signal,priority)=>{
+  this.streamer=new ChunkStreamer(manifest.chunks,async(chunk,signal,priority,byteReady)=>{
    const manager=new THREE.LoadingManager(),loader=new GLTFLoader(manager),abort=()=>manager.abort();loader.setMeshoptDecoder(MeshoptDecoder);
    manager.addHandler(/\.webp(?:\?|$)/i,this.images.handler(signal));
    signal.addEventListener('abort',abort,{once:true});
    try{
     await this.images.prepare(chunk,signal);
-    const bytes=await gameMapSession.read(chunk.url,{signal,priority});
+    const bytes=await gameMapSession.read(chunk.url,{signal,priority});byteReady?.(bytes.byteLength);
     const asset=await withDeadline(this.decode.run(()=>loader.parseAsync(bytes,new URL('.',new URL(chunk.url,location.href)).href),signal,priority),30000,{signal,onLate:g=>{this.resources.retain(g.scene);this.resources.release(g.scene);}});
     const root=asset.scene;this.resources.retain(root);
     try{

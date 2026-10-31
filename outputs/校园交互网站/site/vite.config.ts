@@ -1,7 +1,7 @@
-import {defineConfig,type Plugin} from 'vite';
+import {defineConfig,type Plugin,type UserConfig} from 'vite';
 import {writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
-export default defineConfig(async()=>{
+export default defineConfig(async():Promise<UserConfig>=>{
  const profile=process.env.OPENQS_PROFILE??'demo';if(!['demo','production'].includes(profile))throw Error('OPENQS_PROFILE must be demo or production.');
  const marker:Plugin={name:'openqs-build-profile',async writeBundle(){await mkdir(path.resolve('dist/client'),{recursive:true});await writeFile(path.resolve('dist/client/openqs-profile.json'),JSON.stringify({profile,application:'campus',...(profile==='demo'?{localOnly:true}: {})})+'\n');}};
  if(profile==='production'){const {default:production}=await import('./vite.ui.config');return production;}

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {portraitPixelOpaque,type PortraitAlpha} from './portrait-mask.ts';
 import {wrapAngle,WEAPONS} from './rules.ts';
 import type {WeaponId} from './types';
 import type {AttackPhase,IncomingDamage} from './types';
@@ -26,7 +27,7 @@ export type HitRegion='head'|'torso'|'arm'|'leg';
 export interface BodyHit {distance:number;region:HitRegion;point:THREE.Vector3}
 export interface BodyLayout {w:number;h:number;box:number[];head:number[];torso:number[];arms:number[][];legs:number[][];anchorX?:number}
 /** Intersect the visible image plane, then an anatomical region and its alpha mask. */
-export function portraitHit(origin:THREE.Vector3,direction:THREE.Vector3,plane:THREE.Mesh,shape:BodyLayout,alpha?:{width:number;height:number;data:Uint8Array}):BodyHit|null {
+export function portraitHit(origin:THREE.Vector3,direction:THREE.Vector3,plane:THREE.Mesh,shape:BodyLayout,alpha?:PortraitAlpha):BodyHit|null {
  plane.updateWorldMatrix(true,false);
  const inv=plane.matrixWorld.clone().invert(),localOrigin=origin.clone().applyMatrix4(inv),localDirection=direction.clone().transformDirection(inv);
  if(Math.abs(localDirection.z)<1e-6)return null;
@@ -36,7 +37,7 @@ export function portraitHit(origin:THREE.Vector3,direction:THREE.Vector3,plane:T
  const u=(local.x-box.min.x)/(box.max.x-box.min.x),vy=(local.y-box.min.y)/(box.max.y-box.min.y);
  if(u<0||u>1||vy<0||vy>1)return null;
  const x=u*shape.w,y=(1-vy)*shape.h;
- if(alpha){const px=Math.min(alpha.width-1,Math.floor(u*alpha.width)),py=Math.min(alpha.height-1,Math.floor((1-vy)*alpha.height));if(alpha.data[py*alpha.width+px]<128)return null;}
+ if(alpha){const px=Math.min(alpha.width-1,Math.floor(u*alpha.width)),py=Math.min(alpha.height-1,Math.floor((1-vy)*alpha.height));if(!portraitPixelOpaque(alpha,px,py))return null;}
  const inside=(r:number[])=>x>=r[0]&&y>=r[1]&&x<=r[2]&&y<=r[3];
  const region:HitRegion|null=inside(shape.head)?'head':inside(shape.torso)?'torso':shape.arms.some(inside)?'arm':shape.legs.some(inside)?'leg':null;
  if(!region)return null;const point=local.applyMatrix4(plane.matrixWorld);return {point,distance:point.distanceTo(origin),region};

@@ -113,14 +113,14 @@ export class ChunkStreamer<T> {
       controller: AbortController;
       started: number;
       cancelled: boolean;
+      downloaded: boolean;
+      bytes: number;
     }
   >();
   private failures = new Map<string, number>();
   private needed: MapChunk[] = [];
   private wanted: MapChunk[] = [];
   private alive = true;
-  private initialTotal = 0;
-  private initialDone = 0;
   private revision = 0;
   private photoView: PhotoView | null = null;
   private viewNeeded: MapChunk[] = [];
@@ -143,6 +143,9 @@ export class ChunkStreamer<T> {
   private lodPlan?:LodPlan;
   private selectionPoint:Vec3=[0,0,0];
   private mapFloors:import('./types').MapManifest['floors']=[];
+  private peakPendingBytes=0;
+  private readonly pipelineByteBudget=8*1024*1024;
+  private readonly pipelineJobBudget=8;
   private counters = {updates:0, geometryScans:0, loads:0, evictions:0, distanceEvictions:0, budgetEvictions:0, cancelled:0};
   private residencyRevision=-1;
   private residencyAt=-Infinity;
@@ -212,6 +215,7 @@ export class ChunkStreamer<T> {
       c: MapChunk,
       signal: AbortSignal,
       priority?: number,
+      byteReady?: (bytes:number)=>void,
     ) => Promise<T>,
     private release: (asset: T) => void,
     private now = () => performance.now(),
@@ -272,23 +276,12 @@ export class ChunkStreamer<T> {
       this.needed=this.lodPlan.required;this.neededUrls=new Set(this.needed.map(c=>c.url));
     }
     const first = this.lodSelection.enabled?this.lodPlan!.required:this.chunks.filter((c) => c.residency !== 'detail' && chunkDistance(c, point) < 38);
-    this.initialTotal = first.reduce((n, c) => n + (c.bytes ?? 1), 0) || 1;
     const cancel = () => this.dispose();
     signal?.addEventListener("abort", cancel, { once: true });
     if (signal?.aborted) cancel();
     try {
-      let next = 0;
-      const worker = async () => {
-        while (next < first.length) {
-          if (signal?.aborted)
-            throw new DOMException("Cancelled", "AbortError");
-          const c = first[next++];
-          await this.fetch(c, 0);
-          this.initialDone += c.bytes ?? 1;
-          onProgress(this.initialDone / this.initialTotal);
-        }
-      };
-      await Promise.all([worker(), worker()]);
+      const release=await this.prepareSelection(first,signal??new AbortController().signal,p=>{if(p>0)onProgress(p);},false);
+      release();
     } finally {
       signal?.removeEventListener("abort", cancel);
     }
@@ -301,14 +294,16 @@ export class ChunkStreamer<T> {
     const existing = this.pending.get(chunk.url);
     if (existing) return existing;
     const controller = new AbortController(),
-      request = { controller, started: this.now(), cancelled: false };
+      request = { controller, started: this.now(), cancelled: false, downloaded:false, bytes:Math.max(1,chunk.bytes??1) };
     this.requests.set(chunk.url, request);
+    this.peakPendingBytes=Math.max(this.peakPendingBytes,[...this.requests.values()].reduce((n,r)=>n+r.bytes,0));
     let loading: Promise<T>;
     try {
       loading = this.load(
         chunk,
         controller.signal,
         Number.isFinite(priority) ? priority : 3,
+        bytes=>{if(!this.alive||request.cancelled||this.requests.get(chunk.url)!==request)return;if(bytes>request.bytes)throw Error('地图分块大小超出声明预算。');request.downloaded=true;this.pump();},
       );
     } catch (error) {
       loading = Promise.reject(error);
@@ -592,14 +587,17 @@ export class ChunkStreamer<T> {
       for (const c of this.queue) {
         if (
           this.assets.has(c.url) ||
-          this.pending.has(c.url) ||
+          this.pending.has(c.url) || this.requests.has(c.url) ||
           this.now() - (this.failures.get(c.url) ?? -Infinity) < 5000
         )
           continue;
-        if (this.pending.size >= 2) {
+        const pendingBytes=[...this.requests.values()].reduce((n,r)=>n+r.bytes,0),cost=Math.max(1,c.bytes??1);
+        if(cost>this.pipelineByteBudget){this.failures.set(c.url,this.now());for(const notify of [...this.listeners])notify();continue;}
+        if(this.requests.size>=this.pipelineJobBudget||pendingBytes+cost>this.pipelineByteBudget)continue;
+        if ([...this.requests.values()].filter(r=>!r.downloaded).length >= 2) {
           // An optional slow download must never hold up the ground under the player.
           const candidate = [...this.requests]
-            .filter(([url]) => this.priority(url) > this.priority(c.url))
+            .filter(([url,request]) => !request.downloaded && this.priority(url) > this.priority(c.url))
             .sort(
               (a, b) =>
                 this.priority(b[0]) - this.priority(a[0]) ||
@@ -807,7 +805,7 @@ export class ChunkStreamer<T> {
       const c=this.index.get(url)!;downloadBytes+=c.bytes??0;geometryBytes+=c.decodedGeometryBytes??0;triangles+=c.triangles??0;
       if(combatStructure(c))structures++;for(const t of c.textureResources??[])textures.set(t.id,t.bytes);
     }
-    return {...this.counters,resident:this.assets.size,structureResident:structures,structureTotal:this.combatCore.length,combatLeases:this.combatLeases.size,pending:this.pending.size,downloadBytes,decodedGeometryBytes:geometryBytes,uniqueTextureBytes:[...textures.values()].reduce((a,b)=>a+b,0),manifestTriangles:triangles,lod:this.lodSelection.enabled?{baseline:this.lodPlan?.baseline.size??0,required:this.needed.length,wanted:this.wanted.length,missing:this.needed.filter(c=>!this.assets.has(c.url)).map(c=>c.id??c.url).slice(0,12),budgetMiB:this.geometryInput?.low?128:192}:undefined};
+    return {...this.counters,resident:this.assets.size,structureResident:structures,structureTotal:this.combatCore.length,combatLeases:this.combatLeases.size,pending:this.pending.size,pipeline:{downloading:[...this.requests.values()].filter(r=>!r.downloaded).length,preparing:[...this.requests.values()].filter(r=>r.downloaded).length,pendingBytes:[...this.requests.values()].reduce((n,r)=>n+r.bytes,0),peakPendingBytes:this.peakPendingBytes,byteBudget:this.pipelineByteBudget,jobBudget:this.pipelineJobBudget},downloadBytes,decodedGeometryBytes:geometryBytes,uniqueTextureBytes:[...textures.values()].reduce((a,b)=>a+b,0),manifestTriangles:triangles,lod:this.lodSelection.enabled?{baseline:this.lodPlan?.baseline.size??0,required:this.needed.length,wanted:this.wanted.length,missing:this.needed.filter(c=>!this.assets.has(c.url)).map(c=>c.id??c.url).slice(0,12),budgetMiB:this.geometryInput?.low?128:192}:undefined};
   }
   forEach(fn: (asset: T, chunk: MapChunk, distance: number) => void) {
     for (const [url, asset] of this.assets)

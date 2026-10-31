@@ -1,3 +1,4 @@
+import {decodedMapResourceBinding} from '../map-cache';
 import { Client, type Room, type SeatReservation } from "@colyseus/sdk";
 import { rankingClient, RankingError } from "../ranking/client";
 import { gameMapSession } from "../game-map";
@@ -71,9 +72,9 @@ export async function localMapIdentity(
   return {
     sourceVersion: manifest.sourceVersion || manifest.source,
     manifestHash: index.manifest.sha256,
-    collisionHash: collision.sha256,
-    navigationHash: navigation.sha256,
-    ...(vision ? { visionHash: vision.sha256 } : {}),
+    collisionHash: decodedMapResourceBinding(collision).sha256,
+    navigationHash: decodedMapResourceBinding(navigation).sha256,
+    ...(vision ? { visionHash: decodedMapResourceBinding(vision).sha256 } : {}),
   };
 }
 /** The SDK creates the Room synchronously, before its JOIN promise resolves.

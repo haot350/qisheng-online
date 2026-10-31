@@ -1,5 +1,6 @@
 import {CombatTraining,trainingPlan} from './training';
 import {WeatherScene} from './weather-scene';
+import {CampusGlassEnvironment} from './campus-glass';
 import {stairGuideForRoute,type StairGuide} from './escape-stair-guidance';
 import {NpcPathBudget} from './escape/path-budget.ts';
 import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGadget,cycleGadget,helmetDamage,grenadeDamage,useCards,confiscatedHealth,type GadgetId,type GadgetLoot,type GrenadeState} from '@qisheng/shared/gadgets';
@@ -9,6 +10,7 @@ import * as THREE from "three";
 import {AdaptiveRenderQuality,resolveRenderProfile} from '@qisheng/shared/render-profile';
 import {applyRendererProfile} from './render-quality';
 import { FrameDiagnostics } from './frame-diagnostics.ts';
+import { PreparationProgress, type PreparationTiming } from './preparation-progress.ts';
 import { gameOperations } from './game-operations';
 import { entryFor, ModeUnavailableError } from './game-config-store';
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -341,6 +343,7 @@ export async function createGame(
     room.dispose();
     pmrem.dispose();
   }
+  const glassEnvironment=new CampusGlassEnvironment(scene,renderer,{quality:settings.quality,mobile:qualityDevice.mobile,low:renderProfile().low,weather:settings.weather});
   let viewWeapon: ViewWeapon | null = null;
   const effects = new CombatEffects(scene),
     directions = new DamageDirections(),
@@ -471,6 +474,7 @@ export async function createGame(
   const driveFire = new DrivingFireCoordinator(),
     respawnWait = new Map<number, number>(),
     lastSpawn = new Map<number, Vec3>();
+  let preparationTimings: PreparationTiming[] = [];
   let preparation: AbortController | null = null,
     introCarReady = false;
   type PreparedMode = {
@@ -842,6 +846,7 @@ export async function createGame(
       ? new THREE.Fog(scene.background as THREE.Color, 100, 330)
       : new THREE.Fog(0xccdce3, low ? 35 : 50, low ? 72 : 98);
     weatherScene.set({preset:settings.weather??'clear',seed:roundSeed>>>0,startedAtTick:0},low,mode!=='story');
+    glassEnvironment.set({quality:settings.quality,mobile:qualityDevice.mobile,low,weather:mode==='story'?'clear':settings.weather});
     photo?.setPreviewQuality(settings.quality, adaptiveRatio);
     photo?.setPreviewMobile(profile.previewMobile);
     quality = profile.label;
@@ -2503,12 +2508,15 @@ export async function createGame(
     let committed = false;
     const work = (async () => {
       try {
-        report(0, "准备校园");
-        const ratios = [0, 0, 0, 0],
-          update = (index: number, ratio: number, text: string) => {
-            ratios[index] = ratio;
-            report(ratios.reduce((n, v) => n + v, 0) * 0.2, text);
-          };
+        report(0, "下载校园");
+        const stages = new PreparationProgress([
+          {id:'3',label:'下载校园'},
+          {id:'0',label:'准备人物与装备'},
+          {id:'1',label:'准备人物与装备'},
+          {id:'2',label:'准备场景'},
+          {id:'scene',label:'准备场景'},
+        ], (ratio,text) => { preparationTimings=stages.timings(); report(ratio,text); });
+        const update = (index:number,ratio:number,text:string) => stages.update(String(index),ratio,text);
         const worldReady = Promise.all([
           ensureWorld(token, signal, (p, msg) => update(3, p, msg)),
           preloadModeUI(next),
@@ -2631,8 +2639,8 @@ export async function createGame(
           });
         }
         const dropViews = next==='escape'
-          ? await world.prepareCombat(signal,r=>report(.8+r*.2,'准备校园画面'))
-          : await world.prepareViews(views, signal, (r) => report(0.8 + r * 0.2, "准备出发位置"));
+          ? await world.prepareCombat(signal,r=>stages.update('scene',r,'准备场景'))
+          : await world.prepareViews(views, signal,r=>stages.update('scene',r,'准备场景'));
         if (signal.aborted || token !== enterToken) {
           dropViews();
           throw new DOMException("Cancelled", "AbortError");
@@ -2812,6 +2820,16 @@ export async function createGame(
       await pointer;
       if (dead || token !== enterToken || controller.signal.aborted) return;
       if (!modePrepared(next, loadout)) throw Error("本局准备已更改。");
+      const entryStages = new PreparationProgress([
+        {id:'gpu',label:'准备人物与装备'},
+        {id:'enter',label:'进入校园'},
+      ], (ratio,text) => {
+        if(dead||token!==enterToken||controller.signal.aborted)return;
+        progress=90+ratio*10;message=text;
+        preparationTimings=[...preparationTimings.slice(0,5),...entryStages.timings()];
+        emit();
+      });
+      entryStages.update('gpu',0);
       if (!loadout?.training && !rankingRetryStarted) {
         rankingRetryStarted = true;
         void rankingClient
@@ -2842,14 +2860,17 @@ export async function createGame(
       }
       if (car) car.root.visible = true;
       setupRound();
-      if(next==='dafei'&&car){const gpu=new CombatGpuPreparer(renderer,scene,camera);try{await gpu.prepare(car.root,controller.signal);if(cannon)await gpu.prepare(cannon.root,controller.signal);}finally{gpu.dispose();}}
+      if(next==='dafei'&&car){const gpu=new CombatGpuPreparer(renderer,scene,camera);try{await gpu.prepare(car.root,controller.signal);entryStages.update('gpu',cannon ? .5 : 1);if(cannon)await gpu.prepare(cannon.root,controller.signal);}finally{gpu.dispose();}}
       if(next==='escape'){
         const gpu=new CombatGpuPreparer(renderer,scene,camera);
-        try{await gpu.prepare(effects.root,controller.signal);const restoreShell=effects.prepareGeometryVariants();try{await gpu.prepare(effects.root,controller.signal);}finally{restoreShell();}for(const root of gadgetScene.prepareRoots)await gpu.prepare(root,controller.signal);for(const npc of npcs){await gpu.prepareTextures(npc.rig.preparationTextures,controller.signal);await gpu.prepare(npc.rig.root,controller.signal);}}
+        const total=3+gadgetScene.prepareRoots.length+npcs.length*2;let completed=0;
+        const advanced=()=>entryStages.update('gpu',++completed/total);
+        try{await gpu.prepare(effects.root,controller.signal);advanced();const restoreShell=effects.prepareGeometryVariants();try{await gpu.prepare(effects.root,controller.signal);advanced();}finally{restoreShell();}for(const root of gadgetScene.prepareRoots){await gpu.prepare(root,controller.signal);advanced();}for(const npc of npcs){await gpu.prepareTextures(npc.rig.preparationTextures,controller.signal);advanced();await gpu.prepare(npc.rig.root,controller.signal);advanced();}}
         finally{gpu.dispose();}
-        if(viewWeapon){const firstPerson=new CombatGpuPreparer(renderer,viewScene,viewCamera);try{await firstPerson.prepare(viewWeapon.root,controller.signal);}finally{firstPerson.dispose();}}
+        if(viewWeapon){const firstPerson=new CombatGpuPreparer(renderer,viewScene,viewCamera);try{await firstPerson.prepare(viewWeapon.root,controller.signal);advanced();}finally{firstPerson.dispose();}}
         if(dead||token!==enterToken||controller.signal.aborted)return;
       }
+      entryStages.update('gpu',1);
       pendingRoster = null;
       if (driving) {
         car?.update(driving.read(), 0);
@@ -2909,6 +2930,7 @@ export async function createGame(
         await prepareRankedRound(token, controller.signal);
       if (dead || token !== enterToken || controller.signal.aborted) return;
       preparation = null;
+      entryStages.update('enter',1);
       progress = 100;
       message = "";
       storyGesturePrimed = false;
@@ -6151,6 +6173,7 @@ export async function createGame(
         jsHeapBytes: heap?.usedJSHeapSize ?? null,
         frame:frameDiagnostics.snapshot(),
         streaming:world?.diagnostics(),
+        preparation:preparationTimings,
       });
     }
     if (import.meta.env.DEV) {
@@ -6378,6 +6401,7 @@ export async function createGame(
     effects.dispose();
     gadgetScene.dispose();
     weatherScene.dispose();
+    glassEnvironment.dispose();
     gunEnvironment?.dispose();
     photographyMarkers?.dispose();
     world?.dispose();

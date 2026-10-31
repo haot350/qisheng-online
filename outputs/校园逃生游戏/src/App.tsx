@@ -379,7 +379,6 @@ function HelpContent({
     </div>
   );
 }
-const QaMapControls=import.meta.env.DEV?lazy(()=>import('./qa/MapControls')):null;
 export default function App() {
   const operational = useGameOperations();
   const localRoundAccepted = useRef(false);
@@ -824,13 +823,16 @@ export default function App() {
     const abort = new AbortController();
     let releasePreparation: (() => void) | undefined;
     setPreparation({ state: "loading", progress: 0, message: "正在准备资源" });
+    let completedProgress = 0;
     const onProgress = (progress: number, message: string) => {
-      if (!abort.signal.aborted)
+      if (!abort.signal.aborted) {
+        completedProgress = Math.max(completedProgress, Math.min(99, Math.round(progress * 100)));
         setPreparation({
           state: "loading",
-          progress: Math.min(99, Math.round(progress * 100)),
+          progress: completedProgress,
           message,
         });
+      }
     };
     const onlinePrep = selectedMode === "escape" && escapeEntry !== "single";
     if (!onlinePrep) game.current?.setSettings(settingsRef.current);
@@ -1430,7 +1432,18 @@ export default function App() {
       }
     >
       <div className="world" ref={host} />
-      {QaMapControls&&<Suspense fallback={null}><QaMapControls api={game.current} snapshot={snapshot} settings={settings}/></Suspense>}
+      {online && snapshot.phase === 'loading' && !onlineOpen && !onlineReadingOpen && (
+        <div className="online-shade">
+          <section className="online-panel online-small" aria-label="准备进入校园">
+            <div className="online-body">
+              <h2>准备进入校园</h2>
+              <p role="status">{snapshot.message || '正在准备场景'}</p>
+              <progress aria-label="本局资源准备" max={100} value={Math.max(0,Math.min(100,snapshot.progress))}/>
+              <div className="online-actions"><button onClick={()=>onlineAction({type:'leave'})}>取消并离开房间</button></div>
+            </div>
+          </section>
+        </div>
+      )}
       <input
         ref={importInput}
         hidden

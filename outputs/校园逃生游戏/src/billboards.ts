@@ -11,9 +11,11 @@ import {NPC_IDENTITY,npcPoseFilename,type NpcIdentityId,type NpcPose} from './np
 import {withDeadline} from './network.ts';
 import {resourceWorkQueue,fetchResource,decodeResourceImage,abortResource,waitForResource} from './resource-leases.ts';
 import {staticAssetUrl} from './static-assets.ts';
+import {retainBillboardMask} from './billboard-masks.ts';
+import type {PortraitMask} from './portrait-mask.ts';
 
-type Pose={texture:THREE.Texture;shape:BodyLayout;hand:readonly [number,number,number];alpha?:{width:number;height:number;data:Uint8Array}};
-type Entry={key:string;refs:number;abort:AbortController;promise:Promise<Pose>;pose?:Pose;disposed:boolean};
+type Pose={texture:THREE.Texture;shape:BodyLayout;hand:readonly [number,number,number];alpha:PortraitMask};
+type Entry={key:string;refs:number;abort:AbortController;promise:Promise<Pose>;pose?:Pose;disposed:boolean;maskRelease?:()=>void};
 const cache=new Map<string,Entry>();
 const poseKey=(id:NpcIdentityId,pose:NpcPose,mobile:boolean)=>`${id}:${pose}:${mobile?'mobile':'desktop'}`;
 const cancelled=()=>new Error('人物图片载入已中止。');
@@ -39,6 +41,7 @@ function releaseEntry(entry:Entry){
  if(--entry.refs===0){
   if(cache.get(entry.key)===entry)cache.delete(entry.key);
   entry.abort.abort();
+  entry.maskRelease?.();
   if(entry.pose&&!entry.disposed){entry.disposed=true;entry.pose.texture.dispose();}
  }
 }
@@ -50,21 +53,19 @@ function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
  const filename=npcPoseFilename(id,pose,mobile);
  entry.promise=resourceWorkQueue.run(abort.signal,async()=>{
   const bytes=await withDeadline(fetchResource(staticAssetUrl(filename),abort.signal),30000,{signal:abort.signal});
+  const maskLease=retainBillboardMask(filename,abort.signal);entry.maskRelease=maskLease.release;
+  const maskWork=maskLease.mask;void maskWork.catch(()=>{});
   const image=await withDeadline(decodeResourceImage(bytes,abort.signal),30000,{signal:abort.signal});abortResource(abort.signal);
   const texture=new THREE.Texture(image);texture.needsUpdate=true;
   try{
    texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=2;
-   const {shape,hand}=npcPortraitLayout(id,pose);let alpha:Pose['alpha'];
+   const {shape,hand}=npcPortraitLayout(id,pose),alpha=await maskWork;
    const im=texture.image as {width:number;height:number};
-   if(typeof document!=='undefined'){
-    const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});
-    if(ctx){ctx.drawImage(texture.image,0,0);const rgba=ctx.getImageData(0,0,im.width,im.height).data,data=new Uint8Array(im.width*im.height);for(let j=0;j<data.length;j++)data[j]=rgba[j*4+3];alpha={width:im.width,height:im.height,data};canvas.width=canvas.height=0;}
-   }
+   if(alpha.width!==im.width||alpha.height!==im.height)throw Error('人物图片与轮廓尺寸不一致。');
    if(entry.refs===0)throw cancelled();
    const loaded={texture,shape,hand,alpha};entry.pose=loaded;return loaded;
   }catch(error){texture.dispose();entry.disposed=true;throw error;}
- }).catch(error=>{abort.abort();if(cache.get(key)===entry)cache.delete(key);throw error;});
+ }).catch(error=>{entry.maskRelease?.();abort.abort();if(cache.get(key)===entry)cache.delete(key);throw error;});
  return entry;
 }
 
@@ -120,7 +121,7 @@ export function createBillboardCharacter(identityId:NpcIdentityId,mobile=false){
 
 
 export function billboardResourceDiagnostics(){
- let pixels=0,references=0,ready=0;
- for(const entry of cache.values()){references+=entry.refs;if(entry.pose){ready++;const image=entry.pose.texture.image as {width:number;height:number};pixels+=image.width*image.height;}}
- return{entries:cache.size,ready,references,decodedPixels:pixels,approxRgbaBytes:pixels*4,keys:[...cache.keys()]};
+ let pixels=0,references=0,ready=0,alphaMaskBytes=0;
+ for(const entry of cache.values()){references+=entry.refs;if(entry.pose){ready++;alphaMaskBytes+=entry.pose.alpha.bits.byteLength;const image=entry.pose.texture.image as {width:number;height:number};pixels+=image.width*image.height;}}
+ return{entries:cache.size,ready,references,decodedPixels:pixels,approxRgbaBytes:pixels*4,alphaMaskBytes,keys:[...cache.keys()]};
 }

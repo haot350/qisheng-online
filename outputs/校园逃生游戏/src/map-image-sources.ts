@@ -26,7 +26,7 @@ export class MapImageSources{
   return pending;
  }
  async prepare(chunk:MapChunk,signal:AbortSignal){
-  for(const uri of chunk.dependencies??[]){if(signal.aborted||this.lifetime.signal.aborted)throw new DOMException('Cancelled','AbortError');if(/\.webp$/i.test(uri))await awaitWithSignal(this.source(uri),signal);}
+  if(signal.aborted||this.lifetime.signal.aborted)throw new DOMException('Cancelled','AbortError');await Promise.all((chunk.dependencies??[]).filter(uri=>/\.webp$/i.test(uri)).map(uri=>awaitWithSignal(this.source(uri),signal)));
  }
  handler(signal:AbortSignal):THREE.Loader<THREE.Texture>{
   const owner=this;

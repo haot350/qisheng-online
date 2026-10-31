@@ -8,6 +8,7 @@ const profile=readBuildProfile(),root=fileURLToPath(new URL('../',import.meta.ur
 if(profile==='demo'){
  const generated=new URL('../src/generated/',import.meta.url);await mkdir(generated,{recursive:true});
  const mapping=new URL('static-assets.json',generated);try{await access(mapping);}catch(error){if(error.code!=='ENOENT')throw error;await writeFile(mapping,'{}\n',{flag:'wx'});}
+  const masks=new URL('billboard-alpha-index.json',generated);try{await access(masks);}catch(error){if(error.code!=='ENOENT')throw error;await writeFile(masks,'{"schema":1,"threshold":128,"records":{},"bundles":[]}\n',{flag:'wx'});}
 }
 for(const [script,args] of [['typescript/bin/tsc',['--noEmit']],['vite/bin/vite.js',['build']]]){
  const result=spawnSync(process.execPath,[fileURLToPath(new URL('../node_modules/'+script,import.meta.url)),...args],{cwd:root,stdio:'inherit',env:process.env});

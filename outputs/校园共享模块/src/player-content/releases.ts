@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.10.1',sequence:46,date:'2026-10-31',version:'Preview 0.10.1',
+ overview:'教学楼入口与连廊通行修补。',
+ summary:['调整教学楼公共门扇与入口台阶。','补齐连廊通路，调整门窗玻璃与防撞条的表现。','整理进入校园时的准备与加载提示。'],
+ items:['三栋教学楼的正面门厅与东端入口逐处调整，公共门扇保持敞开，原本封闭的房间仍不开放。','补齐跨楼栋连廊的通路与入口衔接。','窗户与门厅玻璃增加随环境变化的反光，普通玻璃与磨砂玻璃分别呈现，防撞条保持实色。','进入校园时按当前准备阶段显示进度，取消后可重新开始。'],
+},
+{
  id:'preview-0.10.0',sequence:45,date:'2026-10-31',version:'Preview 0.10.0',
  overview:'走进新的校园，再完成一次突围。',
  summary:['更新轻量校园，加入三栋教学楼一至五层与步行车库。','修补追兵的瞄准、开火与换位，保留撤离阶段的分散拦截。','调整坦克驾驶响应，改善中高速转向。'],

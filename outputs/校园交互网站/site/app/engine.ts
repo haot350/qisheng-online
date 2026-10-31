@@ -6,6 +6,7 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {DEFAULT_ENVIRONMENT, DEFAULT_VIEW, VIEW_ZONES, validateView, type EnvironmentSettings, type ViewState} from './viewer-state';
 import type {CampusFloor,CampusBuildingId} from './site-config';
 import {CampusChunkWorld} from './campus-chunks';
+import {CampusGlassEnvironment,ownsGlassEnvironment} from '../../../校园逃生游戏/src/campus-glass';
 import {campusLevelPose} from './campus-chunk-selection';
 import {CAMPUS_CAMERAS} from './campus-cameras';
 import type {MapManifest} from '../../../校园逃生游戏/src/types';
@@ -77,7 +78,9 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   return {sky:skyColor,ambient:new THREE.Color(0xf1f5f5).lerp(new THREE.Color(0xd8b293),warm*.55).lerp(new THREE.Color(0xcbd9e2),cover*.65),ground:new THREE.Color(0x929c81).lerp(new THREE.Color(0x748078),cover),sun:new THREE.Color(0xfff2d9).lerp(new THREE.Color(0xffb678),warm*.9),position:new THREE.Vector3(-40+Math.cos(angle)*330,35+height*285,65),direct:(2.4+height*.85)*(1-cover*.86),fill:2.15+cover*.48,exposure:1.13-cover*.12+height*.05,fog:{clear:.00038,overcast:.00105,mist:.0035,rain:.00175}[settings.weather],rain:settings.weather==='rain'?.42:0};
  }
  let currentAtmosphere=atmosphere(environment);
+ const glassEnvironment=new CampusGlassEnvironment(scene as never,renderer as never,{quality:environment.smooth?'smooth':'auto',mobile:compact,weather:environment.weather,hour:environment.hour});
  function applyAtmosphere(value:Atmosphere){
+  glassEnvironment.set({quality:environment.smooth?'smooth':'auto',mobile:compact,low:autoLow,weather:environment.weather,hour:environment.hour});
   sky.copy(value.sky);fog.color.copy(value.sky);fog.density=value.fog;hemi.color.copy(value.ambient);hemi.groundColor.copy(value.ground);hemi.intensity=value.fill;
   sun.color.copy(value.sun);sun.intensity=value.direct;sun.position.copy(value.position);renderer.toneMappingExposure=value.exposure;
   rainMaterial.opacity=value.rain;rain.visible=loaded&&value.rain>.005;
@@ -92,6 +95,7 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  }
  function applyQuality(){
   const low=environment.smooth||autoLow,ratio=low?1:Math.min(devicePixelRatio||1,compact?1.25:1.5);
+  glassEnvironment.set({quality:environment.smooth?'smooth':'auto',mobile:compact,low,weather:environment.weather,hour:environment.hour});
   renderer.setPixelRatio(ratio);renderer.shadowMap.enabled=!compact&&!low;renderer.shadowMap.needsUpdate=true;
   rainGeometry.setDrawRange(0,(low?90:compact?150:rainCount)*2);diagnostics.pixelRatio=ratio;diagnostics.quality=environment.smooth?'smooth':autoLow?'auto-low':'auto';
  }
@@ -152,7 +156,7 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
  function restore(){contextLost=false;diagnostics.contextLost=false;renderer.shadowMap.needsUpdate=true;onStatus(lastStatus);syncSuspension();request()}
  canvas.addEventListener('webglcontextlost',lose);canvas.addEventListener('webglcontextrestored',restore);
  function motionChanged(){reduced=motionQuery.matches;request()}motionQuery.addEventListener('change',motionChanged);
- function disposeGroup(group:THREE.Object3D){const geo=new Set<THREE.BufferGeometry>(),mats=new Set<THREE.Material>(),tex=new Set<THREE.Texture>();group.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;if((m as THREE.InstancedMesh).isInstancedMesh)(m as THREE.InstancedMesh).dispose();geo.add(m.geometry);for(const mat of Array.isArray(m.material)?m.material:[m.material]){mats.add(mat);for(const v of Object.values(mat))if(v instanceof THREE.Texture)tex.add(v)}});geo.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());tex.forEach(t=>{t.dispose();const src=t.source?.data;if(typeof ImageBitmap!=='undefined'&&src instanceof ImageBitmap)src.close()})}
+ function disposeGroup(group:THREE.Object3D){const geo=new Set<THREE.BufferGeometry>(),mats=new Set<THREE.Material>(),tex=new Set<THREE.Texture>();group.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;if((m as THREE.InstancedMesh).isInstancedMesh)(m as THREE.InstancedMesh).dispose();geo.add(m.geometry);for(const mat of Array.isArray(m.material)?m.material:[m.material]){mats.add(mat);for(const v of Object.values(mat))if(v instanceof THREE.Texture&&!ownsGlassEnvironment(v))tex.add(v)}});geo.forEach(g=>g.dispose());mats.forEach(m=>m.dispose());tex.forEach(t=>{t.dispose();const src=t.source?.data;if(typeof ImageBitmap!=='undefined'&&src instanceof ImageBitmap)src.close()})}
  // Preserve region roots while consolidating static draws; instanced vegetation stays instanced.
  function prepare(group:THREE.Group){group.updateMatrixWorld(true);
   const boundaries=new Set<THREE.Object3D>(group.children);
@@ -317,6 +321,6 @@ export async function createCampusEngine(host:HTMLElement,publish:(s:EngineStatu
   document.removeEventListener('visibilitychange',syncSuspension);motionQuery.removeEventListener('change',motionChanged);
   canvas.removeEventListener('keydown',keyboard);canvas.removeEventListener('webglcontextlost',lose);canvas.removeEventListener('webglcontextrestored',restore);
   controls.removeEventListener('change',request);controls.removeEventListener('start',interrupt);controls.removeEventListener('end',request);controls.dispose();
-  chunkWorld?.dispose();chunkWorld=null;disposeGroup(scene);rainGeometry.dispose();rainMaterial.dispose();sun.shadow.dispose();renderer.dispose();canvas.remove();
+  chunkWorld?.dispose();chunkWorld=null;glassEnvironment.dispose();disposeGroup(scene);rainGeometry.dispose();rainMaterial.dispose();sun.shadow.dispose();renderer.dispose();canvas.remove();
  }};
 }

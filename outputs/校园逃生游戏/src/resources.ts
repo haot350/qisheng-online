@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {ownsGlassEnvironment} from './campus-glass.ts';
 /** GLTF scenes may share resources; evicting one region must not destroy another. */
 export class SceneResources {
   private refs=new Map<{dispose():void},number>();
@@ -12,7 +13,7 @@ export class SceneResources {
     root.traverse(object=>{if(!(object instanceof THREE.Mesh))return;
       for(const material of Array.isArray(object.material)?object.material:[object.material]){
         const values=material as unknown as Record<string,unknown>;
-        for(const [property,value]of Object.entries(values))if(value instanceof THREE.Texture){
+        for(const [property,value]of Object.entries(values))if(value instanceof THREE.Texture&&!ownsGlassEnvironment(value)){
           original.add(value);const key=textureSamplingKey(value);
           if(key){const shared=this.texturePool.get(key);if(shared){values[property]=shared;used.add(shared);}else{this.texturePool.set(key,value);this.textureKeys.set(value,key);used.add(value);}}
           else used.add(value);
@@ -30,7 +31,7 @@ export class SceneResources {
     const all=new Set<{dispose():void}>();
     root.traverse(object=>{if(!(object instanceof THREE.Mesh))return;if(object instanceof THREE.InstancedMesh)all.add(object);all.add(object.geometry);
       for(const material of Array.isArray(object.material)?object.material:[object.material]){
-        all.add(material);for(const value of Object.values(material))if(value instanceof THREE.Texture){all.add(value);
+        all.add(material);for(const value of Object.values(material))if(value instanceof THREE.Texture&&!ownsGlassEnvironment(value)){all.add(value);
           if(!value.userData.mapSourceOwned&&typeof ImageBitmap!=='undefined'&&value.image instanceof ImageBitmap){let bitmap=this.bitmaps.get(value.image);if(!bitmap){const image=value.image;bitmap={dispose:()=>image.close()};this.bitmaps.set(image,bitmap);}all.add(bitmap);}
         }
       }

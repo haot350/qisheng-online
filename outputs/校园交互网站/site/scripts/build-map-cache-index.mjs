@@ -2,6 +2,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {buildMapCacheIndex} from '../../../校园逃生游戏/scripts/build-map-cache-index.mjs';
 const root=path.resolve(fileURLToPath(new URL('../',import.meta.url)));
+/** Both sites use the same schema2 physical gzip/decoded hash policy. */
 export async function prepareCampusMapCache(){
  return buildMapCacheIndex(path.join(root,'public'),'/map/manifest.json','/map/resource-index.json');
 }

@@ -7,9 +7,10 @@ import process from 'node:process';
 const here=path.dirname(fileURLToPath(import.meta.url));
 export async function buildStaticAssets(project,kind='game') {
  if(kind==='game')await (await import('./sync-fresh-helper.mjs')).syncFreshBrowser(project);
+ if(kind==='game')console.log('Portrait alpha masks:',await (await import('./build-billboard-masks.mjs')).buildBillboardMasks(project));
  const publicRoot=path.resolve(project,'public');
- const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players']:['images','poster.jpg'];
- const extensions=new Set(['.glb','.mp3','.wav','.ogg','.m4a','.webp','.png','.jpg','.jpeg','.svg','.woff2']);
+ const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players','characters/portrait-masks']:['images','poster.jpg'];
+ const extensions=new Set(['.glb','.mp3','.wav','.ogg','.m4a','.webp','.png','.jpg','.jpeg','.svg','.woff2','.bin']);
  const resources={};let bytes=0;
  const walk=async logical=>{
   const file=path.resolve(publicRoot,logical);if(!file.startsWith(publicRoot+path.sep))throw Error('Resource escaped public directory');

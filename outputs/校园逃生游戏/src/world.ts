@@ -159,12 +159,13 @@ export async function loadWorld(
   renderContext?:MapRenderContext,
 ): Promise<GameWorld> {
   let photoView: PhotoView | null = null;
-  onProgress(0.04, "读取校园地图");
+  onProgress(0, "读取校园地图");
+  initPromise ??= Promise.all([RAPIER.init(), initNavigation()]);
   const legacy =
     typeof location === "undefined" ||
     (import.meta.env?.DEV &&
       new URLSearchParams(location.search).get("visual") === "candidate");
-  const bundle = legacy ? undefined : await loadGameMapBundle(signal);
+  const bundle = legacy ? undefined : await loadGameMapBundle(signal,detail=>{const ratio=detail.totalBytes?detail.completedBytes/detail.totalBytes:0;onProgress(detail.stage==='download'?.18*Math.min(1,ratio):.2,detail.stage==='download'?'读取校园 '+(detail.completedBytes/1048576).toFixed(1)+' / '+(detail.totalBytes/1048576).toFixed(1)+' MiB（'+detail.completedFiles+'/'+detail.totalFiles+'）':'准备校园结构');});
   const manifest: MapManifest =
     bundle?.manifest ??
     (await request(
@@ -175,7 +176,6 @@ export async function loadWorld(
         : "/map/manifest.json",
       (r) => r.json(),
     ));
-  initPromise ??= Promise.all([RAPIER.init(), initNavigation()]);
   const [collisionData, navData, visionData] = await Promise.all([
     bundle?.collision ?? request(manifest.collisionUrl, (r) => r.arrayBuffer()),
     bundle?.navigation ?? request(manifest.navmeshUrl, (r) => r.arrayBuffer()),
@@ -228,6 +228,7 @@ export async function loadWorld(
     chunk: MapManifest["chunks"][number],
     signal: AbortSignal,
     priority?: number,
+    byteReady?: (bytes:number)=>void,
   ) => {
     const manager = new THREE.LoadingManager(),
       loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder),
@@ -241,8 +242,7 @@ export async function loadWorld(
         ? await withDeadline(
             gameMapSession
               .read(chunk.url, { signal, priority })
-              .then((bytes) =>
-                decodeQueue.run(
+              .then((bytes) => {byteReady?.(bytes.byteLength);return decodeQueue.run(
                   () =>
                     loader.parseAsync(
                       bytes,
@@ -250,8 +250,7 @@ export async function loadWorld(
                     ),
                   signal,
                   priority,
-                ),
-              ),
+                );}),
             30000,
             {
               signal,
@@ -276,6 +275,7 @@ export async function loadWorld(
   const streamer = new ChunkStreamer(manifest.chunks, loadChunk, (asset) =>
     resources.release(asset),
   );
+  onProgress(.25,"校园结构已准备好");
   try {
     await streamer.initialize(
       manifest.spawn,
