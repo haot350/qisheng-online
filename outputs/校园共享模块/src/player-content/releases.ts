@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.10.2',sequence:47,date:'2026-10-31',version:'Preview 0.10.2',
+ overview:'准备完成后，直接开始。',
+ summary:['修补准备完成后再次显示人物加载的问题。','大飞开始驾驶时保持介绍与场景连贯。','教学楼玻璃调整为更深的蓝灰色与环境反光。'],
+ items:['调整：人物、装备与车辆在开始前完成必要准备，进入时不再将已完成的进度退回。','修复：大飞完成或跳过介绍后短暂返回加载页面。','调整：普通窗户与磨砂玻璃分别加深，保留防撞条实色和敞开的门洞。'],
+},
+{
  id:'preview-0.10.1',sequence:46,date:'2026-10-31',version:'Preview 0.10.1',
  overview:'教学楼入口与连廊通行修补。',
  summary:['调整教学楼公共门扇与入口台阶。','补齐连廊通路，调整门窗玻璃与防撞条的表现。','整理进入校园时的准备与加载提示。'],

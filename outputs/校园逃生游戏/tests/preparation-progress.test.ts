@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { PreparationProgress } from '../src/preparation-progress.ts';
+import { PreparationProgress, runPreparationJobs } from '../src/preparation-progress.ts';
 
 test('parallel completions do not hide unfinished campus work or regress the total', () => {
   const reports: [number, string][] = [];
@@ -25,4 +25,34 @@ test('timings retain unfinished work instead of claiming success', () => {
   now = 25;progress.update('map',1);
   now = 70;
   assert.deepEqual(progress.timings(),[{label:'下载校园',durationMs:25,complete:true},{label:'准备场景',durationMs:0,complete:false}]);
+});
+
+test('readiness waits for the actual last GPU job, not model download completion', async () => {
+  let finishGpu!:()=>void;
+  const gate=new Promise<void>(resolve=>finishGpu=resolve),reports:number[]=[],signal=new AbortController().signal;
+  const work=runPreparationJobs([async()=>{},()=>gate],signal,value=>reports.push(value));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(reports.at(-1),.5);
+  assert(!reports.includes(1));
+  finishGpu();await work;
+  assert.equal(reports.at(-1),1);
+});
+
+test('cancellation during a GPU await cannot publish ready or start the next job', async () => {
+  let finishGpu!:()=>void;
+  const controller=new AbortController(),reports:number[]=[],gate=new Promise<void>(resolve=>finishGpu=resolve);
+  let nextRan=false;
+  const work=runPreparationJobs([()=>gate,async()=>{nextRan=true;}],controller.signal,value=>reports.push(value));
+  controller.abort();finishGpu();
+  await assert.rejects(work,{name:'AbortError'});
+  assert.equal(nextRan,false);
+  assert(!reports.includes(1));
+});
+
+test('failed GPU work remains unfinished and can be retried with a fresh operation', async () => {
+  const reports:number[]=[],signal=new AbortController().signal;
+  await assert.rejects(runPreparationJobs([async()=>{},async()=>{throw Error('GPU unavailable');}],signal,value=>reports.push(value)),/GPU unavailable/);
+  assert.equal(reports.at(-1),.5);
+  await runPreparationJobs([async()=>{}],new AbortController().signal,value=>reports.push(value));
+  assert.equal(reports.at(-1),1);
 });

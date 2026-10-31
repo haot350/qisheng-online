@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {CampusGlassEnvironment,campusGlassKind,glassReflectionSize,prepareCampusGlass,reflectionPixels} from '../src/campus-glass.ts';
+import {CampusGlassEnvironment,calibrateCampusGlass,campusGlassKind,glassReflectionSize,prepareCampusGlass,reflectionPixels} from '../src/campus-glass.ts';
 import {SceneResources} from '../src/resources.ts';
 import {decodePortraitMask,portraitPixelOpaque} from '../src/portrait-mask.ts';
 // @ts-ignore The offline encoder remains a JavaScript build helper.
@@ -20,7 +20,7 @@ test('one reflection survives chunk eviction, refreshes only on real changes, an
  let created=0,disposed=0;
  const env=new CampusGlassEnvironment(scene,{} as THREE.WebGLRenderer,{quality:'auto',mobile:true},(_renderer,pixels)=>{created++;const t=new THREE.WebGLRenderTarget(pixels.width*3/4,pixels.height*2);t.addEventListener('dispose',()=>disposed++);return t;});
  const glass=new THREE.MeshStandardMaterial({transparent:true,opacity:.42,roughness:.19,vertexColors:true});glass.name='WEB_glass';prepareCampusGlass(scene,glass);
- const first=glass.envMap;assert.ok(first);assert.equal(glass.opacity,.42);assert.equal(glass.roughness,.19);assert.equal(glass.vertexColors,true);assert.equal(scene.environment,weaponEnvironment);
+ const first=glass.envMap;assert.ok(first);assert.equal(glass.opacity,.66);assert.equal(glass.roughness,.19);assert.equal(glass.vertexColors,true);assert.equal(scene.environment,weaponEnvironment);
  env.set({quality:'auto',mobile:true});assert.equal(created,1);
  const mesh=new THREE.Mesh(new THREE.BoxGeometry(),glass),resources=new SceneResources(true);resources.retain(mesh);resources.release(mesh);
  assert.equal(disposed,0,'a map chunk does not own the shared reflection');assert.equal(env.diagnostics().materials,0);
@@ -37,13 +37,22 @@ test('glass is visible from either face in one transparent pass while opaque saf
  const clear=new THREE.MeshStandardMaterial({transparent:true,opacity:.42,vertexColors:true,depthWrite:true});clear.name='WEB_glass';
  const frosted=new THREE.MeshStandardMaterial({transparent:true,opacity:.78});frosted.name='WEB_frosted';
  for(const m of [clear,frosted]){prepareCampusGlass(scene,m);assert.equal(m.side,THREE.DoubleSide);assert.equal(m.forceSinglePass,true);assert.equal(m.depthWrite,false);}
- assert.equal(clear.opacity,.42);assert.equal(frosted.opacity,.78);assert.equal(clear.vertexColors,true);
+ assert.equal(clear.opacity,.66);assert.equal(frosted.opacity,.88);assert.equal(clear.vertexColors,true);
  const opaque=new THREE.MeshStandardMaterial({side:THREE.FrontSide,transparent:false,opacity:1,depthWrite:true});opaque.name='WEB_safety';opaque.userData.qsOpaqueSafety=true;
  prepareCampusGlass(scene,opaque);assert.equal(opaque.side,THREE.FrontSide);assert.equal(opaque.transparent,false);assert.equal(opaque.opacity,1);assert.equal(opaque.depthWrite,true);assert.equal(opaque.envMap,null);
  const plane=new THREE.Mesh(new THREE.PlaneGeometry(2,2),clear);plane.updateMatrixWorld(true);
  assert.ok(new THREE.Raycaster(new THREE.Vector3(0,0,1),new THREE.Vector3(0,0,-1)).intersectObject(plane).length>0);
  assert.ok(new THREE.Raycaster(new THREE.Vector3(0,0,-1),new THREE.Vector3(0,0,1)).intersectObject(plane).length>0);
  plane.geometry.dispose();[clear,frosted,opaque].forEach(m=>m.dispose());env.dispose();
+});
+test('blue-grey calibration does not accumulate through weather, pooling or cloned materials',()=>{
+ const clear=new THREE.MeshStandardMaterial({color:0xffffff,opacity:.42,transparent:true,roughness:.19,metalness:.12});
+ calibrateCampusGlass(clear,'clear');const color=clear.color.toArray(),alpha=clear.opacity;
+ for(let i=0;i<5;i++)calibrateCampusGlass(clear,'clear');
+ assert.deepEqual(clear.color.toArray(),color);assert.equal(clear.opacity,alpha);assert.equal(alpha,.66);
+ const clone=clear.clone();calibrateCampusGlass(clone,'clear');assert.deepEqual(clone.color.toArray(),color);
+ const frosted=new THREE.MeshStandardMaterial({opacity:.78,roughness:.48});calibrateCampusGlass(frosted,'frosted');assert.equal(frosted.opacity,.88);assert.equal(frosted.roughness,.54);
+ [clear,clone,frosted].forEach(m=>m.dispose());
 });
 test('packed portrait masks preserve every threshold edge and odd row boundary',()=>{
  const width=19,height=17,alpha=Uint8Array.from({length:width*height},(_,i)=>[0,127,128,255][i%4]),mask=decodePortraitMask(encodePortraitMask(alpha,width,height));

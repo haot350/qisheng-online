@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "gradle": "8.9",
+  "gradleSha256": "d725d707bfabd4dfdc958c624003b3c80accc03f7037b5122c4b1d0ef15cecab",
+  "gradleSource": "https://downloads.gradle.org/distributions/gradle-8.9-bin.zip",
+  "agp": "8.7.3",
+  "kotlin": "2.0.21",
+  "jdk": "17.0.20.1+1",
+  "compileSdk": 35,
+  "targetSdk": 35,
+  "minSdk": 29,
+  "buildTools": "35.0.1",
+  "androidx": {"activity": "1.10.1", "core": "1.15.0", "webkit": "1.14.0"},
+  "abi": "arm64-v8a",
+  "nativeLibrariesBundled": false,
+  "wasmPhysics": "same as accepted web build",
+  "distribution": "internal signed APK",
+  "runtimeDependencyVersions": "app/gradle.lockfile"
+}

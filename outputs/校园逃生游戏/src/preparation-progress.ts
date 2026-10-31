@@ -1,6 +1,24 @@
 type Work = { id: string; label: string; value: number; started?: number; finished?: number };
 export type PreparationTiming = { label: string; durationMs: number; complete: boolean };
 
+/** Complete the real preparation jobs before publishing readiness. In
+ * particular, an abort arriving during a GPU await cannot report completion. */
+export async function runPreparationJobs(
+  jobs: readonly (() => void | Promise<void>)[],
+  signal: AbortSignal,
+  publish: (ratio: number) => void,
+) {
+  signal.throwIfAborted();
+  publish(0);
+  for (const [index, job] of jobs.entries()) {
+    signal.throwIfAborted();
+    await job();
+    signal.throwIfAborted();
+    publish((index + 1) / jobs.length);
+  }
+  if (!jobs.length) publish(1);
+}
+
 /** Work completion, not an estimate of the time remaining. Parallel reports
  * retain their own progress and cannot reset another operation's completion. */
 export class PreparationProgress {

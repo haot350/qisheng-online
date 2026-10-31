@@ -47,6 +47,7 @@ import { ModuleBoundary } from "./ModuleBoundary";
 import {MenuPage, useMenuPages, type MenuPageId} from "./MenuPages";
 import {SessionMenuActions} from './SessionMenuActions';
 import {GameDialog} from './GameDialog';
+import {bindNativeUIEvents} from './native-ui-events';
 import {useGamePresence} from './game-presence';
 import { MenuFAQ, MenuUpdates } from "./ReadingUI";
 import { TouchControls } from "./TouchControls";
@@ -892,6 +893,8 @@ export default function App() {
     escapeEntry,
     primary,
     settings.quality,
+    settings.weather,
+    settings.fov,
     settings.drivingVehicle,
     practice,
     settings.escapeDifficulty,
@@ -1006,6 +1009,18 @@ export default function App() {
   const chooseStart = () => {
     if (!game.current || operations.current.busy || snapshot.phase !== "menu")
       return;
+    const loadout=selectedMode==='escape'?{
+      primary:practice?'m4a1' as const:primary,
+      difficulty:practice?'easy' as const:settingsRef.current.escapeDifficulty??'standard',
+      training:practice,
+    }:undefined;
+    // A configuration change can render before its preparation effect runs.
+    // Do not enter using the previous configuration's ready button.
+    if(!game.current.modePrepared?.(selectedMode,loadout)){
+      setPreparation({state:'loading',progress:0,message:'正在准备资源'});
+      setPrepRevision(value=>value+1);
+      return;
+    }
     if (selectedMode === "dafei") prepareIntro();
     else if (selectedMode === "escape" && !practice)
       withBriefing("solo", () => start("escape"));
@@ -1382,6 +1397,39 @@ export default function App() {
   const { unread: feedbackUnread } = useFeedbackUnread(isMenu || feedbackOpen);
   const announcementEntry = isMenu && menuScreen !== 'prepare' ? undefined : onlineView.currentRoom ? entryFor('escape', onlineView.currentRoom.mode==='coop'?'coop':'pvp', onlineView.currentRoom.variant==='ffa'?'ffa':'tdm') : isMenu ? selectedEntry : entryFor(snapshot.mode);
   const announcements = useAnnouncements(announcementEntry, operational.config.revision, playing);
+  useEffect(()=>bindNativeUIEvents(window,{
+    background:()=>{game.current?.clearInput?.();game.current?.pause();},
+    resume:()=>{void gameOperations.refresh().catch(()=>{});},
+    back:()=>{
+      if(accountBusy||busy||leavingRoom)return true;
+      // Let the existing dialog, album and page handlers close their own top
+      // layer, including their draft/focus rules, before falling back to menus.
+      if(leaveConfirmation||modeBlocked||upgradePrompt||pages.active||photoPanelOpen||photoAlbumOpen||archiveOpen||playerAlbumOpen){
+        const escape=new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true,cancelable:true});
+        window.dispatchEvent(escape);
+        if(escape.defaultPrevented)return true;
+      }
+      if(leaveConfirmation){setLeaveConfirmation(false);return true;}
+      if(modeBlocked){setModeBlocked(null);return true;}
+      if(upgradePrompt){deferUpgrade();return true;}
+      if(noticesOpen){setNoticesOpen(false);return true;}
+      if(briefing){setBriefing(null);return true;}
+      if(pages.active){pages.back();return true;}
+      if(touchEditor){setTouchEditor(false);return true;}
+      if(connectionDetails){setConnectionDetails(false);return true;}
+      if(archiveOpen){setArchiveOpen(false);return true;}
+      if(playerAlbumOpen){setPlayerAlbumOpen(false);return true;}
+      if(snapshot.escape?.mapOpen||snapshot.onlineMap){closeTaskMap();return true;}
+      if(playing){game.current?.clearInput?.();game.current?.pause();return true;}
+      if(snapshot.phase==='paused'||snapshot.phase==='intro'||result||onlineOpen||onlineView.currentRoom){returnMenu();return true;}
+      if(isMenu&&menuScreen!=='home'){returnMenu();return true;}
+      return false;
+    },
+  }));
+  const nativeInSession=!!onlineRoomKey||['intro','playing','paused','won','lost'].includes(snapshot.phase);
+  useEffect(()=>{
+    window.dispatchEvent(new CustomEvent('qisheng:native-session-state',{detail:{inSession:nativeInSession,playing}}));
+  },[nativeInSession,playing]);
   const openNotices = () => { if (playing) game.current?.pause(); setNoticesOpen(true); };
   const availability = operational.config.modes;
   const menuUnavailable = {story:!availability.story.enabled,roam:!availability.roam.enabled,dafei:!availability.dafei.enabled,single:!availability['escape-solo'].enabled,coop:!availability['escape-coop'].enabled,tdm:!availability['escape-tdm'].enabled,ffa:!availability['escape-ffa'].enabled,escape:['escape-solo','escape-coop','escape-tdm','escape-ffa'].every(id=>!availability[id as ModeEntry].enabled)};

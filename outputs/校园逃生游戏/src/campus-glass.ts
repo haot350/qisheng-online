@@ -16,6 +16,20 @@ export function glassReflectionSize(s:GlassSettings):128|256{
 export function ownsGlassEnvironment(texture:{userData:Record<string,unknown>}){return texture.userData.campusGlassEnvironment===true;}
 export function prepareCampusGlass(scene:THREE.Scene,material:THREE.Material){environments.get(scene)?.apply(material);}
 
+type GlassSource={color:[number,number,number];opacity:number;roughness:number;metalness:number};
+/** Preserve the source values through material cloning and pool reuse. */
+export function calibrateCampusGlass(material:THREE.MeshStandardMaterial,kind:GlassKind){
+ let source=material.userData.qsCampusGlassSource as GlassSource|undefined;
+ if(!source||!Array.isArray(source.color)||source.color.length!==3||![...source.color,source.opacity,source.roughness,source.metalness].every(Number.isFinite)){
+  source={color:[material.color.r,material.color.g,material.color.b],opacity:material.opacity,roughness:material.roughness,metalness:material.metalness};
+  material.userData.qsCampusGlassSource=source;
+ }
+ material.color.setRGB(...source.color).multiply(kind==='clear'?new THREE.Color(.76,.86,1):new THREE.Color(.83,.88,.94));
+ material.opacity=Math.max(source.opacity,kind==='clear'?.66:.88);
+ material.roughness=kind==='clear'?Math.max(.16,Math.min(.24,source.roughness)):Math.max(.54,source.roughness);
+ material.metalness=kind==='clear'?Math.max(.2,Math.min(.3,source.metalness)):Math.min(.06,source.metalness);
+}
+
 /** Static sky and distant courtyard silhouettes, never live scene/entity data. */
 export function reflectionPixels(size:128|256,weather:string,hour=12){
  const width=size*4,height=size*2,data=new Uint8Array(width*height*4);
@@ -66,6 +80,7 @@ export class CampusGlassEnvironment{
  apply(material:THREE.Material){
   if(this.disposed||!this.target||!(material instanceof THREE.MeshStandardMaterial))return;
   const kind=campusGlassKind(material);if(!kind)return;
+  calibrateCampusGlass(material,kind);
   const previousSide=material.side;
   material.side=THREE.DoubleSide;
   if(material.transparent){material.forceSinglePass=true;material.depthWrite=false;}
@@ -74,8 +89,8 @@ export class CampusGlassEnvironment{
    this.materials.set(material,dispose);material.addEventListener('dispose',dispose);
   }
   const hadEnvironment=!!material.envMap;material.envMap=this.target.texture;
-  material.envMapIntensity=kind==='clear'?.8:.45;
-  // Keep authored alpha, vertex tint and normals; glass uses one two-sided pass.
+  material.envMapIntensity=kind==='clear'?1.2:.55;
+  // Vertex tint and normals remain authored; calibration uses one two-sided pass.
   if(!hadEnvironment||previousSide!==material.side)material.needsUpdate=true;
  }
  diagnostics(){return{size:glassReflectionSize(this.settings),materials:this.materials.size,estimatedTextureBytes:this.target?this.target.width*this.target.height*8:0};}

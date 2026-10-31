@@ -5,12 +5,15 @@ import path from 'node:path';
 import {makePublicMapExamples,publicMapExampleFiles} from './public-map-examples.mjs';
 export const root=fileURLToPath(new URL('../',import.meta.url));
 const fileSet=new Set();
+const androidFiles=[".gitignore","AGENTS.md","app/build.gradle.kts","app/gradle.lockfile","app/src/main/AndroidManifest.xml","app/src/main/java/com/liuframe/qishengonline/AssetRouter.kt","app/src/main/java/com/liuframe/qishengonline/MainActivity.kt","app/src/main/java/com/liuframe/qishengonline/ResourcePolicy.kt","app/src/main/java/com/liuframe/qishengonline/SessionVault.kt","app/src/main/java/com/liuframe/qishengonline/UpdatePolicy.kt","app/src/main/res/drawable/ic_qisheng.xml","app/src/main/res/values/styles.xml","app/src/main/res/xml/network_security_config.xml","app/src/test/java/com/liuframe/qishengonline/ResourcePolicyTest.kt","app/src/test/java/com/liuframe/qishengonline/UpdatePolicyTest.kt","build.gradle.kts","docs/HANDOFF.md","gradle.properties","LICENSE","README.md","scripts/build-internal.mjs","scripts/prepare-bundle.mjs","scripts/prepare-tools.mjs","scripts/run-gradle.mjs","scripts/stage-assets.mjs","scripts/verify-apk.py","settings.gradle.kts","toolchain-lock.json"];
 const rootFiles=['.gitignore','AGENTS.md','README.md','LICENSE','CONTRIBUTING.md','SECURITY.md'];
 const docs=['HANDOFF.md','architecture.md','development.md','admin.md','assistant.md','operations.md','roadmap.md','OPEN_SOURCE.md','DEMO.md','THIRD_PARTY.md'];
 const reviewedGenerated=new Set(["outputs/校园逃生游戏/src/generated/map-layout.json",'outputs/齐盛原生客户端/src/generated/weather_profiles.gd','outputs/齐盛原生客户端/src/generated/weather_profiles.gd.uid']);
 // These checks exercise private model exchange, browser QA or deployment tools.
 // Keep their sources and receipts local rather than exporting incomplete tests.
 const privateChecks=new Set([
+ 'outputs/校园逃生游戏/src/qa',
+ 'outputs/校园服务器部署/tests/release-webr01-fix1.test.mjs',
  'outputs/校园服务器部署/tests/release-webr01-fix1.test.mjs',
  'outputs/校园逃生游戏/tests/map-collision-qsc3.test.ts',
  ...['driving-rollback-v096','release-verification-policy-v097','release-verification-policy-v098','verify-live-transfer-v097','baseline','deployment-protocol-v081','deployment-target','deployment-verification-v069','deployment-verification-v070','deployment-verification-v071','deployment-verification-v090','deployment-verification-v096','eo-cache-boundary','html-cache-bridge','html-cache','map-cache','map-rollback-v097','publish-release','release-record-v069','rollback-compat','schema6-rollback','static-deployment-verification-v080','maintenance-v084'].map(name=>'outputs/校园服务器部署/tests/'+name+'.test.mjs'),
@@ -38,7 +41,7 @@ export async function listPublicSource(){fileSet.clear();for(const file of rootF
  for(const script of ['dev-demo.mjs','check-demo.mjs','verify-demo.mjs','check-environment.mjs','public-source.mjs','public-map-examples.mjs','audit-public-source.mjs','collect-third-party-licenses.mjs'])await add('scripts/'+script);
  for(const entry of await readdir(path.join(root,'THIRD_PARTY_LICENSES')).catch(error=>{if(error.code==='ENOENT')return [];throw error;}))if(/LICENSE|NOTICE|licen[cs]e|notice|dependencies\.json|^rapier-Apache-2\.0\.txt$/i.test(entry))await add('THIRD_PARTY_LICENSES/'+entry);
  for(const [module,scripts]of Object.entries(scriptLists)){
-  const base='outputs/'+module;for(const file of ['README.md','package.json','package-lock.json','tsconfig.json','vite.config.ts','vite.production.config.ts','vite.ui.config.ts','next.config.ts','next-env.d.ts','postcss.config.mjs','eslint.config.mjs','components.json'])await add(base+'/'+file);
+  const base='outputs/'+module;for(const file of ['README.md','package.json','package-lock.json','tsconfig.json','vite.android.config.ts','vite.config.ts','vite.production.config.ts','vite.ui.config.ts','next.config.ts','next-env.d.ts','postcss.config.mjs','eslint.config.mjs','components.json'])await add(base+'/'+file);
   for(const dir of module==='校园交互网站/site'?['app','components','hooks','lib','tests']:module==='校园排行榜服务'?['src','tests','admin']:['src','tests'])await sourceTree(base+'/'+dir);
   for(const script of scripts)await add(base+'/scripts/'+script);
   if(module==='校园逃生游戏'){await add(base+'/index.html',true);await add(base+'/account/index.html',true);await add(base+'/credits/index.html',true);await add(base+'/copyright/index.html',true);await add(base+'/demo/arena.json',true);await add(base+'/demo/public/anonymous-avatar.svg',true);}
@@ -64,6 +67,7 @@ export async function listPublicSource(){fileSet.clear();for(const file of rootF
  for(const file of ['install-colyseus.ps1','prepare-android-tools.ps1','export-android.ps1','capture-windows-crash.ps1'])await add(native+'/scripts/'+file,true);
  for(const entry of await readdir(path.join(root,native,'third_party_licenses')))if(/\.txt$|^sources\.json$/i.test(entry))await add(native+'/third_party_licenses/'+entry,true);
  await add('outputs/校园逃生游戏/scripts/legacy/characters.ts',true);
+ for(const file of androidFiles)await add('outputs/齐盛安卓客户端/'+file,true);
  return [...fileSet].sort();
 }
 function checkVendor(bytes,name){const archive=gunzipSync(bytes);let offset=0,count=0;while(offset+512<=archive.length){const header=archive.subarray(offset,offset+512);if(header.every(byte=>byte===0))break;const entry=header.subarray(0,100).toString().replace(/\0.*$/s,''),size=parseInt(header.subarray(124,136).toString().replace(/\0.*$/s,'').trim()||'0',8),type=header[156];if(!Number.isFinite(size)||size<0||!entry.startsWith('package/')||entry.split('/').includes('..')||entry.includes('\\')||![0,48,53].includes(type)||/\.(?:png|webp|jpe?g|glb|bin|blend|sqlite|log)$|(?:^|\/)\.(?:env|git)/i.test(entry))throw Error('Unsafe shared vendor entry in '+name+': '+entry);count++;offset+=512+Math.ceil(size/512)*512;}if(!count)throw Error('Empty shared vendor tarball: '+name);return count;}

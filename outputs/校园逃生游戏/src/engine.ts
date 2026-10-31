@@ -10,7 +10,7 @@ import * as THREE from "three";
 import {AdaptiveRenderQuality,resolveRenderProfile} from '@qisheng/shared/render-profile';
 import {applyRendererProfile} from './render-quality';
 import { FrameDiagnostics } from './frame-diagnostics.ts';
-import { PreparationProgress, type PreparationTiming } from './preparation-progress.ts';
+import { PreparationProgress, runPreparationJobs, type PreparationTiming } from './preparation-progress.ts';
 import { gameOperations } from './game-operations';
 import { entryFor, ModeUnavailableError } from './game-config-store';
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -462,6 +462,7 @@ export async function createGame(
   const selectGadget=(id:GadgetId)=>{if(mode==='escape'&&['smoke','grenade','cards'].includes(id)){gadgetInventory.selectedGadget=id;emit();}};
 
   let releaseCombat: (() => void) | undefined;
+  let releaseEntryViews: (() => void) | undefined;
   let cpuUpdate = 0,
     cpuNpcs = 0,
     cpuRender = 0,
@@ -480,6 +481,7 @@ export async function createGame(
   type PreparedMode = {
     vehicleId?:DrivingVehicleId;
     key: string;
+    generation: number;
     mode: Mode;
     roster: {
       mode: Mode;
@@ -493,6 +495,7 @@ export async function createGame(
     car?: Awaited<ReturnType<typeof createVehicleVisual>>;
     camera?: CameraVisual;
     storyWorld?: Awaited<ReturnType<typeof createStoryWorld>>;
+    presentationReady?: boolean;
   };
   let modePreparation: {
       key: string;
@@ -500,6 +503,19 @@ export async function createGame(
       work: Promise<void>;
     } | null = null,
     preparedMode: PreparedMode | null = null;
+  let preparedPresentation: PreparedMode | null = null;
+  let activePreparationKey='',firstPlayablePending=false;
+  let resumeRequiresGesture=false;
+  const preparationTrace: {stage:string;at:number;key:string;generation:number;progress:number;phase:Phase}[]=[];
+  const tracePreparation=(stage:string,key=preparedMode?.key??preparedPresentation?.key??activePreparationKey)=>{
+    preparationTrace.push({stage,at:performance.now(),key,generation:enterToken,progress,phase});
+    if(preparationTrace.length>32)preparationTrace.shift();
+    if(import.meta.env.DEV){
+      const state={key,generation:enterToken,ready:!!preparedMode?.presentationReady,phase,progress,trace:preparationTrace.map(item=>({...item}))};
+      (window as any).__gamePreparation=state;
+      canvas.dataset.preparationHandoff=JSON.stringify(state);
+    }
+  };
   let climaxTime = 0,
     previousStoryStep = "";
   let orbit = 0,
@@ -881,12 +897,14 @@ export async function createGame(
   observer.observe(host);
   applyQuality();
   function visibility() {
-    if (document.hidden) pause();
+    if (document.hidden) {resumeRequiresGesture=true;input.reset();pause();}
     else if (phase === "intro") {
       last = performance.now();
       schedule();
     }
   }
+  const nativeBackground=()=>{resumeRequiresGesture=true;input.reset();pause();};
+  window.addEventListener('qisheng:native-background',nativeBackground);
   function contextLost(e: Event) {
     e.preventDefault();
     graphicsLost = true;
@@ -1215,6 +1233,8 @@ export async function createGame(
     selectEscapeTask(tasks[(at + 1) % tasks.length].id);
   }
   function resetTransient(preserveAudioGesture = false) {
+    activePreparationKey='';firstPlayablePending=false;
+    preparedPresentation=null;
     qualityTextureLoad?.abort();qualityTextureLoad=undefined;
     ranked?.cancel();
     ranked = null;
@@ -1245,6 +1265,8 @@ export async function createGame(
     releaseOpening = undefined;
     releaseCombat?.();
     releaseCombat=undefined;
+    releaseEntryViews?.();
+    releaseEntryViews=undefined;
     frameDiagnostics.reset();
     openingLanding = null;
     storyOverlays.clear();
@@ -2251,29 +2273,7 @@ export async function createGame(
         "exit",
       );
       gate.visible = false;
-      if(!training)info("三项行动已公布。", 2);
-      try {
-        if (!training && !localStorage.getItem("qisheng-escape-controls-v031")) {
-          info(
-            touchControls()
-              ? settings.escapeAimMode === "hold"
-                ? "左手移动，右手观察；按住瞄准开镜。"
-                : "左手移动，右手观察；点击瞄准切换开镜。"
-              : "WASD 移动 · Shift 冲刺 · Ctrl 滑铲 · M 地图",
-            5,
-          );
-          localStorage.setItem("qisheng-escape-controls-v031", "1");
-        }
-      } catch {}
-    } else if (mode === "roam")
-      info(
-        touchControls()
-          ? "自由漫游已开启。点“相机”开始拍摄。"
-          : "自由漫游已开启。按 C 举起相机。",
-        5,
-      );
-    else if (mode === "story") notice = "";
-    else info("大课间到了：五分钟驾驶挑战，留意车况与维修点。", 5);
+    }
     if (mode === "escape" || mode === "dafei") {
       if(mode==='escape')for(const supply of world.manifest.supplies)for(const [index,kind] of (['helmet','grenade','cards'] as const).entries()){
         const point=v(supply.position).add(new THREE.Vector3((index-1)*1.15,0,1.2)),support=world.supportAt(point,1.75);
@@ -2363,6 +2363,21 @@ export async function createGame(
       updateDriveCamera(0, true);
     }
   }
+  function announceRound() {
+    if (mode === 'escape') {
+      if(!training)info('三项行动已公布。',2);
+      try {
+        if (!training && !localStorage.getItem('qisheng-escape-controls-v031')) {
+          info(touchControls()
+            ? settings.escapeAimMode === 'hold' ? '左手移动，右手观察；按住瞄准开镜。' : '左手移动，右手观察；点击瞄准切换开镜。'
+            : 'WASD 移动 · Shift 冲刺 · Ctrl 滑铲 · M 地图',5);
+          localStorage.setItem('qisheng-escape-controls-v031','1');
+        }
+      } catch {}
+    } else if (mode === 'roam') info(touchControls() ? '自由漫游已开启。点“相机”开始拍摄。' : '自由漫游已开启。按 C 举起相机。',5);
+    else if (mode === 'story') notice='';
+    else info('大课间到了：五分钟驾驶挑战，留意车况与维修点。',5);
+  }
   function unlockAudio(next: Mode = mode) {
     if (next === "story") {
       storyGesturePrimed = true;
@@ -2373,7 +2388,7 @@ export async function createGame(
     } else if (next === "roam") void audio.unlockEffects().catch(() => {});
     else void audio.unlock().catch(() => {});
   }
-  async function enter(unlock = true) {
+  async function enter(unlock = true, pointerReady = false) {
     const token = ++enterToken;
     input.reset();
     input.setMode(mode);
@@ -2382,7 +2397,7 @@ export async function createGame(
     emit();
     if (unlock) unlockAudio();
     syncObservationCursor(true, true);
-    const result = await Promise.allSettled([input.lock()]);
+    const result = await Promise.allSettled([pointerReady ? Promise.resolve() : input.lock()]);
     if (dead || token !== enterToken) return;
     if (result[0].status === "rejected") {
       phase = "paused";
@@ -2393,7 +2408,7 @@ export async function createGame(
         "鼠标尚未进入游戏，请点击继续游戏重试，或在设置选择触屏操作。",
       );
     }
-    if (document.hidden || (touchControls() && innerHeight > innerWidth)) {
+    if (document.hidden || resumeRequiresGesture || (touchControls() && innerHeight > innerWidth)) {
       phase = "paused";
       emit();
       return;
@@ -2405,6 +2420,10 @@ export async function createGame(
     last = performance.now();
     accumulator = 0;
     refreshStreaming();
+    releaseEntryViews?.();
+    releaseEntryViews=undefined;
+    firstPlayablePending=true;
+    tracePreparation('control-ready');
     emit();
     schedule();
   }
@@ -2422,11 +2441,17 @@ export async function createGame(
         : "",
       renderProfile().mobileTextures ? "mobile-textures" : "full-textures",
       settings.quality,
+      settings.weather ?? "clear",
+      settings.fov,
       next === "escape" && loadout?.training ? "practice" : "round",
     ].join(":");
   }
   function releasePrepared(value: PreparedMode | null) {
     if (!value) return;
+    if (preparedPresentation === value) {
+      preparedPresentation = null;
+      resetTransient();
+    }
     value.weapons?.();
     value.billboards?.();
     value.views?.();
@@ -2443,7 +2468,52 @@ export async function createGame(
     if (phase !== "playing" && phase !== "paused") input.freePointerLock();
   }
   function modePrepared(next: Mode, loadout?: Loadout) {
-    return preparedMode?.key === preparationKey(next, loadout);
+    return preparedMode?.key === preparationKey(next, loadout) && preparedMode === preparedPresentation && preparedMode.generation === enterToken && preparedMode.presentationReady === true;
+  }
+  function assemblePreparedRound(value: PreparedMode, loadout?: Loadout) {
+    preparedPresentation = value;
+    mode = value.mode;
+    activeVehicleId = value.vehicleId ?? "bao5";
+    if (mode === "escape" && loadout?.difficulty)
+      settings = {...settings, escapeDifficulty: escapeDifficulty(loadout.difficulty)};
+    if (loadout && PRIMARY_WEAPONS.includes(loadout.primary)) selectedPrimary = loadout.primary;
+    training = mode === "escape" && loadout?.training ? new CombatTraining() : null;
+    roundRoster = [...value.roster.ids];
+    roundSeed = value.roster.seed;
+    roundMobile = value.mobile;
+    if (mode === "escape") {
+      viewWeapon = createViewWeapon(["glock", selectedPrimary]);
+      viewScene.add(viewWeapon.root);
+    }
+    if (value.car) {
+      car = value.car;
+      value.car = undefined;
+    }
+    setupRound();
+    if (car) car.root.visible = true;
+  }
+  async function prepareRoundGpu(value: PreparedMode, signal: AbortSignal, publish: (ratio:number)=>void) {
+    const worldGpu = new CombatGpuPreparer(renderer, scene, camera);
+    const firstPersonGpu = new CombatGpuPreparer(renderer, viewScene, viewCamera);
+    const jobs: (()=>Promise<void>)[] = [];
+    if (car) { const root=car.root; jobs.push(()=>worldGpu.prepare(root,signal)); }
+    if (cannon) { const root=cannon.root; jobs.push(()=>worldGpu.prepare(root,signal)); }
+    if (value.mode === "escape" || value.mode === "dafei") {
+      jobs.push(()=>worldGpu.prepare(effects.root,signal));
+      jobs.push(async()=>{
+        const restore=effects.prepareGeometryVariants();
+        try { await worldGpu.prepare(effects.root,signal); } finally { restore(); }
+      });
+      for (const root of gadgetScene.prepareRoots) jobs.push(()=>worldGpu.prepare(root,signal));
+      for (const npc of npcs) {
+        jobs.push(()=>worldGpu.prepareTextures(npc.rig.preparationTextures,signal));
+        jobs.push(()=>worldGpu.prepare(npc.rig.root,signal));
+      }
+    }
+    if (viewWeapon) { const root=viewWeapon.root; jobs.push(()=>firstPersonGpu.prepare(root,signal)); }
+    if (value.camera) { const root=value.camera.group; jobs.push(()=>firstPersonGpu.prepare(root,signal)); }
+    try { await runPreparationJobs(jobs,signal,publish); }
+    finally { worldGpu.dispose(); firstPersonGpu.dispose(); }
   }
   async function prepareMode(
     next: Mode,
@@ -2462,6 +2532,8 @@ export async function createGame(
         signal: options.signal,
       });
     }
+    const previousPreparation = modePreparation?.work;
+    const preserveAudioGesture = next === 'story' && storyGesturePrimed;
     cancelModePreparation();
     cancelPreparation();
     const token = ++enterToken,
@@ -2474,7 +2546,6 @@ export async function createGame(
     input.setMode(next);
     input.reset();
     audio.update(0, true);
-    resetTransient(next === "story" && storyGesturePrimed);
     phase = "menu";
     const report = (ratio: number, text: string) => {
       if (!dead && token === enterToken && !signal.aborted) {
@@ -2500,6 +2571,7 @@ export async function createGame(
     }
     const value: PreparedMode = {
       key,
+      generation: token,
       mode: next,
       vehicleId:next==="dafei"?drivingVehicleId(settings.drivingVehicle):undefined,
       roster: { ...pendingRoster, ids: next === "escape" && loadout?.training ? [] : [...pendingRoster.ids] },
@@ -2508,6 +2580,12 @@ export async function createGame(
     let committed = false;
     const work = (async () => {
       try {
+        // A cancelled GPU compile still owns its scene objects until its finally
+        // has restored them. Never dispose/reuse that presentation underneath it.
+        await previousPreparation?.catch(() => {});
+        if(signal.aborted || token!==enterToken)throw new DOMException('Cancelled','AbortError');
+        resetTransient(preserveAudioGesture);
+        tracePreparation('prepare',key);
         report(0, "下载校园");
         const stages = new PreparationProgress([
           {id:'3',label:'下载校园'},
@@ -2515,6 +2593,7 @@ export async function createGame(
           {id:'1',label:'准备人物与装备'},
           {id:'2',label:'准备场景'},
           {id:'scene',label:'准备场景'},
+          {id:'gpu',label:'准备画面'},
         ], (ratio,text) => { preparationTimings=stages.timings(); report(ratio,text); });
         const update = (index:number,ratio:number,text:string) => stages.update(String(index),ratio,text);
         const worldReady = Promise.all([
@@ -2607,6 +2686,7 @@ export async function createGame(
           driveMap = configureDrivingStart(driveMap, (point, viewYaw) =>
             world.validateDrivingSpawn(driveMap!, point, viewYaw, value.vehicleId),
           );
+        assemblePreparedRound(value,loadout);
         const views: PhotoView[] = [];
         if (next === "story") {
           const sm = await import("./story");
@@ -2621,15 +2701,20 @@ export async function createGame(
               far: 360,
             });
           }
+        } else if(next === 'dafei') {
+          // Prepare both the real chase camera and the introduction camera;
+          // neither observes from the first-person spawn-height approximation.
+          const addCameraView=()=>views.push({
+            origin:camera.position.toArray() as Vec3,
+            direction:camera.getWorldDirection(new THREE.Vector3()).toArray() as Vec3,
+            fov:camera.fov,aspect:camera.aspect,far:low?85:110,
+          });
+          addCameraView();
+          staticDriveCamera();
+          addCameraView();
         } else {
-          const spawn =
-              next === "dafei" && driveMap
-                ? driveMap.spawn
-                : world.manifest.spawn,
-            viewYaw =
-              next === "dafei" && driveMap
-                ? driveMap.spawnYaw
-                : world.manifest.spawnYaw;
+          const spawn = world.manifest.spawn,
+            viewYaw = world.manifest.spawnYaw;
           views.push({
             origin: [spawn[0], spawn[1] + 1.62, spawn[2]],
             direction: [-Math.sin(viewYaw), 0, -Math.cos(viewYaw)],
@@ -2646,9 +2731,13 @@ export async function createGame(
           throw new DOMException("Cancelled", "AbortError");
         }
         value.views = dropViews;
+        await prepareRoundGpu(value,signal,r=>stages.update('gpu',r,'准备画面'));
+        if(signal.aborted || token!==enterToken)throw new DOMException('Cancelled','AbortError');
+        value.presentationReady = true;
         preparedMode = value;
         committed = true;
         report(1, "");
+        tracePreparation('ready',key);
       } catch (error) {
         controller.abort();
         if (!committed) releasePrepared(value);
@@ -2750,10 +2839,6 @@ export async function createGame(
     audio.reset();
     audio.update(0, true);
     if (document.pointerLockElement === canvas) document.exitPointerLock();
-    if (value.car) {
-      car = value.car;
-      value.car = undefined;
-    }
     if (!car) throw Error("汽车尚未准备好。");
     car.root.visible = true;
     staticDriveCamera();
@@ -2787,8 +2872,10 @@ export async function createGame(
     if (import.meta.env.DEV) (window as any).__gameStartError = null;
     if (dead) return;
     gameOperations.assert(entryFor(next));
+    resumeRequiresGesture=false;
     const permission = gameOperations.check(entryFor(next));
     void permission.catch(() => {});
+    const wasPrepared = modePrepared(next,loadout), previousPhase=phase;
     const ready = prepareMode(next, loadout),
       token = enterToken,
       controller = new AbortController();
@@ -2810,9 +2897,12 @@ export async function createGame(
     // Preserve the original user gesture while resources finish. No delayed auto-lock.
     const pointer = input.lock();
     void pointer.catch(() => {});
-    phase = "loading";
+    if (!wasPrepared) phase = "loading";
+    tracePreparation('start',preparationKey(next,loadout));
     emit();
     let value: PreparedMode | null = null;
+    let adopted = false;
+    const entryStartedAt=performance.now();
     try {
       await permission;
       await ready;
@@ -2820,16 +2910,6 @@ export async function createGame(
       await pointer;
       if (dead || token !== enterToken || controller.signal.aborted) return;
       if (!modePrepared(next, loadout)) throw Error("本局准备已更改。");
-      const entryStages = new PreparationProgress([
-        {id:'gpu',label:'准备人物与装备'},
-        {id:'enter',label:'进入校园'},
-      ], (ratio,text) => {
-        if(dead||token!==enterToken||controller.signal.aborted)return;
-        progress=90+ratio*10;message=text;
-        preparationTimings=[...preparationTimings.slice(0,5),...entryStages.timings()];
-        emit();
-      });
-      entryStages.update('gpu',0);
       if (!loadout?.training && !rankingRetryStarted) {
         rankingRetryStarted = true;
         void rankingClient
@@ -2838,40 +2918,21 @@ export async function createGame(
           .catch(() => {});
       }
       value = preparedMode;
+      if (next === "escape" || next === "dafei")
+        await prepareRankedRound(token, controller.signal);
+      if (dead || token !== enterToken || controller.signal.aborted) return;
+      if (!modePrepared(next,loadout) || value !== preparedMode || value !== preparedPresentation)
+        throw Error('本局准备已更改。');
       preparedMode = null;
-      const selected = value!.roster;
-      mode = next;
-      activeVehicleId=value!.vehicleId??"bao5";
-      training = next === "escape" && loadout?.training ? new CombatTraining() : null;
-      roundRoster = [...selected.ids];
-      roundSeed = selected.seed;
-      roundMobile = value!.mobile;
+      preparedPresentation = null;
+      activePreparationKey=value!.key;
+      adopted = true;
       releaseWeapons = value!.weapons;
       value!.weapons = undefined;
       releaseBillboards = value!.billboards;
       value!.billboards = undefined;
-      if (next === "escape") {
-        viewWeapon = createViewWeapon(["glock", selectedPrimary]);
-        viewScene.add(viewWeapon.root);
-      }
-      if (value!.car) {
-        car = value!.car;
-        value!.car = undefined;
-      }
-      if (car) car.root.visible = true;
-      setupRound();
-      if(next==='dafei'&&car){const gpu=new CombatGpuPreparer(renderer,scene,camera);try{await gpu.prepare(car.root,controller.signal);entryStages.update('gpu',cannon ? .5 : 1);if(cannon)await gpu.prepare(cannon.root,controller.signal);}finally{gpu.dispose();}}
-      if(next==='escape'){
-        const gpu=new CombatGpuPreparer(renderer,scene,camera);
-        const total=3+gadgetScene.prepareRoots.length+npcs.length*2;let completed=0;
-        const advanced=()=>entryStages.update('gpu',++completed/total);
-        try{await gpu.prepare(effects.root,controller.signal);advanced();const restoreShell=effects.prepareGeometryVariants();try{await gpu.prepare(effects.root,controller.signal);advanced();}finally{restoreShell();}for(const root of gadgetScene.prepareRoots){await gpu.prepare(root,controller.signal);advanced();}for(const npc of npcs){await gpu.prepareTextures(npc.rig.preparationTextures,controller.signal);advanced();await gpu.prepare(npc.rig.root,controller.signal);advanced();}}
-        finally{gpu.dispose();}
-        if(viewWeapon){const firstPerson=new CombatGpuPreparer(renderer,viewScene,viewCamera);try{await firstPerson.prepare(viewWeapon.root,controller.signal);advanced();}finally{firstPerson.dispose();}}
-        if(dead||token!==enterToken||controller.signal.aborted)return;
-      }
-      entryStages.update('gpu',1);
       pendingRoster = null;
+      announceRound();
       if (driving) {
         car?.update(driving.read(), 0);
         updateDriveCamera(0, true);
@@ -2923,18 +2984,16 @@ export async function createGame(
         releaseCombat=value!.views;
         value!.views=undefined;
       } else {
-        value!.views?.();
+        releaseEntryViews = value!.views;
         value!.views = undefined;
       }
-      if (next === "escape" || next === "dafei")
-        await prepareRankedRound(token, controller.signal);
       if (dead || token !== enterToken || controller.signal.aborted) return;
       preparation = null;
-      entryStages.update('enter',1);
       progress = 100;
       message = "";
       storyGesturePrimed = false;
-      return enter(false);
+      await enter(false,true);
+      preparationTimings.push({label:'进入校园',durationMs:Math.round(performance.now()-entryStartedAt),complete:true});
     } catch (error) {
       if (dead || token !== enterToken) return;
       if (import.meta.env.DEV)
@@ -2943,6 +3002,17 @@ export async function createGame(
           ids: value?.roster.ids,
           message: error instanceof Error ? error.message : String(error),
         };
+      if(!adopted && modePrepared(next,loadout)) {
+        preparation=null;
+        ranked?.cancel();ranked=null;
+        input.freePointerLock();
+        phase=previousPhase==='intro'&&introCarReady?'intro':'menu';
+        progress=100;message='';
+        tracePreparation('entry-failed');
+        emit();
+        if(error instanceof ModeUnavailableError)throw error;
+        throw new Error('本局暂时无法开始，请重试。',{cause:error});
+      }
       cancelPreparation();
       cancelModePreparation();
       resetTransient();
@@ -2953,7 +3023,7 @@ export async function createGame(
       if (error instanceof ModeUnavailableError) throw error;
       throw new Error("本局暂时无法开始，请重试。", { cause: error });
     } finally {
-      releasePrepared(value);
+      if(adopted)releasePrepared(value);
     }
   }
   async function prepareOpening(token: number, signal: AbortSignal) {
@@ -2980,9 +3050,11 @@ export async function createGame(
         far: 360,
       });
     }
-    message = "准备完整开场";
-    progress = 0;
-    emit();
+    if(!releaseOpening){
+      message = "准备完整开场";
+      progress = 0;
+      emit();
+    }
     const release =
       releaseOpening ??
       (await world.prepareViews(views, signal, (p) => {
@@ -3076,6 +3148,7 @@ export async function createGame(
   }
   async function resume() {
     if (dead || phase !== "paused") return;
+    resumeRequiresGesture=false;
     input.reset();
     return enter();
   }
@@ -6174,6 +6247,7 @@ export async function createGame(
         frame:frameDiagnostics.snapshot(),
         streaming:world?.diagnostics(),
         preparation:preparationTimings,
+        preparationHandoff:{key:preparedMode?.key??preparedPresentation?.key??activePreparationKey,generation:enterToken,ready:!!preparedMode?.presentationReady,phase,trace:preparationTrace.map(item=>({...item}))},
       });
     }
     if (import.meta.env.DEV) {
@@ -6369,6 +6443,10 @@ export async function createGame(
       }
     }
     render(dt);
+    if(firstPlayablePending&&phase==='playing'&&!buffering){
+      firstPlayablePending=false;
+      tracePreparation('first-playable');
+    }
     frameDiagnostics.end();
     if (phaseActive() || (phase === "intro" && !document.hidden)) schedule();
   }
@@ -6382,6 +6460,7 @@ export async function createGame(
     cancelAnimationFrame(raf);
     observer.disconnect();
     document.removeEventListener("visibilitychange", visibility);
+    window.removeEventListener('qisheng:native-background',nativeBackground);
     window.removeEventListener("orientationchange", orientation);
     canvas.removeEventListener("webglcontextlost", contextLost);
     canvas.removeEventListener("webglcontextrestored", contextRestored);

@@ -7,7 +7,8 @@ export type MapReadStage={stage:'download'|'decode'|'ready';bytes:number;totalBy
 export type MapReadOptions={signal?:AbortSignal;priority?:number;progress?:TransferProgress;waitForPersistence?:boolean;onStage?:(detail:MapReadStage)=>void};
 export type MapResourceIndex={schema:1|2;manifest:{url:string;sha256:string};resources:Record<string,MapResource>};
 export type MapCacheCoverage={bytes:number;files:number;totalBytes:number;totalFiles:number;remainingBytes:number;oldBytes:number;oldFiles:number;complete:boolean};
-export type MapCacheStats={ready:boolean;bytes:number;files:number;budget:number;available:boolean;reason:string;hits:number;misses:number;active:number;current?:MapCacheCoverage;prefetch:{running:boolean;done:number;total:number;bytes:number;totalBytes:number;error:string;receiving?:number;stage?:'reading'|'downloading'|'verifying';pausedBy:'user'|'battle'|null;requested:boolean}};
+export type MapCacheStats={ready:boolean;bytes:number;files:number;budget:number;available:boolean;reason:string;hits:number;misses:number;active:number;bundled?:{bytes:number;files:number};current?:MapCacheCoverage;prefetch:{running:boolean;done:number;total:number;bytes:number;totalBytes:number;error:string;receiving?:number;stage?:'reading'|'downloading'|'verifying';pausedBy:'user'|'battle'|null;requested:boolean}};
+export type BundledMapResource={url:string;bytes:number;sha256:string};
 export const abortMapRequest=()=>new DOMException('地图加载已取消。','AbortError');
 export async function mapDigest(bytes:ArrayBuffer){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),n=>n.toString(16).padStart(2,'0')).join('');}
 
@@ -82,7 +83,7 @@ export class MapByteCache {
  private inventory?:Map<string,{key:Request;bytes:number;time:number}>;private currentResources?:Map<string,MapResource>;private verified=new Set<string>();private prefetchSource?:PrefetchSource;private onlineBattle=false;
  private touchTimer?:ReturnType<typeof setTimeout>;private lastTouch=0;
  private decoded=new Map<string,ArrayBuffer>();private decodedBytes=0;private decodeQueue=new MapDownloadQueue(()=>{},1);private failedEncodings=new Set<string>();
- private metrics={networkBytes:0,networkMs:0,gzipDecodeMs:0,gzipDecodes:0,decodedHits:0,fallbacks:0};
+ private metrics={networkBytes:0,networkMs:0,bundledBytes:0,bundledReads:0,gzipDecodeMs:0,gzipDecodes:0,decodedHits:0,fallbacks:0};
  diagnostics(){return{...this.metrics,decodedBytes:this.decodedBytes,decodedFiles:this.decoded.size,decoding:this.decodeQueue.active,pendingWriteBytes:this.pendingWriteBytes};}
  private representation(resource:MapResource){return resource.encoding&&(typeof DecompressionStream==='undefined'||this.failedEncodings.has(resource.url))?decodedMapResourceBinding(resource):resource;}
  private async decodedResource(resource:MapResource,bytes:ArrayBuffer,signal?:AbortSignal){
@@ -90,19 +91,20 @@ export class MapByteCache {
   const epoch=this.epoch;return this.decodeQueue.request(key,async decodeSignal=>{const start=performance.now(),value=await decodeMapResource(resource,bytes,decodeSignal);this.metrics.gzipDecodeMs+=performance.now()-start;this.metrics.gzipDecodes++;if(epoch===this.epoch&&!decodeSignal.aborted&&value.byteLength<=32*1024*1024){while(this.decodedBytes+value.byteLength>32*1024*1024&&this.decoded.size){const first=this.decoded.keys().next().value!;this.decodedBytes-=this.decoded.get(first)!.byteLength;this.decoded.delete(first);}this.decoded.set(key,value);this.decodedBytes+=value.byteLength;}return value;},0,signal);
  }
  private state:MapCacheStats={ready:false,bytes:0,files:0,budget:MAP_CACHE_LIMIT,available:true,reason:'',hits:0,misses:0,active:0,prefetch:emptyPrefetch()};
- constructor(private environment:{fetch:typeof fetch;caches?:CacheStorage;storage?:{estimate:()=>Promise<StorageEstimate>};metadata?:Pick<Storage,'getItem'|'setItem'>;origin:string;online?:()=>boolean;cacheReadTimeoutMs?:number}){
+ constructor(private environment:{fetch:typeof fetch;caches?:CacheStorage;storage?:{estimate:()=>Promise<StorageEstimate>};metadata?:Pick<Storage,'getItem'|'setItem'>;origin:string;online?:()=>boolean;cacheReadTimeoutMs?:number;bundledResources?:ReadonlyMap<string,BundledMapResource>}){
   this.queue=new MapDownloadQueue(()=>{this.state={...this.state,active:this.queue.active};this.emit();});
   try{const saved=JSON.parse(environment.metadata?.getItem('qisheng-map-lru-v1')||'{}');for(const [url,time] of Object.entries(saved))if(typeof time==='number'){this.touched.set(url,time);this.lastTouch=Math.max(this.lastTouch,time);}}catch{}
-  if(!environment.caches){this.readable=false;this.degrade('浏览器未开放地图存储，将直接联网加载。');}
+  if(!environment.caches){this.readable=false;if(environment.bundledResources?.size)this.state={...this.state,ready:true,available:true,reason:'校园资源已随应用提供。'};else this.degrade('浏览器未开放地图存储，将直接联网加载。');}
  }
  stats=():MapCacheStats=>this.state;
  subscribe=(listener:()=>void)=>{this.listeners.add(listener);return()=>{this.listeners.delete(listener);};};
  private emit(){for(const listener of this.listeners)listener();}
+ private isBundled(resource:MapResource,url=new URL(resource.url,this.environment.origin).href){const row=this.environment.bundledResources?.get(url);if(!row)return false;if(row.bytes!==resource.bytes||row.sha256!==resource.sha256)throw Error('应用内地图版本不一致，请更新应用。');return true;}
  private coverage(){
   if(!this.currentResources)return;
-  let bytes=0,files=0,totalBytes=0;for(const [url,r] of this.currentResources){totalBytes+=r.bytes;const row=this.inventory?.get(url);if(row?.bytes===r.bytes&&this.verified.has(url)){bytes+=r.bytes;files++;}}
+  let bytes=0,files=0,totalBytes=0,bundledBytes=0,bundledFiles=0;for(const [url,r] of this.currentResources){totalBytes+=r.bytes;if(this.isBundled(r,url)){bytes+=r.bytes;files++;bundledBytes+=r.bytes;bundledFiles++;continue;}const row=this.inventory?.get(url);if(row?.bytes===r.bytes&&this.verified.has(url)){bytes+=r.bytes;files++;}}
   const current={bytes,files,totalBytes,totalFiles:this.currentResources.size,remainingBytes:Math.max(0,totalBytes-bytes),oldBytes:Math.max(0,this.state.bytes-bytes),oldFiles:Math.max(0,this.state.files-files),complete:files===this.currentResources.size};
-  this.state={...this.state,current};
+  this.state={...this.state,current,...(bundledFiles?{bundled:{bytes:bundledBytes,files:bundledFiles}}:{})};
  }
  private degrade(reason:string){this.state={...this.state,ready:true,available:false,reason};this.emit();}
  private exclusive<T>(work:()=>Promise<T>):Promise<T>{const next=this.lock.then(work,work);this.lock=next.catch(()=>{});return next;}
@@ -111,6 +113,7 @@ export class MapByteCache {
  private async budget(bytes:number){let budget=MAP_CACHE_LIMIT;try{const estimate=await this.environment.storage?.estimate();if(estimate?.quota!==undefined&&estimate.usage!==undefined)budget=Math.min(budget,Math.max(0,Math.floor((estimate.quota-estimate.usage+bytes)*.5)));}catch{}return budget;}
  async refresh(resources?:MapResource[],signal?:AbortSignal){
   if(resources){this.currentResources=new Map(resources.map(resource=>this.representation(resource)).map(r=>[new URL(r.url,this.environment.origin).href,r]));for(const url of this.currentResources.keys())this.verified.delete(url);this.coverage();}
+  if(this.currentResources?.size&&[...this.currentResources].every(([url,resource])=>this.isBundled(resource,url))){if(signal?.aborted)throw abortMapRequest();this.state={...this.state,ready:true,available:true,reason:'校园资源已随应用提供。'};this.coverage();this.emit();return this.state;}
   if(!this.environment.caches)return this.state;
   try{await this.exclusive(async()=>{
    const cache=await this.environment.caches!.open(MAP_CACHE_NAME);await this.entries(cache,true);
@@ -186,8 +189,9 @@ export class MapByteCache {
   return pending.promise;
  }
  read(resource:MapResource,options:MapReadOptions={}):Promise<ArrayBuffer>{
-  const selected=this.representation(resource),epoch=this.epoch,url=new URL(selected.url,this.environment.origin).href;let representationValidated=false;
+  const selected=this.representation(resource),epoch=this.epoch,url=new URL(selected.url,this.environment.origin).href,bundled=this.isBundled(selected,url);let representationValidated=false;
   const request=this.queue.request(url,async(signal,progress)=>{
+   if(bundled){const bytes=await this.fetchBytes(selected.url,signal,'no-store',progress);if(bytes.byteLength!==selected.bytes||await mapDigest(bytes)!==selected.sha256)throw Error('应用内地图资源校验失败，请重新安装。');this.metrics.bundledReads++;this.metrics.bundledBytes+=bytes.byteLength;progress(100,bytes.byteLength);return{bytes,cached:true,persistence:Promise.resolve(true)};}
    const pending=this.pendingWrites.get(url);if(pending?.epoch===epoch){progress(100,pending.bytes.byteLength);return{bytes:pending.bytes,cached:true,persistence:pending.promise};}
    let cached:ArrayBuffer|undefined;if(this.readable)try{cached=await this.storedBytes(selected,url,signal,epoch);}catch(error){if(signal.aborted)throw error;if(epoch===this.epoch){this.readable=false;this.degrade('本机地图存储暂时不可用，将直接联网加载。');}}
    if(signal.aborted)throw abortMapRequest();
@@ -200,13 +204,13 @@ export class MapByteCache {
   return request.then(async result=>{
    if(options.signal?.aborted)throw abortMapRequest();if(selected.encoding)options.onStage?.({stage:'decode',bytes:selected.bytes,totalBytes:selected.bytes,decodedBytes:selected.encoding.decodedBytes});
    const bytes=await this.decodedResource(selected,result.bytes,options.signal);representationValidated=true;if(options.signal?.aborted)throw abortMapRequest();
-   if(result.cached&&epoch===this.epoch){this.verified.add(url);this.touch(url);this.coverage();this.emit();}
+   if(result.cached&&epoch===this.epoch&&!bundled){this.verified.add(url);this.touch(url);this.coverage();this.emit();}
    const signal=options.signal??new AbortController().signal;
    const persistence=result.persistence??(this.state.available&&epoch===this.epoch?this.persist(selected,url,result.bytes,epoch,signal,Boolean(options.waitForPersistence)):Promise.resolve(false));
    if(options.waitForPersistence&&!await awaitWithSignal(persistence,options.signal))throw Error('地图已加载，但本机存储暂时未能保存，请重试完整下载。');
    options.onStage?.({stage:'ready',bytes:selected.bytes,totalBytes:selected.bytes,decodedBytes:bytes.byteLength});return bytes;
   }).catch(error=>{
-   if(representationValidated||options.signal?.aborted||error?.name==='AbortError')throw error;
+   if(bundled||representationValidated||options.signal?.aborted||error?.name==='AbortError')throw error;
    if(!selected.encoding)throw error;
    this.failedEncodings.add(selected.url);this.removeCorrupt(url,epoch);this.metrics.fallbacks++;
    // Complete download must never call an unverified encoded representation saved.
@@ -231,7 +235,9 @@ export class MapByteCache {
   try{
    const list=typeof resources==='function'?await resources(abort.signal):resources,unique=[...new Map(list.map(resource=>this.representation(resource)).map(r=>[r.url,r])).values()];if(abort.signal.aborted)return;
    this.state={...this.state,prefetch:{...this.state.prefetch,total:unique.length,totalBytes:unique.reduce((n,r)=>n+r.bytes,0)}};this.emit();
-   await this.refresh(unique,abort.signal);if(abort.signal.aborted)return;if(!this.state.available||this.state.prefetch.totalBytes>this.state.budget)throw Error('本机空间不足以保存完整地图，仍可按需联网游玩。');
+   await this.refresh(unique,abort.signal);if(abort.signal.aborted)return;
+   if(unique.every(resource=>this.isBundled(resource))){this.state={...this.state,prefetch:{...this.state.prefetch,done:unique.length,bytes:this.state.prefetch.totalBytes}};this.emit();return;}
+   if(!this.state.available||this.state.prefetch.totalBytes>this.state.budget)throw Error('本机空间不足以保存完整地图，仍可按需联网游玩。');
    const cached=unique.filter(r=>this.verified.has(new URL(r.url,this.environment.origin).href)&&this.inventory?.get(new URL(r.url,this.environment.origin).href)?.bytes===r.bytes);
    this.state={...this.state,prefetch:{...this.state.prefetch,done:cached.length,bytes:cached.reduce((n,r)=>n+r.bytes,0)}};this.emit();
    const receiving=new Map<string,number>();const remaining=unique.filter(r=>!cached.includes(r));let next=0;const worker=async()=>{while(next<remaining.length&&!abort.signal.aborted){const r=remaining[next++];await this.read(r,{signal:abort.signal,priority:10,waitForPersistence:true,progress:(percent,bytes)=>{if(abort.signal.aborted||this.prefetchAbort!==abort)return;receiving.set(r.url,Math.min(r.bytes,Math.max(0,bytes??0)));this.state={...this.state,prefetch:{...this.state.prefetch,receiving:[...receiving.values()].reduce((n,v)=>n+v,0),stage:percent===99||bytes===r.bytes?'verifying':'downloading'}};this.emit();}});receiving.delete(r.url);if(abort.signal.aborted)return;if(!this.state.available)throw Error('本机存储暂时不可用，请稍后重试。');this.state={...this.state,prefetch:{...this.state.prefetch,done:this.state.prefetch.done+1,bytes:this.state.prefetch.bytes+r.bytes,receiving:[...receiving.values()].reduce((n,v)=>n+v,0)}};this.emit();}};
@@ -243,8 +249,14 @@ export class MapByteCache {
 }
 
 let shared:MapByteCache|undefined;
+let bundledResources:ReadonlyMap<string,BundledMapResource>|undefined;
+/** Called once by the signed app bootstrap before the first map consumer. */
+export function configureBundledMapResources(resources:readonly BundledMapResource[],origin=typeof location==='undefined'?'https://game.tianhw.top':location.origin){
+ if(shared)throw Error('地图读取已开始，不能切换随包资源。');
+ const rows=new Map<string,BundledMapResource>();for(const row of resources){if(!/^\/assets\/map\/[a-f0-9]{64}\.[a-z0-9]+$/.test(row.url)||!/^[a-f0-9]{64}$/.test(row.sha256)||!row.url.includes(row.sha256)||!Number.isSafeInteger(row.bytes)||row.bytes<0)throw Error('随包地图清单无效。');const url=new URL(row.url,origin).href;if(rows.has(url))throw Error('随包地图清单重复。');rows.set(url,{...row});}bundledResources=rows;
+}
 export function mapByteCache(){
- if(!shared){let metadata:Storage|undefined;try{metadata=globalThis.localStorage;}catch{}shared=new MapByteCache({fetch:(...args)=>fetch(...args),caches:typeof caches==='undefined'?undefined:caches,storage:typeof navigator==='undefined'?undefined:navigator.storage,metadata,origin:typeof location==='undefined'?'http://localhost':location.origin});}
+ if(!shared){let metadata:Storage|undefined;try{metadata=globalThis.localStorage;}catch{}shared=new MapByteCache({fetch:(...args)=>fetch(...args),caches:typeof caches==='undefined'?undefined:caches,storage:typeof navigator==='undefined'?undefined:navigator.storage,metadata,origin:typeof location==='undefined'?'http://localhost':location.origin,bundledResources});}
  return shared;
 }
 export class MapAssetSession {
