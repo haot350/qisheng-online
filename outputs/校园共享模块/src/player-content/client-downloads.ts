@@ -1,7 +1,7 @@
 export const UE_WINDOWS_PREVIEW = {
   productName: '齐盛：2027',
   logoPath: '/images/branding/qisheng-2027-primary.webp',
-  title: 'Windows UE 校园游览测试版',
+  title: 'Windows 校园游览测试版',
   version: '0.2.0',
   description: '新版校园步行探索、六种环境与独立画质设置。本版暂不提供联机枪战。',
   installation: '完整解压后，运行 QishengOnline.exe。',

@@ -2,6 +2,7 @@ import {useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {listPhotoMetadata,photoSummary,readPhoto,removePhoto,watchAlbum} from './album.ts';
 import {AlbumThumbnailCache} from './thumbnail.ts';
 import type {PhotoMetadata,PhotoRecord} from './types.ts';
+import styles from './AlbumMedia.module.css';
 
 export function useAlbumMedia(extras:PhotoRecord[]=[],enabled=true){
  const extraRef=useRef(new Map<string,PhotoRecord>());extraRef.current=new Map(extras.map(photo=>[photo.id,photo]));
@@ -34,5 +35,5 @@ export function PhotoThumbnail({photo,cache,alt='玩家拍摄的数字校园照�
 export function PhotoImage({photo}:{photo:PhotoRecord}){
  const[image,setImage]=useState({id:'',url:''}),[failed,setFailed]=useState(false),[attempt,setAttempt]=useState(0);
  useEffect(()=>{const source=URL.createObjectURL(photo.blob);setFailed(false);setImage({id:photo.id,url:source});return()=>{URL.revokeObjectURL(source);};},[photo.id,photo.blob,attempt]);
- return <>{failed&&<div className="photo-album-alert" role="alert"><span>照片暂时无法显示。</span><button onClick={()=>{setFailed(false);setAttempt(n=>n+1);}}>重新显示照片</button></div>}<img src={image.id===photo.id?image.url||undefined:undefined} alt="玩家拍摄的数字校园照片" decoding="async" onError={()=>{if(image.id===photo.id&&image.url)setFailed(true);}} style={failed?{display:'none'}:undefined}/></>;
+ return <>{failed&&<div className={styles.error} role="alert"><span>照片暂时无法显示。</span><button onClick={()=>{setFailed(false);setAttempt(n=>n+1);}}>重新显示照片</button></div>}<img width={photo.width} height={photo.height} data-photo-original={photo.id} src={image.id===photo.id?image.url||undefined:undefined} alt="玩家拍摄的数字校园照片" decoding="async" onError={()=>{if(image.id===photo.id&&image.url)setFailed(true);}} style={failed?{display:'none'}:undefined}/></>;
 }

@@ -32,7 +32,7 @@ const credential = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY
 const productionIP = /(?:38\.22\.95\.192|154\.40\.59\.1)/;
 const unsafeAsset = /\.(?:png|jpe?g|webp|gif|bmp|ico|glb|gltf|blend|bin|fbx|obj|mtl|ktx2?|dds|mp3|wav|ogg|flac|mp4|sqlite(?:3)?|db|log|zip|7z|pck|apk|aab|exe|dll|so|dylib|pdf)$/i;
 const privateDirectory = /(?:^|\/)(?:private(?:-data)?|credentials?|screenshots?|backups?|releases?|node_modules|\.git|\.godot|target)(?:\/|$)/i;
-const approvedAsset = new Set(['outputs/校园逃生游戏/demo/public/anonymous-avatar.svg', 'outputs/校园逃生游戏/demo/public/ui-b-campus.svg', 'outputs/齐盛原生客户端/icon.svg']);
+const approvedAsset = new Set(['outputs/校园逃生游戏/demo/public/anonymous-avatar.svg', 'outputs/校园逃生游戏/demo/public/ui-b-campus.svg', 'outputs/校园逃生游戏/demo/public/ui-b-campus.svg', 'outputs/齐盛原生客户端/icon.svg']);
 let sourceCount = 0, uidCount = 0, rustFiles = 0, nativeFiles = 0, deployFiles = 0;
 const scan = (text, file, entry) => {
   for (const [kind, pattern] of [['credential-signature', credential], ['production-IP-literal', productionIP]]) {

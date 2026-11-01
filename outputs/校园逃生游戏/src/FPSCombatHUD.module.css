@@ -1,0 +1,42 @@
+
+.fps-vitals,.fps-ammo { box-sizing:border-box; min-width:0; color:var(--text-primary); background:color-mix(in srgb,var(--surface-card) 90%,transparent); border:1px solid var(--border-subtle); font-family:var(--font-body); pointer-events:none; text-shadow:none; transition:border-color var(--motion-short,160ms); }
+.fps-vitals { width:178px; min-height:110px; display:grid; gap:10px; padding:12px 16px; border-left:3px solid var(--accent-primary); clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px)); }
+.fps-health,.fps-stamina { display:grid; grid-template-columns:1fr auto; align-items:center; gap:5px 12px; min-width:0; }
+.fps-health>span,.fps-stamina>span { display:flex; align-items:center; gap:5px; font-size:calc(12px * var(--ui-text-scale,1)); color:var(--text-muted); }
+.fps-health-icon { font-style:normal; color:var(--accent-primary); font-size:calc(17px * var(--ui-text-scale,1)); line-height:1; }
+.fps-vitals strong,.fps-ammo>strong,.fps-ammo small { font-family:var(--font-number); font-variant-numeric:tabular-nums; font-weight:700; letter-spacing:-.035em; }
+.fps-health strong { font-size:calc(36px * var(--ui-text-scale,1)); line-height:1; }
+.fps-stamina strong { font-size:calc(17px * var(--ui-text-scale,1)); line-height:1.2; }
+.fps-meter { grid-column:1/-1; height:4px; overflow:hidden; background:color-mix(in srgb,var(--text-muted) 22%,transparent); }
+.fps-meter b { display:block; height:100%; background:var(--text-primary); transition:width var(--motion-short,160ms) linear; }
+.fps-stamina .fps-meter b { background:var(--accent-primary); }
+.fps-vitals.critical { border-color:var(--status-danger,#ef9b83); border-left-color:var(--status-danger,#ef9b83); }
+.critical .fps-health strong,.critical .fps-health-icon { color:var(--status-danger,#ef9b83); }
+.critical .fps-health .fps-meter b { background:var(--status-danger,#ef9b83); }
+.fps-ammo { min-width:174px; max-width:230px; min-height:110px; padding:12px 16px; border-right:3px solid var(--accent-primary); text-align:right; clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px); }
+.fps-weapon-name { display:block; min-width:0; margin-bottom:4px; color:var(--text-muted); font-size:calc(13px * var(--ui-text-scale,1)); font-weight:600; overflow-wrap:anywhere; }
+.fps-ammo>strong { display:block; font-size:calc(48px * var(--ui-text-scale,1)); line-height:1.05; white-space:nowrap; }
+.fps-ammo small { font-size:calc(20px * var(--ui-text-scale,1)); color:var(--text-muted); letter-spacing:0; }
+.fps-ammo.is-low { border-right-color:var(--status-warning,#eac187); }
+.fps-ammo.is-low>strong { color:var(--status-warning,#eac187); }
+.fps-ammo.is-empty { border-color:var(--status-danger,#ef9b83); }
+.fps-ammo.is-empty>strong,.fps-ammo.is-empty .fps-weapon-action { color:var(--status-danger,#ef9b83); }
+.fps-weapon-action { display:flex; flex-direction:column; align-items:flex-end; gap:5px; margin-top:7px; font-size:calc(12px * var(--ui-text-scale,1)); line-height:1.35; color:var(--text-muted); }
+.fps-weapon-action.is-active { color:var(--accent-primary); }
+.fps-weapon-action progress { display:block; width:100%; height:4px; border:0; appearance:none; background:color-mix(in srgb,var(--text-muted) 24%,transparent); accent-color:var(--accent-primary); }
+.fps-weapon-action progress::-webkit-progress-bar { background:color-mix(in srgb,var(--text-muted) 24%,transparent); }
+.fps-weapon-action progress::-webkit-progress-value { background:var(--accent-primary); }
+.fps-weapon-action progress::-moz-progress-bar { background:var(--accent-primary); }
+.fps-vitals.is-touch { width:102px; min-height:82px; padding:8px 9px; gap:7px; }
+.fps-vitals.is-touch .fps-health-icon { display:none; }
+.fps-vitals.is-touch .fps-health>span,.fps-vitals.is-touch .fps-stamina>span { font-size:calc(11px * var(--ui-text-scale,1)); gap:0; white-space:nowrap; }
+.fps-vitals.is-touch .fps-health strong { font-size:calc(26px * var(--ui-text-scale,1)); }
+.fps-vitals.is-touch .fps-stamina strong { font-size:calc(14px * var(--ui-text-scale,1)); }
+.fps-vitals.is-touch .fps-meter { height:3px; }
+.fps-ammo.is-touch { min-width:128px; max-width:180px; min-height:84px; padding:8px 11px; }
+.fps-ammo.is-touch .fps-weapon-name { font-size:calc(12px * var(--ui-text-scale,1)); }
+.fps-ammo.is-touch>strong { font-size:calc(33px * var(--ui-text-scale,1)); }
+.fps-ammo.is-touch small { font-size:calc(16px * var(--ui-text-scale,1)); }
+.fps-ammo.is-touch .fps-weapon-action { margin-top:5px; font-size:calc(11px * var(--ui-text-scale,1)); }
+@media(prefers-reduced-motion:reduce) { .fps-vitals,.fps-ammo,.fps-meter b { transition:none; } }
+:global([data-reduced-motion=true]) .fps-vitals,:global([data-reduced-motion=true]) .fps-ammo,:global([data-reduced-motion=true]) .fps-meter b { transition:none; }

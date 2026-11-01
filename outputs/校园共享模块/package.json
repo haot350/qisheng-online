@@ -1,6 +1,6 @@
 {
   "name": "@qisheng/shared",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "private": true,
   "type": "module",
   "description": "Canonical game rules, protocol and opt-in browser modules",
@@ -108,7 +108,12 @@
     "./community/feedback-picture": {
       "types": "./src/community/feedback-picture.ts",
       "default": "./dist/community/feedback-picture.js"
-    }
+    },
+    "./ui": {
+      "types": "./src/ui/index.tsx",
+      "default": "./dist/ui/index.js"
+    },
+    "./ui/theme.css": "./dist/ui/theme.css"
   },
   "files": [
     "dist",

@@ -22,7 +22,7 @@
     "recast-navigation": "0.43.1",
     "three": "0.183.0",
     "express": "5.2.1",
-    "@qisheng/shared": "file:vendor/qisheng-shared-0.11.0.tgz"
+    "@qisheng/shared": "file:vendor/qisheng-shared-0.11.1.tgz"
   },
   "devDependencies": {
     "@types/express": "5.0.3",

@@ -1,4 +1,8 @@
 import {drivingVehicleId} from './vehicles';
+import {UIPresentationProvider,resolveUIPresentation,screenUIOrientation} from '@qisheng/shared/ui';
+import shellUI from './ui/PageShell.module.css';
+import sessionUI from './ui/SessionMenu.module.css';
+import loadingUI from './ui/LoadingPanel.module.css';
 import {VehicleChoice} from './DrivingUI';
 import {WeatherChoice} from './WeatherChoice';
 import {MenuChoice} from './MenuChoice';
@@ -667,6 +671,7 @@ export default function App() {
     game.current?.storyOverlay("ui-module", moduleFailures.current.size > 0);
   };
   const usableViewport = useUsableViewport();
+  const presentation=resolveUIPresentation({...usableViewport,touch:primaryTouchInput(),android:isAndroidApp(),orientation:primaryTouchInput()||isAndroidApp()?screenUIOrientation():undefined});
   const [systemTouch, setSystemTouch] = useState(primaryTouchInput);
   const importInput = useRef<HTMLInputElement>(null),
     importSession = useRef<{
@@ -1478,8 +1483,9 @@ export default function App() {
     </Suspense>
   );
   return (
-    <main
-      data-ui-platform={isAndroidApp()?'android':(primaryTouchInput()||usableViewport.width<900?'web-mobile':'desktop')}
+    <UIPresentationProvider value={presentation}><main
+      data-ui-platform={presentation.platform}
+      data-ui-orientation={presentation.orientation}
       data-ui-theme={snapshot.mode==='escape'||isMenu&&selectedMode==='escape'&&menuScreen==='prepare'||onlineOpen?'tactical':'campus'}
       style={{"--ui-text-scale":settings.uiTextScale??1} as React.CSSProperties}
       data-reduced-motion={(!settings.headBob&&!settings.recoilShake)||matchMedia("(prefers-reduced-motion: reduce)").matches}
@@ -1493,15 +1499,14 @@ export default function App() {
         (snapshot.mode === "escape" ? " escape-mode" : "")
       }
     >
-      <div className="world" ref={host} />
-      {online && snapshot.phase === 'loading' && !onlineOpen && !onlineReadingOpen && (
-        <div className="online-shade">
-          <section className="online-panel online-small" aria-label="准备进入校园">
-            <div className="online-body">
+      <div className="world" ref={host} />      {online && snapshot.phase === 'loading' && !onlineOpen && !onlineReadingOpen && (
+        <div className={loadingUI.shade}>
+          <section className={loadingUI.panel} aria-label="准备进入校园">
+            <div className={loadingUI.body}>
               <h2>准备进入校园</h2>
               <p role="status">{snapshot.message || '正在准备场景'}</p>
               <progress aria-label="本局资源准备" max={100} value={Math.max(0,Math.min(100,snapshot.progress))}/>
-              <div className="online-actions"><button onClick={()=>onlineAction({type:'leave'})}>取消并离开房间</button></div>
+              <div className={loadingUI.actions}><button onClick={()=>onlineAction({type:'leave'})}>取消并离开房间</button></div>
             </div>
           </section>
         </div>
@@ -1642,34 +1647,13 @@ export default function App() {
               )}
             </>
           }
-          controls={
-            <>
-              {selectedMode === "escape" ? (
-                <>
-                  <WeaponLoadout value={primary} onChange={id=>setPrimary(id as PrimaryWeapon)} mode="solo" disabled={busy}/>
-                  <MenuChoice label="难度" purpose="difficulty" value={settings.escapeDifficulty??'standard'} disabled={busy} onChange={escapeDifficulty=>changeSettings({...settings,escapeDifficulty})} options={ESCAPE_DIFFICULTIES.map(d=>({value:d.id,label:d.label}))} hint={ESCAPE_DIFFICULTIES.find(d=>d.id===(settings.escapeDifficulty??'standard'))?.description}/>
-                </>
-              ) : selectedMode === "dafei" ? (
-                <>
-                  <p className="mode-note">
-                    五分钟争取更多积分，车况耗尽会提前结算。
-                  </p>
-<VehicleChoice value={drivingVehicleId(settings.drivingVehicle)} onChange={drivingVehicle=>changeSettings({...settings,drivingVehicle})} disabled={busy}/>{drivingVehicleId(settings.drivingVehicle)==='bao5'&&<TransmissionChoice
-                    mode={settings.transmission ?? "auto"}
-                    onChange={changeTransmission}
-                    disabled={busy}
-                  />}
-                </>
-              ) : (
-                <p className="mode-note">
-                  {selectedMode === "story"
-                    ? "故事进度自动保存在本机，可随时停下。"
-                    : "随时探索与拍照，不计时，也没有敌人。"}
-                </p>
-              )}
-              {selectedMode!=='story'&&<WeatherChoice value={settings.weather??'clear'} onChange={weather=>changeSettings({...settings,weather})} disabled={busy}/>}
-            </>
-          }
+          displayControls={selectedMode==='escape'?<WeaponLoadout value={primary} onChange={id=>setPrimary(id as PrimaryWeapon)} mode="solo" disabled={busy}/>:selectedMode==='dafei'?<VehicleChoice value={drivingVehicleId(settings.drivingVehicle)} onChange={drivingVehicle=>changeSettings({...settings,drivingVehicle})} disabled={busy}/>:undefined}
+          optionControls={<>
+            {selectedMode==='escape'&&<MenuChoice label="难度" purpose="difficulty" value={settings.escapeDifficulty??'standard'} disabled={busy} onChange={escapeDifficulty=>changeSettings({...settings,escapeDifficulty})} options={ESCAPE_DIFFICULTIES.map(d=>({value:d.id,label:d.label}))} hint={ESCAPE_DIFFICULTIES.find(d=>d.id===(settings.escapeDifficulty??'standard'))?.description}/>}
+            {selectedMode==='dafei'&&<><p>五分钟争取更多积分，车况耗尽会提前结算。</p>{drivingVehicleId(settings.drivingVehicle)==='bao5'&&<TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/>}</>}
+            {selectedMode==='story'?<p>故事进度自动保存在本机，可随时停下。</p>:selectedMode==='roam'?<p>随时探索与拍照，不计时，也没有敌人。</p>:null}
+            {selectedMode!=='story'&&<WeatherChoice value={settings.weather??'clear'} onChange={weather=>changeSettings({...settings,weather})} disabled={busy}/>}
+          </>}
         />
       )}
       {announcements.flash && playing && <div className="announcement-flash" role="status"><strong>{announcements.flash.title}</strong><span>暂停菜单可查看完整通知</span></div>}
@@ -1677,14 +1661,14 @@ export default function App() {
       {noticesOpen && <MenuReadingPanel title="游戏通知" onClose={()=>setNoticesOpen(false)}><AnnouncementList items={announcements.list} onRead={announcements.markRead}/></MenuReadingPanel>}
       {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} identity={rankingPlayer?.nickname} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
         {page==='settings'?<SettingsPanel mode={helpMode} onlineWeather={onlineView.currentRoom?(onlineView.currentRoom.weather?.preset??'clear'):undefined} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
-        page==='help'?<div className="help-panel">{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题 →</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
+        page==='help'?<div className={shellUI.help}>{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
         page==='faq'?<MenuFAQ mode={helpMode} context={menuScreen==='prepare'?'prepare':'home'}/>:
         page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
         page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} onPlanComplete={plan=>{if(plan.actions.some(action=>action.type==='create_room'||action.type==='join_room')&&onlineClient.current?.view.currentRoom?.phase==='lobby'){pages.clear();setOnlineOpen(true);}}} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
-        page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} campusArtUrl={staticAssetUrl('/assets/ui-b/courtyard-wide.webp')} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
+        page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} campusArtUrl={staticAssetUrl('/assets/ui-b/courtyard-wide.webp')} campusPortraitArtUrl={staticAssetUrl('/assets/ui-b/courtyard-portrait.webp')} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
       {leaveConfirmation&&<GameDialog tactical={snapshot.mode==='escape'||!!onlineView.currentRoom} tone="danger" title={leaveDestination==='lobby'?'返回联机大厅？':onlineView.currentRoom?'离开当前房间？':'结束本局？'} busy={leavingRoom} busyLabel="正在离开…" onCancel={()=>setLeaveConfirmation(false)} cancelLabel="留在菜单" confirmLabel={leaveDestination==='lobby'?'返回联机大厅':'返回主菜单'} onConfirm={()=>void (leaveDestination==='lobby'?finishReturnLobby():finishReturnMenu())}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位。其他玩家可以继续对局。':storyMode?'故事进度会保留在本机，下次可以继续。':'本局尚未完成，返回主菜单将结束当前游玩。'}</p></GameDialog>}
       {briefing && (
@@ -1924,7 +1908,7 @@ export default function App() {
             className="story-system-error"
             onClick={() => game.current?.retryMusic()}
           >
-            背景音乐未载入 · 重试
+            背景音乐未载入，点击重试
           </button>
         )}
       {playing &&
@@ -2147,12 +2131,11 @@ export default function App() {
         !photoAlbumOpen && !pages.active && (
           <MenuPage id="pause" title={snapshot.mode==='escape'?'突围菜单':'暂停菜单'} active tactical={snapshot.mode==='escape'} showNavigation={false} centered onRoot={returnMenu} rootLabel="主菜单" feedbackUnread={feedbackUnread} onNavigate={openMenuPage}>
           <AnnouncementBanner items={announcements.list} onOpen={openNotices}/>
-          <div className="pause-shade">
-            <section className="pause-panel">
-              <div className="pause-session-heading"><h2>{snapshot.mode==='escape'?'准备好，继续行动。':'校园在等你。'}</h2><p>{driving?'驾驶与倒计时已暂停。':'当前进度已暂停。'}</p></div>
-              {driving&&(!snapshot.driving?.vehicleId||snapshot.driving.vehicleId==='bao5')&&<div className="pause-session-controls"><TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/></div>}
+          <div className={sessionUI.content}>
+              <p className={sessionUI.caption}>{driving?'驾驶与倒计时已暂停。':'当前进度已暂停。'}</p>
+              {driving&&(!snapshot.driving?.vehicleId||snapshot.driving.vehicleId==='bao5')&&<div className={sessionUI.controls}><TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/></div>}
               <button
-                className="primary wide"
+                className={sessionUI.resume}
                 onClick={resume}
                 disabled={busy || (touchLayout && portrait)}
               >
@@ -2160,9 +2143,8 @@ export default function App() {
                 <Icon name="play" />
               </button>
               <SessionMenuActions onOpen={openMenuPage} onMain={returnMenu} busy={busy}/>
-              {storyMode&&<details className="pause-progress-controls"><summary>故事进度</summary><label><input type="checkbox" checked={replayGuidanceOnContinue} onChange={event=>setReplayGuidanceOnContinue(event.target.checked)}/>继续时重看操作引导</label><div className="pause-options"><button className="secondary" onClick={exportStory}>导出进度</button><button className="secondary" onClick={chooseImport} disabled={busy}>导入进度</button><button className="text-button" onClick={()=>void continueStory(true,true)} disabled={busy}>恢复上一份存档</button></div></details>}
+              {storyMode&&<details className={sessionUI.story}><summary>故事进度</summary><label><input type="checkbox" checked={replayGuidanceOnContinue} onChange={event=>setReplayGuidanceOnContinue(event.target.checked)}/>继续时重看操作引导</label><div className={sessionUI.storyOptions}><button className="secondary" onClick={exportStory}>导出进度</button><button className="secondary" onClick={chooseImport} disabled={busy}>导入进度</button><button className="text-button" onClick={()=>void continueStory(true,true)} disabled={busy}>恢复上一份存档</button></div></details>}
 
-            </section>
           </div>
           </MenuPage>
         )}
@@ -2273,18 +2255,18 @@ export default function App() {
           </MenuPage>
         )}
       {online && snapshot.phase === "error" && !onlineReadingOpen && (
-        <div className="online-shade">
+        <div className={loadingUI.shade}>
           <section
-            className="online-panel online-small"
+            className={loadingUI.panel}
             role="dialog"
             aria-label="校园加载失败"
           >
-            <div className="online-body">
+            <div className={loadingUI.body}>
               <h2>校园暂时未能载入</h2>
               <p>其他队员可以继续准备。重试完成后再开始本局。</p>
-              <div className="online-actions">
+              <div className={loadingUI.actions}>
                 <button
-                  className="online-primary"
+                  className={loadingUI.primary}
                   onClick={() => setAttempt((n) => n + 1)}
                 >
                   重新载入
@@ -2467,6 +2449,6 @@ export default function App() {
             </button>
           </div>
         )}
-    </main>
+    </main></UIPresentationProvider>
   );
 }

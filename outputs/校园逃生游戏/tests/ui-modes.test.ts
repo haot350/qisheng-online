@@ -8,8 +8,6 @@ import ts from 'typescript';
 import type {Mode,Snapshot,DrivingSnapshot,GameAPI} from '../src/types.ts';
 import {DEFAULT_PHOTO_SETTINGS,type PhotoRecord,type PhotoSnapshot,type PhotoControl} from '../src/photography/types.ts';
 import {AlbumFullError} from '../src/photography/album.ts';
-import {StorySession} from '../src/story/session.ts';
-import {EscapeRound} from '../src/escape/round.ts';
 import {staticAssetUrl} from '../src/static-assets.ts';
 
 // Render the real UI branches and exercise menu callbacks without mounting a
@@ -18,18 +16,19 @@ import {staticAssetUrl} from '../src/static-assets.ts';
 const moduleURL=(source:string)=>`data:text/javascript,${encodeURIComponent(source)}`;
 const reactURL=import.meta.resolve('react');
 const hooksURL=moduleURL(`export * from ${JSON.stringify(reactURL)};
-  import {lazy as originalLazy,useState as realUseState,useRef as realUseRef} from ${JSON.stringify(reactURL)};
+  import {lazy as originalLazy,useState as realUseState,useRef as realUseRef,useCallback as realUseCallback,useEffect as realUseEffect,useLayoutEffect as realUseLayoutEffect} from ${JSON.stringify(reactURL)};
   export const lazy=(loader)=>{const source=loader.toString();for(const name of ['PhotoAlbum','PhotoUI','StoryHUD','ArchiveUI','RealityUI'])if(source.includes('m.'+name))return globalThis.uiLazyModules[name];return originalLazy(loader);};
-  export const useState=(initial)=>globalThis.uiFixture.topActive?globalThis.uiFixture.useState(initial):realUseState(initial);
-  export const useRef=(initial)=>globalThis.uiFixture.topActive?globalThis.uiFixture.useRef(initial):realUseRef(initial);
-  export const useCallback=(callback)=>callback;
-  export const useEffect=()=>{};
-  export const useLayoutEffect=()=>{};`);
+  export const useState=(initial)=>globalThis.uiFixture?.topActive?globalThis.uiFixture.useState(initial):realUseState(initial);
+  export const useRef=(initial)=>globalThis.uiFixture?.topActive?globalThis.uiFixture.useRef(initial):realUseRef(initial);
+  export const useCallback=(...args)=>globalThis.uiFixture?.topActive?args[0]:realUseCallback(...args);
+  export const useEffect=(...args)=>globalThis.uiFixture?.topActive?undefined:realUseEffect(...args);
+  export const useLayoutEffect=(...args)=>globalThis.uiFixture?.topActive?undefined:realUseLayoutEffect(...args);`);
 const engineURL=moduleURL('export function createGame(){throw new Error("The UI fixture must not initialize the engine");}');
 const storyStoreURL=moduleURL('export class StorySaveStore{async load(previous){return globalThis.uiStoryStore.load(previous);}async close(){globalThis.uiStoryStore.closed++;}}');
-const cssURL=moduleURL('export {};');
+const cssURL=moduleURL('export default new Proxy({}, {get:(_target,key)=>String(key)});');
 registerHooks({
   resolve(specifier,context,nextResolve){
+    if(specifier==='react'&&context.parentURL?.includes('/src/'))return {url:hooksURL,shortCircuit:true};
     if(context.parentURL?.endsWith('/src/App.tsx')){
       if(specifier==='react')return {url:hooksURL,shortCircuit:true};
       if(specifier==='./usable-viewport')return {url:moduleURL('export function useUsableViewport(){return {width:1280,height:720};}'),shortCircuit:true};
@@ -49,10 +48,13 @@ registerHooks({
     return nextResolve(specifier,context);
   },
   load(url,context,nextLoad){
+    if(url.endsWith('.json'))return {format:'module',source:'export default '+readFileSync(new URL(url),'utf8')+';',shortCircuit:true};
     if(url.endsWith('.tsx'))return {format:'module',source:ts.transpileModule(readFileSync(new URL(url),'utf8').replaceAll('import.meta.env.DEV','false'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX}}).outputText,shortCircuit:true};
     return nextLoad(url,context);
   },
 });
+const {StorySession}=await import('../src/story/session.ts');
+const {EscapeRound}=await import('../src/escape/round.ts');
 const {DEFAULT_SETTINGS}=await import('../src/types.ts');
 const {StoryHUD}=await import('../src/StoryUI.tsx');
 const {PhotoAlbum,PhotoUI}=await import('../src/PhotoUI.tsx');
@@ -64,6 +66,9 @@ const {DafeiIntro,DrivingHelp}=await import('../src/DrivingUI.tsx');
 const {EscapeTouchControls}=await import('../src/EscapeTouchUI.tsx');
 const {ModuleBoundary}=await import('../src/ModuleBoundary.tsx');
 const {MainMenu,MenuReadingPanel}=await import('../src/MainMenu.tsx');
+const {MenuPage}=await import('../src/MenuPages.tsx');
+const {SessionMenuActions}=await import('../src/SessionMenuActions.tsx');
+const {GameDialog}=await import('../src/GameDialog.tsx');
 
 type Element=ReactElement<Record<string,unknown>>;
 function elements(node:unknown,result:Element[]=[]):Element[]{
@@ -75,6 +80,7 @@ function element(tree:unknown,predicate:(node:Element)=>boolean){const found=ele
 const html=(tree:ReactElement)=>renderToStaticMarkup(tree);
 const mainMenu=(tree:ReactElement)=>element(tree,n=>n.type===MainMenu);
 const menuStart=(tree:ReactElement)=>({props:{onClick:mainMenu(tree).props.onStart}});
+function confirmLeave(tree:ReactElement){const dialog=element(tree,n=>n.type===GameDialog&&n.props.confirmLabel==='返回主菜单');(dialog.props.onConfirm as ()=>void)();}
 const driving=():DrivingSnapshot=>({gear:1,rpm:900,transmission:'auto',shiftLeft:0,shiftSerial:0,rejectedShiftSerial:0,score:300,hits:2,combo:2,bestCombo:2,bestScore:500,durability:340,speed:10,boostLeft:0,boostCooldown:0,countdown:0,resetProgress:0,repairProgress:0,repairName:'',guide:'',targets:[{id:0,name:'追逐者',angle:Math.PI/2,remaining:2}]});
 function escapeState(phase:Snapshot['phase']){const site=(id:string,x:number)=>({id,label:id,region:'teaching' as const,position:[x,0,0] as [number,number,number],floor:0 as const});const points=[site('one',10),site('two',20),site('three',30)],gate=site('gate',0);const round=new EscapeRound({difficulty:'standard',plan:{seed:17,difficulty:'standard',spawn:[0,0,0],extraction:gate,tasks:points.map((point,i)=>({id:'task-'+i,kind:'take' as const,label:'任务'+i,sites:[point],duration:0,radius:2.4}))}});if(phase==='won'){for(const point of points)round.update(.016,{position:point.position,interactPressed:true});round.update(.016,{position:[0,0,0],interactPressed:true});round.update(20,{position:[0,0,0],extractionClear:true});}return {...round.snapshot(),best:92,playerPosition:[0,0,0] as [number,number,number],playerFloor:0,mapFloor:0,mapFloors:[0,1,2,3,4]};}
 const snapshot=(mode:Mode,phase:Snapshot['phase']='menu'):Snapshot=>({phase,mode,progress:100,message:'',health:100,stamina:100,ammo:17,reserve:51,weapon:'glock',hasPrimary:mode==='escape',smokes:2,remaining:mode==='dafei'?300:480,elapsed:0,grace:0,clues:0,goalName:'庭院',goalDistance:30,goalAngle:0,extraction:0,running:false,crouching:false,aiming:false,reloading:false,hit:0,hitType:null,hurt:0,incoming:[{id:1,angle:0,vertical:0,strength:.8,remaining:.8}],fps:30,quality:'自动',musicError:false,best:null,resultReason:'',notice:'',buffering:false,mapError:false,mapProgress:1,...(mode==='dafei'?{driving:driving()}:mode==='escape'?{escape:escapeState(phase)}:{})});
@@ -85,16 +91,27 @@ const appSource=ts.createSourceFile('App.tsx',readFileSync(new URL('../src/App.t
 const appDeclaration=appSource.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='App');assert.ok(appDeclaration);
 const stateNames:string[]=[];
 const refNames:string[]=[];
-function refDeclarations(node:ts.Node){if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.initializer&&ts.isCallExpression(node.initializer)&&node.initializer.expression.getText(appSource)==='useRef')refNames.push(node.name.text);ts.forEachChild(node,refDeclarations);}refDeclarations(appDeclaration);
-function stateDeclarations(node:ts.Node){if(ts.isVariableDeclaration(node)&&ts.isArrayBindingPattern(node.name)&&node.initializer&&ts.isCallExpression(node.initializer)&&node.initializer.expression.getText(appSource)==='useState'){const first=node.name.elements[0];assert.ok(ts.isBindingElement(first)&&ts.isIdentifier(first.name));stateNames.push(first.name.text);}ts.forEachChild(node,stateDeclarations);}stateDeclarations(appDeclaration);
+const pagesSource=ts.createSourceFile('MenuPages.tsx',readFileSync(new URL('../src/MenuPages.tsx',import.meta.url),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const pagesDeclaration=pagesSource.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='useMenuPages');assert.ok(pagesDeclaration);
+function hookDeclarations(node:ts.Node,source:ts.SourceFile,prefix=''){
+ if(ts.isCallExpression(node)&&node.expression.getText(source)==='useMenuPages'){hookDeclarations(pagesDeclaration,pagesSource,'pages.');return;}
+ if(ts.isVariableDeclaration(node)&&node.initializer&&ts.isCallExpression(node.initializer)){
+  const hook=node.initializer.expression.getText(source);
+  if(hook==='useRef'&&ts.isIdentifier(node.name))refNames.push(prefix+node.name.text);
+  if(hook==='useState'&&ts.isArrayBindingPattern(node.name)){const first=node.name.elements[0];assert.ok(ts.isBindingElement(first)&&ts.isIdentifier(first.name));stateNames.push(prefix+first.name.text);}
+ }
+ ts.forEachChild(node,child=>hookDeclarations(child,source,prefix));
+}
+hookDeclarations(appDeclaration,appSource);
 async function fixture(mode:Mode,run:(f:{render:()=>ReactElement;starts:{mode:Mode;loadout:unknown}[];state:Record<string,unknown>;cues:()=>number;prepares:()=>number;api:GameAPI;store:{load:(previous?:boolean)=>Promise<unknown>;closed:number}})=>void|Promise<void>,overrides:Record<string,unknown>={}){
   const starts:{mode:Mode;loadout:unknown}[]=[],state:Record<string,unknown>={snapshot:snapshot(mode),settings:{...DEFAULT_SETTINGS},selectedMode:mode,menuScreen:'prepare',preparation:{state:'ready',progress:100,message:''},...overrides};
+  if(state['pages.active']&&!state['pages.visited'])state['pages.visited']=[state['pages.active']];
   let cueCount=0,prepareCount=0;
-  const api={start:async(mode:Mode,loadout?:unknown)=>{starts.push({mode,loadout});},prepareDafeiIntro:async()=>{prepareCount++;state.snapshot=snapshot('dafei','intro');},guide(){cueCount++;},menu(){state.snapshot=snapshot(mode);},setSettings(){},drive(){},action(){},move(){},look(){},holdLook(){}} as unknown as GameAPI;
+  const api={start:async(mode:Mode,loadout?:unknown)=>{starts.push({mode,loadout});},prepareDafeiIntro:async()=>{prepareCount++;state.snapshot=snapshot('dafei','intro');},guide(){cueCount++;},menu(){state.snapshot=snapshot(mode);},setSettings(){},modePrepared(){return true;},pause(){state.snapshot={...(state.snapshot as Snapshot),phase:'paused'};},clearInput(){},drive(){},action(){},move(){},look(){},holdLook(){}} as unknown as GameAPI;
   let stateIndex=0,refIndex=0;
   const refs:{current:unknown}[]=[];
   const store={load:async(_previous?:boolean):Promise<unknown>=>null,closed:0};
-  const globals={uiStoryStore:store,uiFixture:{topActive:false,useState(initial:unknown){const key=stateNames[stateIndex++];assert.ok(key,'unexpected App state hook');if(!(key in state))state[key]=typeof initial==='function'?(initial as ()=>unknown)():initial;return [state[key],(next:unknown)=>{state[key]=typeof next==='function'?(next as (old:unknown)=>unknown)(state[key]):next;}];},useRef(initial:unknown){const index=refIndex++;return refs[index]??(refs[index]={current:refNames[index]==='game'?api:initial});}},localStorage:{getItem:(key:string)=>key==='qisheng-combat-briefing-v1'?'["solo","coop","pvp"]':null,setItem(){}},matchMedia:()=>({matches:false}),navigator:{maxTouchPoints:0},document:{documentElement:{requestFullscreen:undefined}},location:{search:''},window:{innerWidth:800,innerHeight:600}};
+  const globals={uiStoryStore:store,uiFixture:{topActive:false,useState(initial:unknown){const key=stateNames[stateIndex++];assert.ok(key,'unexpected App state hook');if(!(key in state))state[key]=typeof initial==='function'?(initial as ()=>unknown)():initial;return [state[key],(next:unknown)=>{state[key]=typeof next==='function'?(next as (old:unknown)=>unknown)(state[key]):next;}];},useRef(initial:unknown){const index=refIndex++;return refs[index]??(refs[index]={current:refNames[index]==='game'?api:initial});}},localStorage:{getItem:(key:string)=>key==='qisheng-combat-briefing-v1'?'["solo","coop","pvp"]':null,setItem(){}},matchMedia:()=>({matches:false}),navigator:{maxTouchPoints:0},HTMLElement:class HTMLElement{},document:{activeElement:null,querySelector(){return null;},documentElement:{requestFullscreen:undefined}},location:{search:''},window:{innerWidth:800,innerHeight:600}};
   const descriptors=new Map(Object.keys(globals).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   for(const [key,value]of Object.entries(globals))Object.defineProperty(globalThis,key,{configurable:true,value});
   const render=()=>{stateIndex=refIndex=0;let tree:ReactElement;globalThis.uiFixture.topActive=true;try{tree=App();}finally{globalThis.uiFixture.topActive=false;}assert.equal(stateIndex,stateNames.length);return tree;};
@@ -104,12 +121,12 @@ async function fixture(mode:Mode,run:(f:{render:()=>ReactElement;starts:{mode:Mo
 test('four menu modes share one start action, prepare separately and keep FAQ and updates in reading panels',async()=>{
   for(const mode of ['story','escape','roam','dafei'] as const)await fixture(mode,({render,state})=>{
     let menu=mainMenu(render());assert.equal(menu.props.screen,'prepare');assert.equal(menu.props.mode,mode);
-    const prepared=html(render());assert.equal(prepared.includes('id="primary-weapon"'),mode==='escape');assert.match(prepared,/预览版/);
+    const prepared=html(render());assert.equal(prepared.includes('data-weapon-loadout'),mode==='escape');assert.match(prepared,/预览版/);
     assert.equal(prepared.includes('faq-list'),false,'reading material does not crowd preparation');
-    (menu.props.onModes as ()=>void)();const modes=html(render());assert.equal((modes.match(/class="menu-mode-card /g)??[]).length,4);
+    (menu.props.onModes as ()=>void)();const modes=html(render());assert.equal((modes.match(/data-menu-mode="/g)??[]).length,4);
     (mainMenu(render()).props.onMode as (value:Mode)=>void)(mode);assert.equal(state.selectedMode,mode);assert.equal(state.menuScreen,'prepare');
     menu=mainMenu(render());(menu.props.onFAQ as ()=>void)();const faq=html(render());assert.ok((faq.match(/<details>/g)??[]).length>=3);assert.ok((faq.match(/aria-pressed="/g)??[]).length>=5);
-    (element(render(),n=>n.type===MenuReadingPanel).props.onClose as ()=>void)();assert.equal(state.menuReading,null);
+    (element(render(),n=>n.type===MenuPage&&n.props.id==='faq').props.onBack as ()=>void)();assert.equal(state['pages.active'],null);
     (mainMenu(render()).props.onUpdates as ()=>void)();const updates=html(render());
     const versions=['Preview 0.2.2','Preview 0.2.1','Preview 0.2.0','Preview 0.1.5','Preview 0.1.4','Preview 0.1.3','Preview 0.1.2','Preview 0.1.1','Preview 0.1.0'];
     for(const [index,version]of versions.entries()){assert.ok(updates.includes(version),`missing public release ${version}`);if(index)assert.ok(updates.indexOf(versions[index-1])<updates.indexOf(version),'updates must retain newest-first order');}
@@ -132,7 +149,7 @@ test('dafei prepares intro without a round; phase drives dialogue and restart sk
   });
   for(const mode of ['escape','roam'] as const)await fixture(mode,({render,starts,state})=>{
     (menuStart(render()).props.onClick as ()=>void)();
-    assert.deepEqual(starts,[{mode,loadout:mode==='escape'?{primary:'m4a1',difficulty:'standard'}:undefined}]);
+    assert.deepEqual(starts,[{mode,loadout:mode==='escape'?{primary:'m4a1',difficulty:'standard',training:false}:undefined}]);
   });
 });
 
@@ -159,7 +176,7 @@ test('returning during intro preparation rejects stale completion without affect
     api.prepareDafeiIntro=()=>{state.snapshot=snapshot('dafei','intro');return old;};
     (menuStart(render()).props.onClick as ()=>void)();
     const firstIntro=element(render(),n=>n.type===DafeiIntro);assert.equal(firstIntro.props.busy,true);
-    (firstIntro.props.onBack as ()=>void)();assert.equal((state.snapshot as Snapshot).phase,'menu');assert.equal(state.busy,false);
+    (firstIntro.props.onBack as ()=>void)();confirmLeave(render());assert.equal((state.snapshot as Snapshot).phase,'menu');assert.equal(state.busy,false);
     const fresh=new Promise<void>(resolve=>{resolveNew=resolve;});
     api.prepareDafeiIntro=()=>{state.snapshot=snapshot('dafei','intro');return fresh;};
     (menuStart(render()).props.onClick as ()=>void)();
@@ -178,23 +195,23 @@ test('intro failure exposes retry and return while no driving input or simulatio
 test('manual pause removes touch controls while loading retains the escape cleanup component with actions disabled',async()=>{
   for(const mode of ['escape','dafei'] as const)for(const paused of [true,false])await fixture(mode,({render})=>{
     const tree=render(),markup=html(tree);if(paused)assert.doesNotMatch(markup,/class="touch-layer|fps-touch-controls/);else if(mode==='escape'){assert.doesNotMatch(markup,/fps-touch-controls/,'loading disables new touch actions');assert.equal((element(tree,n=>n.type===EscapeTouchControls).props.snapshot as Snapshot).buffering,true);}else assert.match(markup,/class="touch-layer/);
-    assert.match(markup,paused?/pause-panel/:/streaming-panel/);
+    assert.match(markup,paused?/data-menu-page="pause"/:/streaming-panel/);
   },{snapshot:{...snapshot(mode,paused?'paused':'playing'),buffering:!paused,bufferingVisible:!paused},settings:{...DEFAULT_SETTINGS,controls:'touch'}});
 });
 
 test('driving and escape result panels display their own record type',async()=>{
   for(const mode of ['escape','dafei'] as const)await fixture(mode,({render})=>{
-    const markup=html(render());assert.equal(markup.includes('本局积分'),mode==='dafei');assert.equal(markup.includes('最高积分'),mode==='dafei');assert.equal(markup.includes('本机最高评分'),mode==='escape');assert.equal(markup.includes('本次评分'),mode==='escape');
+    const markup=html(render());assert.equal(markup.includes('本局积分'),mode==='dafei');assert.equal(markup.includes('最高积分'),mode==='dafei');assert.equal(markup.includes('本机最高评分'),mode==='escape');assert.equal(markup.includes('data-combat-ui="escape-result"'),mode==='escape');
   },{snapshot:snapshot(mode,'won')});
 });
 
 test('help follows the selected mode and correctly explains driving timing, damage and observation',async()=>{
   for(const mode of ['escape','roam','dafei'] as const)await fixture(mode,({render})=>{
-    const help=element(render(),n=>n.props.className==='help-panel'),markup=html(help);
+    const help=element(render(),n=>n.type===MenuPage&&n.props.id==='help'),markup=html(help);
     if(mode==='dafei'){assert.match(markup,/落地.*昏迷十秒/);assert.match(markup,/视线外重新登场/);assert.match(markup,/普通碰墙不扣耐久/);assert.match(markup,/右键拖动/);assert.doesNotMatch(markup,/选枪与命中|在校园中找到三份线索/);}
     if(mode==='escape'){assert.match(markup,/枪械与掩护/);assert.match(markup,/AWM|M249/);assert.doesNotMatch(markup,/维修与脱困/);}
     if(mode==='roam'){assert.match(markup,/自由走一走/);assert.doesNotMatch(markup,/选枪与命中|维修与脱困/);}
-  },{showHelp:true});
+  },{'pages.active':'help'});
   const touchHelp=renderToStaticMarkup(createElement(DrivingHelp,{touch:true}));assert.doesNotMatch(touchHelp,/<h3>电脑<\/h3>/);assert.match(touchHelp,/左侧横摇杆转向/);
 });
 
@@ -223,7 +240,7 @@ test('the ending album retains both original temporary Blobs and forwards indepe
  await fixture('story',({render,state,api})=>{
   const removed:string[]=[];api.photoRemoved=id=>{removed.push(id);const previous=state.snapshot as Snapshot;state.snapshot={...previous,temporaryPhotos:previous.temporaryPhotos?.filter(p=>p.id!==id),latestPhoto:previous.latestPhoto?.id===id?undefined:previous.latestPhoto};};
   let album=element(render(),n=>n.type===PhotoAlbum);assert.equal(album.props.extra,undefined);assert.equal(album.props.extras,photos);assertEndingActionsDisabled(element(render(),n=>n.type===StoryHUD),true);
-  const markup=html(album);assert.match(markup,/导出照片/);assert.match(markup,/导出拍摄参数/);assert.match(markup,/选择一张照片，查看、分享或导出。/);assert.doesNotMatch(markup,/照片保存在这台设备中/);assert.equal((markup.match(/未保存 · /g)??[]).length,2,'each temporary thumbnail is labelled');assert.match(markup,/<p role="status">未保存，可导出本次照片。<\/p>/);for(const [index,photo]of photos.entries())assert.equal((album.props.extras as PhotoRecord[])[index].blob,photo.blob,'App passes the original Blob for each export');
+  const markup=html(album);assert.match(markup,/导出照片/);assert.match(markup,/导出拍摄参数/);assert.match(markup,/<small>2 张照片<\/small>/);assert.match(markup,/data-photo-original="ending-temporary-second"/);assert.doesNotMatch(markup,/照片保存在这台设备中/);assert.equal((markup.match(/<small>未保存，/g)??[]).length,2,'each temporary thumbnail is labelled');assert.match(markup,/<p role="status">未保存，可导出本次照片。<\/p>/);for(const [index,photo]of photos.entries())assert.equal((album.props.extras as PhotoRecord[])[index].blob,photo.blob,'App passes the original Blob for each export');
   // This fixture exercises App's real album callback and the next emitted
   // snapshot. Browser QA separately clicks the real album deletion controls.
   for(const [index,photo]of photos.entries()){
@@ -248,7 +265,7 @@ test('returning during file import discards the late checkpoint and cannot clear
   api.unlockAudio=()=>{};const restores:unknown[]=[];api.restoreStory=async cp=>{restores.push(cp);};
   let finishFile!:(text:string)=>void,finishStart!:()=>void;const file={size:100,text:()=>new Promise<string>(resolve=>{finishFile=resolve;})} as File;
   const hud=element(render(),n=>n.type===StoryHUD);(hud.props.onImport as (file:File)=>void)(file);assert.equal(state.busy,true);
-  (hud.props.onReturnMenu as ()=>void)();state.selectedMode='roam';api.start=()=>new Promise<void>(resolve=>{finishStart=resolve;});
+  (hud.props.onReturnMenu as ()=>void)();confirmLeave(render());state.selectedMode='roam';api.start=()=>new Promise<void>(resolve=>{finishStart=resolve;});
   (menuStart(render()).props.onClick as ()=>void)();assert.equal(state.busy,true);
   finishFile(JSON.stringify(new StorySession().checkpoint()));await new Promise<void>(resolve=>setImmediate(resolve));assert.deepEqual(restores,[]);assert.equal(state.busy,true);
   finishStart();await new Promise<void>(resolve=>setImmediate(resolve));assert.equal(state.busy,false);assert.equal(state.uiError,'');
@@ -260,7 +277,7 @@ test('returning during saved-story lookup closes the store and never resurrects 
   api.unlockAudio=()=>{};let release!:(cp:unknown)=>void;store.load=()=>new Promise(resolve=>{release=resolve;});const restores:unknown[]=[];api.restoreStory=async cp=>{restores.push(cp);};
   (mainMenu(render()).props.onContinue as ()=>void)();
   for(let i=0;i<20&&!release;i++)await new Promise<void>(resolve=>setImmediate(resolve));assert.ok(release);assert.equal(state.busy,true);
-  state.snapshot={...snapshot('story','playing'),story:finishedStory()};(element(render(),n=>n.type===StoryHUD).props.onReturnMenu as ()=>void)();
+  state.snapshot={...snapshot('story','playing'),story:finishedStory()};(element(render(),n=>n.type===StoryHUD).props.onReturnMenu as ()=>void)();confirmLeave(render());
   release(new StorySession().checkpoint());await new Promise<void>(resolve=>setImmediate(resolve));assert.deepEqual(restores,[]);assert.equal(state.busy,false);assert.equal(store.closed,1);assert.equal((state.snapshot as Snapshot).phase,'menu');
  },{savedStory:true});
 });
@@ -269,7 +286,7 @@ test('a late resume failure cannot replace the new menu operation error or busy 
  await fixture('story',async({render,state,api})=>{
   let fail!:(error:Error)=>void;api.resume=()=>new Promise<void>((_resolve,reject)=>{fail=reject;});
   (element(render(),n=>n.type==='button'&&n.props.children instanceof Array&&n.props.children[0]==='继续游玩').props.onClick as ()=>void)();assert.equal(state.busy,true);
-  (element(render(),n=>n.type==='button'&&n.props.children==='返回首页').props.onClick as ()=>void)();state.uiError='新的操作反馈';
+  (element(render(),n=>n.type===SessionMenuActions).props.onMain as ()=>void)();confirmLeave(render());state.uiError='新的操作反馈';
   fail(Error('旧恢复失败'));await new Promise<void>(resolve=>setImmediate(resolve));assert.equal(state.uiError,'新的操作反馈');assert.equal(state.busy,false);
  },{snapshot:snapshot('story','paused')});
 });

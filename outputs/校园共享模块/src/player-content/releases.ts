@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.11.1',sequence:49,date:'2026-11-01',version:'Preview 0.11.1',
+ overview:'选择装备、准备房间更顺手。',
+ summary:['校园菜单重新整理，选装和房间准备更清楚。','地图、摄影与结算采用统一的排版。','优化手机与安卓的返回、设置和长页面布局。'],
+ items:['首页与公共页面延续校园画册风格，枪战选装、房间和暂停保留战术界面。','整理装备选择、房间操作和确认提示，让当前选择与主要操作更容易找到。','地图、相册、摄影参数与结算重新排版，照片按原本的构图显示。','手机与安卓分别调整导航和设置分类，减少重复页头和不必要的滚动。'],
+},
+{
  id:'preview-0.11.0',sequence:48,date:'2026-11-01',version:'Preview 0.11.0',
  overview:'熟悉的校园，重新整理的菜单。',
  summary:['水彩校园与新的页面排版，桌面和手机各有自己的布局。','选装、房间准备和设置更清楚，账号与反馈更方便浏览。','齐盛Online 安卓版开放预览，与网页使用同一账号和房间。'],
