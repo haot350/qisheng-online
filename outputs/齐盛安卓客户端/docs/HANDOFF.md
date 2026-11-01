@@ -1,14 +1,30 @@
-# 齐盛Online Android 接续
+# 2026-11-01 安卓0.3.0已公开
 
-## 0.2.1已公开
+最终公开包为0.3.0／versionCode4，内置网页0.12.0，360,277,175字节，SHA256 `26ede650daea0a75ad96c73760763a00a54015fee5bfabbf798dfaa3934bc7bb`。公开下载与更新清单于2026-11-01T13:26:48.885Z原子切换；Windows UE及Godot历史条目保留，无服务重启。下载：`https://game.tianhw.top/native/releases/26ede650daea0a75ad96c73760763a00a54015fee5bfabbf798dfaa3934bc7bb/qisheng-online-android-v0.3.0-preview.apk`。
 
-2026-11-01发布0.2.1／versionCode 3，内置网页0.11.1并沿用既有应用身份和升级签名。B方向页面重新校准：菜单与实际游玩分开，桌面和移动布局分别组织，账号、选装、房间、设置、摄影与相册保留真实功能。
+最终sourceHash `31726ef9f9ed94fba20fa03398a880304d6df9171282526c6bf0d6774cc23994`，bundleDigest `ff6bd743906310a6f2c4aef93f8fabdeac3dca1b158db83ee4cd4598e1174b35`。2696资源URL、原证书、16KiB对齐和全部哈希通过。准备脚本按当次Vite manifest清除215个过期runtime哈希，共15,640,665字节，未改正式地图或原素材。
 
-本轮Release构建、2846项资源URL哈希、Manifest、同证书签名和16KiB对齐检查通过。没有新增真机安装、输入法、多指、旋转、后台、文件导出或覆盖更新验证，deviceVerified保持false；本次发布授权不等于取得这些运行结果，也不沿用旧版豁免作为新版实测。
+用户在本轮调整安排，要求安卓也立即发布；真机选图、裁剪、上传、系统返回与重开检查留待补查，`deviceVerified=false`。没有以浏览器或离线校验替代真机结果。最终验收绑定、公开收据与下载复检位于 `work/studio/web/v0.12.0/android-tools/{acceptance.json,ACCEPTED-ENTRY.json,PUBLICATION.json,PUBLIC-DOWNLOAD-CHECK.json}`，最终APK与审计在同任务 `deliverables`。
 
-源码职责、构建步骤与后续设备检查顺序见下文。私有资源和签名独立保存；公开源码不包含APK、正式校园及人物素材。本轮不据WebView封装或浏览器短查声称性能优势。
+当前两站下载卡均读取公开更新接口，动态显示0.3.0。元数据no-store，APK长期immutable缓存及Range206已复检。发生安卓问题时先撤下载与更新入口；修补包增加versionCode，保留用户数据，不降版本恢复旧数据。
 
-## 0.2.0历史记录
+## 本轮中间候选历史
+
+以下c76与d97包及收据已留档；普通下载只使用上述26ede最终包。
+
+# 2026-11-01 安卓0.3.0签名候选已交
+
+签名候选已完成，内置网页0.12.0：364,645,119字节，SHA256 `c76fe843ac663c884853c8c38c633a9df0e473f7fd2658392b9950af603863ac`。原升级证书、16KiB对齐、5项宿主Release用例、APK ZIP完整性、2875资源URL与全部SHA、私密配置排除均通过。构建前后sourceHash一致为`8092a00409ec6c6643a0b065128c137c01ad34b0b97eee4cd8303d675f7de1e8`，bundleDigest `5c5a63c5ca365443c970903d6767c25cf6bce7ed77b7380a640ef5b01bd43503`，地图与协议不变。
+
+候选及收据在`work/studio/web/v0.12.0/deliverables`，构建/签名/资源核验记录在本轮`qa/android-*v030*`。本轮未做安卓真机选图、裁剪、上传、系统返回或重开；`deviceVerified=false`、`available=false`、`publicDownloadEnabled=false`。当前公开0.2.1的清单与归档未改。
+
+已在核验身份后的香港主机安装不可变候选归档，供用户头像短测：`https://game.tianhw.top/native/releases/c76fe843ac663c884853c8c38c633a9df0e473f7fd2658392b9950af603863ac/qisheng-online-android-v0.3.0-preview.apk`。4,286,850字节差异传输后，远端逐字节恢复的完整APK SHA与本地签名包一致；206 Range及immutable缓存通过。updates.json前后SHA均为`d15e34ba63b58a70e15b3c7bf75220e16abdbcac1252393da28155601b4e57ee`，普通更新仍0.2.1，无服务重启。归档接收记录为本轮`deliverables/android-v0.3.0-staged-trial.json`；这一步仅提供试装链接。
+
+## 候选准备记录
+
+公开下载仍为0.2.1／versionCode3，SHA256 `24928849b6b031ef8d0617acebf6d9c844f5c08df73abe096284c59e25f87dcc`。本地release-config已更新0.3.0／versionCode4，应用身份、升级证书、公开预览构建渠道与协议保持不变。待网页0.12.0最终dist冻结后才构建候选；实际选图、裁剪、上传短测通过前不修改线上下载或更新清单。
+
+头像使用现有HTML文件选择与WebView FileChooser路径，裁剪在同一正式React组件中完成，上传地址为/api/v1；宿主无需新增图像桥。浏览器截图和离线APK校验不能替代安卓文件选择、系统返回与重开后的实机结果。
 
 # 安卓0.2.0已公开
 

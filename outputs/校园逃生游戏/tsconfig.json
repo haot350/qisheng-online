@@ -78,6 +78,12 @@
       ],
       "@qisheng/shared/community/account.css": [
         "../校园共享模块/src/community/account.css"
+      ],
+      "@qisheng/shared/community/AccountAvatar": [
+        "../校园共享模块/src/community/AccountAvatar.tsx"
+      ],
+      "@qisheng/shared/community/appearance": [
+        "../校园共享模块/src/community/appearance.ts"
       ]
     },
     "noUnusedLocals": true,

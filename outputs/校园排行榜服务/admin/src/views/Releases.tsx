@@ -37,7 +37,7 @@ export default function Releases() {
       </PageTitle>
       <Panel>
         <p className="muted">
-          部署记录由发布复检登记。编辑说明不会把版本标记为已上线。
+          上线状态以部署复检记录为准；发行说明可单独编辑。
         </p>
         <Load
           loading={resource.loading}

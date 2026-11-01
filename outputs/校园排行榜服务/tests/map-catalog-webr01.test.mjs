@@ -120,7 +120,7 @@ test('temporary API issues current tickets, resumes old signed tickets, and sepa
   for(const vehicleId of ranking.DRIVING_VEHICLE_IDS){const board=(await app.inject({url:'/v1/boards?mode=dafei&period=all&vehicleId='+vehicleId})).json();assert.equal(board.ruleVersion,ranking.DAFEI_RULE_VERSION);assert.equal(board.total,1);assert.equal(board.entries[0].vehicleId,vehicleId);}
   const oldBoard=(await app.inject({url:'/v1/boards?mode=dafei&period=all&vehicleId=tank&ruleVersion='+ranking.HF_DAFEI_RULE_VERSION})).json();assert.equal(oldBoard.total,1);
   const health=(await app.inject({url:'/health'})).json();assert.equal(health.mapCatalogId,ranking.MAP_CATALOG_ID);assert.equal(health.version,JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version);
-  assert.equal(db.pragma('user_version',{simple:true}),6);
+  assert.equal(db.pragma('user_version',{simple:true}),7);
  }finally{await app.close();}
 });
 
@@ -139,7 +139,7 @@ test('cooperative results remain idempotent across three scopes and the default 
   const currentBoard=(await app.inject({url:'/v1/multiplayer/boards?period=all&players=2'})).json();assert.equal(currentBoard.ruleVersion,ranking.COOP_RULE_VERSION);assert.equal(currentBoard.total,1);
   for(const ruleVersion of versions){assert.ok(currentBoard.versions.includes(ruleVersion));const board=(await app.inject({url:'/v1/multiplayer/boards?period=all&players=2&ruleVersion='+ruleVersion})).json();assert.equal(board.total,1);}
   assert.equal(db.prepare('SELECT count(*) n FROM multiplayer_results').get().n,3);
-  assert.equal(db.pragma('user_version',{simple:true}),6);
+  assert.equal(db.pragma('user_version',{simple:true}),7);
  }finally{await app.close();}
 });
 

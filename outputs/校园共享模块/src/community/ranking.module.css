@@ -99,3 +99,10 @@
 
 .ranking-result .ranking-muted { color:var(--text-muted); font-size:calc(14px * var(--ui-text-scale,1)); }
 .ranking-result .ranking-actions { display:flex; gap:12px; flex-wrap:wrap; }
+
+.ranking-row-player { display:grid; grid-template-columns:36px minmax(0,1fr); column-gap:10px; align-items:center; }
+.ranking-row-avatar { grid-row:1 / 3; }
+.ranking-row-player > strong, .ranking-row-player > small { grid-column:2; min-width:0; overflow-wrap:anywhere; }
+.ranking-detail h3 { display:flex; align-items:center; gap:14px; }
+.ranking-detail-avatar { display:inline-flex; flex:none; }
+.ranking-member { display:flex; align-items:center; gap:10px; padding-block:6px; }

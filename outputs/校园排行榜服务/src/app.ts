@@ -1,3 +1,5 @@
+import {accountAvatarRoutes} from './account-avatars.js';
+import {sessionLabel} from './session-details.js';
 import {nativeUpdateRoutes} from './native-updates.js';
 import {readFileSync} from 'node:fs';
 import {presenceRoutes} from './presence.js';
@@ -34,13 +36,15 @@ export async function createApp(opts:AppOptions={}){
  await app.register(rateLimit,{global:true,max:1200,timeWindow:'1 minute',keyGenerator:req=>{const identity=identityFor(req);return identity.player?'player:'+identity.player.id:'ip:'+req.ip;}});
  const safe=(p:PlayerRow):RankingPlayer=>{const a=accountFor(db,p.id);return {id:p.id,nickname:p.nickname,shortId:p.short_id,renameAt:p.renamed?p.renamed+7*DAY:0,autoSubmit:!!p.auto_submit,restricted:!!p.restricted,accountStatus:a?.status??'legacy',needsUpgrade:!a,syncStats:a?!!a.sync_stats:false,accountId:a?.id} as RankingPlayer;};
  const credentialSecret=opts.credentialSecret??random();const credential=(id:string)=>createHmac('sha256',credentialSecret).update(id).digest('base64url');
- const session=(id:string)=>{const token=random(),expiresAt=now()+30*DAY;db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token),id,expiresAt);return {token,expiresAt};};
+ const session=(id:string,req?:FastifyRequest)=>{const token=random(),expiresAt=now()+30*DAY;db.transaction(()=>{db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(hash(token),id,expiresAt);db.prepare('INSERT INTO session_details(session_hash,created,last_seen,label) VALUES(?,?,?,?)').run(hash(token),now(),now(),sessionLabel(req));})();return {token,expiresAt};};
  function auth(req:FastifyRequest,optional=false):PlayerRow|null{
   const identity=identityFor(req);
   if(identity.problem==='long')throw new AppError('AUTH','登录状态已失效。',401);
   if(!identity.player){if(optional)return null;throw new AppError('AUTH',identity.problem==='missing'?'请先登录账号。':'登录状态已失效，请重新登录。',401);}
   // Renew at most once per day of normal usage, not on every read under FULL WAL.
   if(!identity.renewed&&identity.player.sessionExpires<now()+29*DAY){renewIdentity.run(now()+30*DAY,identity.tokenHash,now());identity.renewed=true;}
+  const details=db.prepare('SELECT last_seen FROM session_details WHERE session_hash=?').get(identity.tokenHash) as {last_seen:number|null}|undefined;
+  if(!details||details.last_seen===null||now()-details.last_seen>=300000)db.prepare("INSERT INTO session_details(session_hash,created,last_seen,label) VALUES(?,NULL,?,'旧登录会话') ON CONFLICT(session_hash) DO UPDATE SET last_seen=excluded.last_seen").run(identity.tokenHash,now());
   return identity.player;
  }
  function requireAccount(req:FastifyRequest){const p=auth(req)!,a=accountFor(db,p.id);if(!a)throw new AppError('ACCOUNT_UPGRADE','请先把旧身份升级为账号。',403);if(a.status!=='active')throw new AppError('ACCOUNT_DISABLED','此账号暂时不能使用在线服务。',403);return p;}
@@ -51,8 +55,8 @@ export async function createApp(opts:AppOptions={}){
  app.addHook('onSend',async(req,reply,payload)=>{reply.header('X-Content-Type-Options','nosniff').header('Referrer-Policy','no-referrer').header('Cache-Control','no-store');if(req.url.startsWith('/admin'))reply.header('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");return payload;});
  app.get('/health',()=>({ok:true,version:API_VERSION,mapCatalogId:activeMapCatalogId,ruleVersion:currentRankingRuleVersion('escape'),ruleVersions:{escape:currentRankingRuleVersion('escape'),dafei:currentRankingRuleVersion('dafei')},sqliteVersion:(db.prepare('select sqlite_version() v').get() as {v:string}).v}));
  nativeUpdateRoutes(app,opts.nativeManifestFile);
- const ctx={app,db,now,auth,requireAccount,safe,session,loadRun,submission,audit,opts,credential};operationsRoutes(ctx);identityRoutes(ctx);accountRoutes(ctx);accountProfileRoutes(ctx);achievementRoutes(ctx);runRoutes(ctx);boardRoutes(ctx);feedbackRoutes(ctx);multiplayerRoutes(ctx);telemetryRoutes(ctx);presenceRoutes(ctx);assistantRoutes(ctx);adminRoutes(ctx);
+ const ctx={app,db,now,auth,requireAccount,safe,session,loadRun,submission,audit,opts,credential};operationsRoutes(ctx);identityRoutes(ctx);accountRoutes(ctx);accountProfileRoutes(ctx);accountAvatarRoutes(ctx);achievementRoutes(ctx);runRoutes(ctx);boardRoutes(ctx);feedbackRoutes(ctx);multiplayerRoutes(ctx);telemetryRoutes(ctx);presenceRoutes(ctx);assistantRoutes(ctx);adminRoutes(ctx);
  app.addHook('onClose',async()=>{await closeAssistant(ctx);if(!opts.db)db.close();});return {app,db};
 }
 export type Context=Awaited<ReturnType<typeof createContext>>;
-async function createContext(){const db=openDatabase(':memory:');return {app:Fastify(),db,now:Date.now,auth:(_req:FastifyRequest,_optional?:boolean)=>null as PlayerRow|null,requireAccount:(_req:FastifyRequest)=>({}) as PlayerRow,safe:(_p:PlayerRow)=>({}) as RankingPlayer,session:(_id:string)=>({token:'',expiresAt:0}),loadRun:(_req:FastifyRequest,_id:string,_credential?:string)=>({}) as RunRow,submission:(_r:RunRow)=>({}) as any,audit:(_a:string,_t:string,_d?:unknown,_actor?:string)=>({}),opts:{} as AppOptions,credential:(_id:string)=>''};}
+async function createContext(){const db=openDatabase(':memory:');return {app:Fastify(),db,now:Date.now,auth:(_req:FastifyRequest,_optional?:boolean)=>null as PlayerRow|null,requireAccount:(_req:FastifyRequest)=>({}) as PlayerRow,safe:(_p:PlayerRow)=>({}) as RankingPlayer,session:(_id:string,_req?:FastifyRequest)=>({token:'',expiresAt:0}),loadRun:(_req:FastifyRequest,_id:string,_credential?:string)=>({}) as RunRow,submission:(_r:RunRow)=>({}) as any,audit:(_a:string,_t:string,_d?:unknown,_actor?:string)=>({}),opts:{} as AppOptions,credential:(_id:string)=>''};}

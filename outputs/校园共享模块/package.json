@@ -1,6 +1,6 @@
 {
   "name": "@qisheng/shared",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "private": true,
   "type": "module",
   "description": "Canonical game rules, protocol and opt-in browser modules",
@@ -113,7 +113,15 @@
       "types": "./src/ui/index.tsx",
       "default": "./dist/ui/index.js"
     },
-    "./ui/theme.css": "./dist/ui/theme.css"
+    "./ui/theme.css": "./dist/ui/theme.css",
+    "./community/AccountAvatar": {
+      "types": "./src/community/AccountAvatar.tsx",
+      "default": "./dist/community/AccountAvatar.js"
+    },
+    "./community/appearance": {
+      "types": "./src/community/appearance.ts",
+      "default": "./dist/community/appearance.js"
+    }
   },
   "files": [
     "dist",

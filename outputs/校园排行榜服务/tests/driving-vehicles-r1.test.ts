@@ -122,6 +122,6 @@ test('actual API binds tickets, separates vehicle boards and preserves archived 
   assert.equal((await app.inject({method:'GET',url:'/v1/boards?mode=dafei&period=all&vehicleId=other'})).statusCode,400);
   const profile=await app.inject({method:'GET',url:'/v1/accounts/profile',headers});assert.equal(profile.statusCode,200,profile.body);
   assert.deepEqual(profile.json().bestByRule.map((r:any)=>r.vehicleId).sort(),['bao5','scooter','tank']);
-  assert.equal(db.pragma('user_version',{simple:true}),6);
+  assert.equal(db.pragma('user_version',{simple:true}),7);
  }finally{await app.close();}
 });

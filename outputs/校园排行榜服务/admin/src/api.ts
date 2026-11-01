@@ -27,6 +27,7 @@ export async function api<T = Row>(
   data?: unknown,
   signal?: AbortSignal,
   timeoutMs = 20000,
+  method: 'POST' | 'DELETE' = 'POST',
 ): Promise<T> {
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -46,7 +47,7 @@ export async function api<T = Row>(
     },
     ...(data === undefined
       ? {}
-      : { method: "POST", body: JSON.stringify(data) }),
+      : { method, body: JSON.stringify(data) }),
   });
   const result = await response
     .json()

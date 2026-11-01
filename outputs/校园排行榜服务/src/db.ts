@@ -18,12 +18,13 @@ export function openDatabase(path:string){
 
  `);
  migrate(db);
- // Query indexes are additive; schema-6 account migrations require a schema-6 rollback build.
- db.exec(`CREATE INDEX IF NOT EXISTS feedback_reply_owner ON feedback_replies(feedback_id,id);
+ // Query indexes are additive; schema-7 rollback keeps an API that accepts schema 7.
+ db.exec(`CREATE INDEX IF NOT EXISTS multiplayer_participant_owner ON multiplayer_participants(player_id,result_id);
+ CREATE INDEX IF NOT EXISTS feedback_reply_owner ON feedback_replies(feedback_id,id);
  CREATE INDEX IF NOT EXISTS feedback_image_owner ON feedback_images(feedback_id);
  CREATE INDEX IF NOT EXISTS feedback_followup_owner ON feedback_followups(feedback_id,created,id);
  CREATE INDEX IF NOT EXISTS issue_board_order ON issues(published,status,updated DESC,id);`);
- // Additive operations metadata keeps schema-6 rollback applications readable.
+ // Operations tables remain compatible with existing realtime workers.
  // Commands created by this version are acked in the legacy table: older workers
  // must never consume commands they cannot validate or report accurately.
  db.exec(`CREATE TABLE IF NOT EXISTS room_runtime(room_id TEXT PRIMARY KEY,generation TEXT NOT NULL,revision INTEGER NOT NULL,signature TEXT NOT NULL,details TEXT NOT NULL);
@@ -39,7 +40,7 @@ export function openDatabase(path:string){
 export type RankingDatabase=ReturnType<typeof openDatabase>;
 
 function migrate(db:Database.Database){
- const version=Number(db.pragma('user_version',{simple:true}));if(version>6)throw Error('Database schema newer than application');
+ const version=Number(db.pragma('user_version',{simple:true}));if(version>7)throw Error('Database schema newer than application');
  if(version<2)db.transaction(()=>{db.exec(`
  ALTER TABLE runs ADD COLUMN mode TEXT;ALTER TABLE runs ADD COLUMN difficulty TEXT;
  ALTER TABLE runs ADD COLUMN rule_version TEXT;ALTER TABLE runs ADD COLUMN score REAL;ALTER TABLE runs ADD COLUMN elapsed REAL;
@@ -108,5 +109,10 @@ function migrate(db:Database.Database){
  ALTER TABLE runs ADD COLUMN record_stats INTEGER NOT NULL DEFAULT 1;
  ALTER TABLE runs ADD COLUMN publish_board INTEGER NOT NULL DEFAULT 1;
  PRAGMA user_version=6;
+ `);})();
+ if(version<7)db.transaction(()=>{db.exec(`
+ CREATE TABLE account_avatars(account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,revision TEXT NOT NULL UNIQUE,image BLOB NOT NULL,thumbnail BLOB NOT NULL,bytes INTEGER NOT NULL CHECK(bytes>0 AND bytes<=196608),updated INTEGER NOT NULL);
+ CREATE TABLE session_details(session_hash TEXT PRIMARY KEY REFERENCES sessions(hash) ON DELETE CASCADE,created INTEGER,last_seen INTEGER,label TEXT NOT NULL DEFAULT '旧登录会话');
+ PRAGMA user_version=7;
  `);})();
 }

@@ -77,6 +77,12 @@
       ],
       "@qisheng/shared/player-content/reading.css": [
         "../../校园共享模块/dist/player-content/reading.css"
+      ],
+      "@qisheng/shared/community/AccountAvatar": [
+        "../../校园共享模块/src/community/AccountAvatar.tsx"
+      ],
+      "@qisheng/shared/community/appearance": [
+        "../../校园共享模块/src/community/appearance.ts"
       ]
     },
     "types": [

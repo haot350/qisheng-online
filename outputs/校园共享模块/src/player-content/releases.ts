@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.12.0',sequence:50,date:'2026-11-01',version:'Preview 0.12.0',
+ overview:'换上自己的头像，整理自己的战绩。',
+ summary:['账号支持上传和裁剪个人头像，公开档案可复制链接分享。','战绩可以按玩法翻阅，账号安全页可查看已登录设备。','整理手机玩法封面、文字操作与展开入口。'],
+ items:['在账号的外观页面上传照片，调整裁剪后保存，也可继续使用姓名头像和预设头像。','头像跟随档案公开设置，在菜单、榜单和房间中展示。','个人战绩按玩法分页查看，可展开比赛摘要，单人成绩可选择公开或撤回。','安全页面显示登录设备与活动时间，支持逐台退出。','手机玩法选择改用横幅画面，常用文字操作和折叠入口更容易辨认。'],
+},
+{
  id:'preview-0.11.1',sequence:49,date:'2026-11-01',version:'Preview 0.11.1',
  overview:'选择装备、准备房间更顺手。',
  summary:['校园菜单重新整理，选装和房间准备更清楚。','地图、摄影与结算采用统一的排版。','优化手机与安卓的返回、设置和长页面布局。'],

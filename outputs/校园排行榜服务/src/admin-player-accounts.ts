@@ -4,6 +4,7 @@ import {AppError} from './validation.js';
 import {page, text} from './feedback.js';
 import {editRevision} from './admin-revision.js';
 import {accountAdminView, recomputeAchievements, resolveAccountAppeal, revokeAccountSessions} from './accounts.js';
+import {avatarResponse} from './account-avatars.js';
 
 type Admin = (req: FastifyRequest, write?: boolean, scope?: string) => any;
 type Log = (a: any, action: string, target: string, detail?: any) => void;
@@ -31,6 +32,22 @@ export function playerAccountAdminRoutes(c: Context, admin: Admin, log: Log) {
     admin(req,false,'player-accounts');const id=params(req).id,row=accountRow(c,id);
     if(!row)throw new AppError('PLAYER','找不到玩家。',404);
     return {...accountAdminView(c,id),revision:editRevision(row,fields),sessions:(db.prepare('SELECT count(*) n FROM sessions WHERE player_id=? AND expires>?').get(id,now()) as any).n};
+  });
+  app.get('/admin/player-accounts/:id/avatar',(req,reply)=>{
+    admin(req,false,'player-accounts');const a=db.prepare('SELECT id FROM accounts WHERE player_id=?').get(params(req).id) as {id:string}|undefined;
+    if(!a)throw new AppError('PLAYER','找不到这个账号。',404);
+    return avatarResponse(c,a.id,req.query as any,reply);
+  });
+  app.delete('/admin/player-accounts/:id/avatar',req=>{
+    const actor=admin(req,true,'player-accounts'),id=params(req).id,b=body(req),reason=text(b.reason,2,300);
+    return db.transaction(()=>{
+      const before=accountRow(c,id);if(!before||!before.username)throw new AppError('PLAYER','找不到这个账号。',404);expected(b.expectedRevision,before);
+      const a=db.prepare('SELECT id FROM accounts WHERE player_id=?').get(id) as {id:string};
+      const removed=db.prepare('DELETE FROM account_avatars WHERE account_id=?').run(a.id).changes;
+      if(removed)db.prepare('UPDATE accounts SET updated=? WHERE id=?').run(Math.max(now(),before.account_updated+1),a.id);
+      const after=accountRow(c,id);log(actor,'player-avatar-remove',id,{reason,removed:!!removed,before:safeRow(before),after:safeRow(after)});
+      return {ok:true,revision:editRevision(after,fields)};
+    })();
   });
   app.post('/admin/player-accounts/:id',req=>{
     const a=admin(req,true,'player-accounts'),id=params(req).id,b=body(req),reason=text(b.reason,2,300);

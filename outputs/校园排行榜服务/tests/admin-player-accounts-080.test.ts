@@ -39,12 +39,12 @@ test('appeal approval requires owner evidence and raw reset credentials never en
     assert.equal((await f.req('POST','/admin/account-appeals/private-appeal',{status:'rejected',response:'旧窗口拒绝。',expectedUpdatedAt:time},f.owner)).statusCode,409);
   }finally{await f.app.close();}
 });
-test('aggregated filters isolate versions and room receipts distinguish queued acknowledgement and timeout',async()=>{
+test('aggregated filters isolate versions and old commands retain legacy receipts',async()=>{
   const f=await fixture();try{
     const day=new Date().toISOString().slice(0,10);for(const version of ['0.8.0','0.7.1'])f.db.prepare('INSERT INTO telemetry_daily VALUES(?,?,?,?,?,?,?,?)').run(day,'page-view','game','escape','desktop',version,'',version==='0.8.0'?3:7);
     const stats=await f.req('GET','/admin/stats?version=0.8.0&mode=escape&platform=desktop',undefined,f.owner);assert.equal(stats.statusCode,200,stats.body);assert.equal(stats.json().daily[0].count,3);
     const now=Date.now();for(const [id,created,acked] of [['waiting',now,0],['done',now,1],['late',now-61000,0]])f.db.prepare('INSERT INTO room_commands(id,room_id,action,reason,created,acked) VALUES(?,?,?,?,?,?)').run(id,'test-room','kick','fixture',created,acked);
     const commands=await f.req('GET','/admin/room-commands',undefined,f.owner);assert.equal(commands.statusCode,200,commands.body);
-    assert.deepEqual(Object.fromEntries(commands.json().items.map(r=>[r.id,r.state])),{waiting:'queued',done:'acknowledged',late:'timeout'});
+    assert.deepEqual(Object.fromEntries(commands.json().items.map(r=>[r.id,r.state])),{waiting:'legacy',done:'legacy',late:'legacy'});
   }finally{await f.app.close();}
 });

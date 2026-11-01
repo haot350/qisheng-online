@@ -140,7 +140,7 @@ test('presence uses server tokens, de-duplicates accounts, expires sessions and 
     assert.notEqual(renewed.sessionId, a.sessionId);
     assert.ok(b.sessionId && b.sessionId !== a.sessionId);
     assert.equal(f.db.prepare('SELECT count(*) n FROM presence_minutes').get().n, 1);
-    assert.equal(f.db.pragma('user_version', {simple: true}), 6);
+    assert.equal(f.db.pragma('user_version', {simple: true}), 7);
   } finally {await f.app.close();}
 });
 

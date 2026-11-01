@@ -1,4 +1,18 @@
 @import url("./workspace.css");
+.account-avatar-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.account-avatar-preview img {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  object-fit: cover;
+  background: var(--soft);
+}
 :root {
   font-family: Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
   color: #292b29;

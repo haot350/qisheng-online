@@ -12,6 +12,29 @@ const metadata=JSON.parse(await fs.readFile(path.join(game,'package.json'),'utf8
 const overlay=path.join(root,'work/overlay'),runtime=path.join(overlay,'android/runtime');await fs.mkdir(runtime,{recursive:true});
 await new Promise((resolve,reject)=>{const child=spawn(process.execPath,[path.join(game,'node_modules/vite/bin/vite.js'),'build','--config','vite.android.config.ts'],{cwd:game,env:{...process.env,OPENQS_PROFILE:'production',QISHENG_ANDROID_WEB_DIST:runtime},stdio:'inherit',windowsHide:true});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('Android runtime build failed')));});
 const runtimeManifest=JSON.parse(await fs.readFile(path.join(runtime,'.vite/manifest.json'),'utf8'));
+// Keep only this compilation's outputs. Some Windows runs retain old hashed
+// files despite emptyOutDir; these are generated assets, never source/signing.
+const overlayRoot=await fs.realpath(overlay),runtimeRoot=await fs.realpath(runtime),expectedRuntime=path.join(overlayRoot,'android','runtime');
+if(overlayRoot!==path.resolve(root,'work/overlay')||runtimeRoot!==expectedRuntime)throw Error('Android runtime cleanup must remain inside the generated overlay');
+const runtimeFiles=new Set(['.vite/manifest.json']);
+for(const item of Object.values(runtimeManifest))for(const name of [item.file,...(item.css??[]),...(item.assets??[])]){
+ if(typeof name!=='string'||!name||path.isAbsolute(name)||name.split(/[\\/]/).includes('..')||!path.resolve(runtimeRoot,name).startsWith(runtimeRoot+path.sep))throw Error('Unsafe Android runtime output in Vite manifest');
+ runtimeFiles.add(name.replaceAll('\\','/'));
+}
+for(const name of runtimeFiles){const file=path.join(runtimeRoot,name),info=await fs.lstat(file);if(!info.isFile()||info.isSymbolicLink())throw Error('Expected a regular current Android runtime output');}
+const obsolete=[];
+async function pruneRuntime(relative=''){
+ for(const entry of await fs.readdir(path.join(runtimeRoot,relative),{withFileTypes:true})){
+  const name=(relative?relative+'/':'')+entry.name,file=path.resolve(runtimeRoot,name);
+  if(!file.startsWith(runtimeRoot+path.sep)||entry.isSymbolicLink())throw Error('Runtime cleanup refuses an escaped path or symlink');
+  if(entry.isDirectory())await pruneRuntime(name);
+  else if(entry.isFile()&&!runtimeFiles.has(name)){
+   const bytes=await fs.readFile(file);obsolete.push({path:name,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')});await fs.unlink(file);
+  }
+ }
+}
+await pruneRuntime();
+await fs.writeFile(path.join(root,'work/runtime-pruned.json'),JSON.stringify({checkedAt:new Date().toISOString(),runtimeRoot,manifestFiles:runtimeFiles.size,removed:obsolete,removedBytes:obsolete.reduce((sum,row)=>sum+row.bytes,0),sourceOrSigningChanged:false},null,2)+'\n');
 const entry=runtimeManifest['src/android-entry.ts'];if(!entry?.isEntry||!entry.file)throw Error('Android entry was not emitted');
 const documents=[['index.html','main'],['account/index.html','account'],['credits/index.html','credits'],['copyright/index.html','copyright']];
 const excluded=new Set([...documents.map(([name])=>name),'release-manifest.json','licenses/dependencies.json','_headers']);

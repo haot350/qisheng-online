@@ -34,9 +34,6 @@
 .account-login-help .account-actions { display:grid; justify-items:start; gap:4px; margin:6px 0 0; }
 .account-login-help button { border:0; background:none; color:var(--accent-primary); padding-inline:0; text-align:left; }
 .account-hero { display:grid; grid-template-columns:72px minmax(0,1fr) auto; align-items:center; gap:22px; padding:0 0 28px; border-bottom:1px solid var(--border-subtle); }
-.account-avatar { display:inline-flex; align-items:center; justify-content:center; flex:none; overflow:hidden; border-radius:50%; color:var(--accent-text); background:var(--text-primary); font-family:var(--font-body); font-size:calc(36px * var(--ui-text-scale,1)); }
-.account-avatar svg { width:76%; height:76%; }
-.account-avatar>span { font-family:var(--font-body); }
 .account-hero>div:nth-child(2) { min-width:0; }
 .account-hero h2 { font-family:var(--font-body); font-size:calc(32px * var(--ui-text-scale,1)); line-height:1.4; overflow-wrap:anywhere; word-break:break-word; }
 .account-hero p { margin-top:8px; font-size:calc(14px * var(--ui-text-scale,1)); color:var(--text-muted); }
@@ -74,7 +71,6 @@
 .account-avatar-options { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:22px; }
 .account-avatar-options>button { display:grid; justify-items:center; gap:9px; min-width:80px; padding:12px 10px; font-size:calc(14px * var(--ui-text-scale,1)); }
 .account-avatar-options>button[aria-pressed=true] { border-color:var(--accent-primary); background:var(--surface-raised); }
-.account-avatar-options .account-avatar { font-size:calc(23px * var(--ui-text-scale,1)); }
 .account-history article,.account-sessions article { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:18px; padding:18px 0; border-bottom:1px solid var(--border-subtle); }
 .account-history article>div,.account-sessions article>div { display:grid; gap:7px; min-width:0; }
 .account-history strong,.account-sessions strong { font-family:var(--font-body); font-size:calc(16px * var(--ui-text-scale,1)); overflow-wrap:anywhere; }
@@ -147,3 +143,34 @@
 .account-page:is([data-ui-platform=web-mobile],[data-ui-platform=android]) .account-auth-layout { display:block; width:100%; max-width:460px; padding:8px 0 28px; }
 .account-page:is([data-ui-platform=web-mobile],[data-ui-platform=android]) .account-auth-art { display:none; }
 .account-page:is([data-ui-platform=web-mobile],[data-ui-platform=android]) .account-auth-paper { width:100%; margin:0 auto; padding:0; border:0; background:transparent; box-shadow:none; }
+
+.account-profile-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px 24px; padding:16px 0 4px; }
+.account-hero p>button { padding:0; min-height:28px; font-size:inherit; font-family:var(--font-number); }
+.account-page:is([data-ui-platform=web-mobile],[data-ui-platform=android]) .account-hero p>button { min-width:44px; min-height:44px; display:inline-flex; align-items:center; }
+.account-page:is([data-ui-platform=web-mobile],[data-ui-platform=android]) :is(.account-profile-actions,.account-header)>a { min-height:44px; display:inline-flex; align-items:center; }
+.account-avatar-editor { display:flex; align-items:center; flex-wrap:wrap; gap:24px; margin:0 0 26px; }
+.account-avatar-editor>div { min-width:0; }
+.account-avatar-editor .account-actions { margin:0; gap:8px 18px; }
+.account-avatar-editor .account-muted { margin:10px 0 0; font-size:14px; }
+.account-file-input { position:absolute; width:1px; height:1px; opacity:0; clip-path:inset(50%); overflow:hidden; }
+.account-presets { margin:16px 0 24px; }
+.account-presets>summary { min-height:44px; }
+.account-presets .account-avatar-options { padding-top:16px; margin:0; }
+.account-stat-details { margin-top:20px; }
+.account-stat-details>summary { font-size:14px; min-height:44px; }
+.account-stat-details dl dd { font-size:17px; }
+.account-stat-details .account-muted { font-size:13px; margin:16px 0 0; }
+.account-match-heading { flex:1 1 260px; }
+.account-match-heading>span { font-size:16px; }
+.account-history article { display:block; }
+.account-match-details { width:100%; margin-top:12px; }
+.account-match-details>summary { min-height:44px; }
+.account-match-details>p { font-size:14px; color:var(--text-muted); margin:10px 0 18px; }
+.account-match-details>dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px 28px; padding:0 0 20px; margin:0; }
+.account-match-details>dl>div { min-width:0; }
+.account-match-details dt { color:var(--text-muted); font-size:14px; }
+.account-match-details dd { font:500 20px/1.4 var(--font-number); margin:5px 0 0; overflow-wrap:anywhere; }
+.account-pagination { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:26px; font-size:14px; }
+.account-pagination>span { color:var(--text-muted); }
+.account-sessions article>div { gap:8px; }
+@media(max-width:430px) { .account-avatar-editor{gap:18px}.account-avatar-editor .account-actions{gap:8px}.account-profile-actions{gap:6px 18px}.account-match-details>dl{grid-template-columns:repeat(2,minmax(0,1fr))}.account-stat-grid dd{font-size:22px}.account-stat-details dl dd{font-size:17px}.account-pagination{gap:8px}.account-pagination button{padding-inline:12px} }
