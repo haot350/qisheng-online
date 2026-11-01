@@ -14,6 +14,6 @@
   "abi": "arm64-v8a",
   "nativeLibrariesBundled": false,
   "wasmPhysics": "same as accepted web build",
-  "distribution": "internal signed APK",
+  "distribution": "signed APK candidate; public availability follows device acceptance",
   "runtimeDependencyVersions": "app/gradle.lockfile"
 }

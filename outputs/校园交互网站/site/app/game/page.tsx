@@ -5,6 +5,7 @@ import {GAME_ORIGIN,SITE_ORIGIN} from '../site-config';
 import {RELEASE_LABEL} from '../release';
 import {PLAYER_CONTENT as playerContent,UE_WINDOWS_PREVIEW} from '@qisheng/shared/player-content';
 import PlayerHelp from '../player-content/PlayerHelp';
+import AndroidDownload from './AndroidDownload';
 import '../player-content/reading.css';
 import '../game-intro.css';
 export const dynamic='force-static';
@@ -21,6 +22,7 @@ export default function GameIntroPage(){return <div className="game-intro-page">
 </section>
 <section className="game-intro-width game-intro-cache-note"><p className="game-intro-muted">地图会按需保存在当前浏览器，下一次进入可少等一会儿。也可以在游戏设置的“地图下载”查看准备进度与剩余体积，提前下载完整地图。</p><a className="game-intro-hero-link" href="/feedback">查看问题与开发者答复</a></section>
 <section className="game-intro-width game-client-download" aria-labelledby="game-client-title"><div><img className="game-client-logo" src={staticAssetUrl(UE_WINDOWS_PREVIEW.logoPath)} width={2172} height={724} alt="齐盛：2027" decoding="async"/><h2 id="game-client-title">{UE_WINDOWS_PREVIEW.productName}</h2><p className="game-client-meta">{UE_WINDOWS_PREVIEW.title} · Preview {UE_WINDOWS_PREVIEW.version} · {(UE_WINDOWS_PREVIEW.bytes/1_000_000).toFixed(1)} MB</p><p>{UE_WINDOWS_PREVIEW.description} {UE_WINDOWS_PREVIEW.installation}</p><a className="game-intro-hero-link" href="https://qs2027.tianhw.top/" target="_blank" rel="noopener noreferrer">走进《齐盛：2027》 ↗</a></div><a className="game-intro-button" href={new URL(UE_WINDOWS_PREVIEW.downloadPath,GAME_ORIGIN).href} download>下载 Windows 版 ↓</a></section>
+<AndroidDownload/>
 <section className="game-intro-overview game-mode-overview game-intro-width" id="game-modes" aria-labelledby="game-modes-title"><div data-reveal><h2 id="game-modes-title">先选一条校园路线。</h2><p className="game-intro-muted">从四张校园封面中选择玩法，再准备装备或邀请同伴。第一次来，也可以先用自由漫游熟悉校园。</p></div><div className="game-intro-modes">
 <article data-reveal><h3>剧情 · 明天，照常见</h3><p>跟随两位同伴走过七章黄昏校园故事，合作拍照、商量选片，把今天留下来。</p><a className="game-intro-hero-link" href="#game-story">认识同伴</a></article>
 <article data-reveal><h3>校园突围</h3><p>随机三项行动任务，顺序由你决定。应对追逐者与增援，完成任务后守住校门撤离区。</p><a className="game-intro-hero-link" href="#game-escape">了解突围</a></article>

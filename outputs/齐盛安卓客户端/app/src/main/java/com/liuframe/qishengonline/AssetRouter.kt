@@ -20,7 +20,7 @@ class AssetRouter(private val assets: AssetManager) {
         val actual = MessageDigest.getInstance("SHA-256").digest(raw).joinToString("") { "%02x".format(it) }
         check(BuildConfig.BUNDLE_MANIFEST_SHA256.length == 64 && actual == BuildConfig.BUNDLE_MANIFEST_SHA256) { "安装资源校验未通过，请重新安装测试包。" }
         bundle = JSONObject(String(raw, Charsets.UTF_8))
-        check(bundle.getString("productId") == BuildConfig.PRODUCT_ID && bundle.getBoolean("internalOnly"))
+        check(bundle.getString("productId") == BuildConfig.PRODUCT_ID && bundle.getString("applicationId")==BuildConfig.APPLICATION_ID && bundle.getString("version")==BuildConfig.VERSION_NAME && bundle.getInt("versionCode")==BuildConfig.VERSION_CODE && bundle.getString("channel")==BuildConfig.RELEASE_CHANNEL && bundle.getBoolean("internalOnly")==BuildConfig.INTERNAL_ONLY)
         val rows = bundle.getJSONArray("files")
         for (i in 0 until rows.length()) {
             val row = rows.getJSONObject(i); val file = row.getString("path")

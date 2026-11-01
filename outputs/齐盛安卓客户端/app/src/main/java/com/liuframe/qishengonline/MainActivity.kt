@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
     private var focusRequest: AudioFocusRequest? = null
     private var exitDialog: AlertDialog? = null
     @Volatile private var destroyed = false
-    private var inSession=false
+    private var presentation=PresentationState(false,false,"auto")
     private var checkedUpdates=false
     @Volatile private var availableUpdate:NativeUpdate?=null
     private var updateOffered=false
@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             javaScriptCanOpenWindowsAutomatically = false; setSupportMultipleWindows(false)
             mediaPlaybackRequiresUserGesture = true
-            userAgentString += " QishengOnlineAndroid/0.1.0"
+            userAgentString += " QishengOnlineAndroid/${BuildConfig.VERSION_NAME}"
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(view, false)
         WebViewCompat.addWebMessageListener(view, "LiuFrameNative", setOf(ResourcePolicy.ORIGIN)) { source, message, origin, mainFrame, reply ->
@@ -177,24 +177,32 @@ class MainActivity : ComponentActivity() {
             if(destroyed)return@execute
             try {
                 when (method) {
-                    "init" -> {send(reply, response(id, JSONObject().put("productId", BuildConfig.PRODUCT_ID).put("version", BuildConfig.VERSION_NAME).put("internalOnly", true).put("session", vault.read())));if(!checkedUpdates&&!destroyed){checkedUpdates=true;updates.execute { checkUpdates() }}}
+                    "init" -> {send(reply, response(id, JSONObject().put("productId", BuildConfig.PRODUCT_ID).put("applicationId",BuildConfig.APPLICATION_ID).put("version", BuildConfig.VERSION_NAME).put("versionCode",BuildConfig.VERSION_CODE).put("channel",BuildConfig.RELEASE_CHANNEL).put("internalOnly", BuildConfig.INTERNAL_ONLY).put("session", vault.read())));if(!checkedUpdates&&!destroyed){checkedUpdates=true;updates.execute { checkUpdates() }}}
                     "session.write" -> { vault.write(params.getString("token")); send(reply, response(id, JSONObject().put("saved", true))) }
                     "system.backUnhandled" -> { runOnUiThread { confirmExit() }; send(reply, response(id, JSONObject())) }
-                    "system.orientation" -> {
-                        val orientation = params.getString("value")
-                        require(orientation in listOf("auto", "landscape"))
+                    "system.presentation" -> {
+                        val orientation = params.getString("orientation")
+                        val next=PresentationState(params.getBoolean("inSession"),params.getBoolean("playing"),orientation)
                         runOnUiThread {
-                            inSession=orientation=="landscape"
+                            if(destroyed)return@runOnUiThread
+                            presentation=next
                             requestedOrientation = if (orientation == "landscape") ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
                             val controller = WindowInsetsControllerCompat(window, web ?: return@runOnUiThread)
                             if (orientation == "landscape") { controller.hide(WindowInsetsCompat.Type.systemBars()); controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
                             else controller.show(WindowInsetsCompat.Type.systemBars())
+                            if(next.keepAwake(visible))window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                             offerUpdate()
                         }
                         send(reply, response(id, JSONObject()))
                     }
-                    "system.awake" -> { val enabled = params.getBoolean("value"); runOnUiThread { if (enabled && visible) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }; send(reply, response(id, JSONObject())) }
-                    "clipboard.write" -> { val text = params.getString("text"); require(text.length <= 32_000); runOnUiThread { getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("齐盛Online", text)) }; send(reply, response(id, JSONObject())) }
+                    "clipboard.write" -> {
+                        val text=params.getString("text");require(text.length<=32_000)
+                        runOnUiThread {
+                            if(destroyed||!visible||generation!=documentGeneration){send(reply,response(id,false,"复制已取消。"));return@runOnUiThread}
+                            try {getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("齐盛Online",text));send(reply,response(id,JSONObject()))}
+                            catch(_:Exception){send(reply,response(id,false,"暂时无法复制，请保存文件。"))}
+                        }
+                    }
                     "export.begin" -> {
                         require(exports.size < 1 && pendingExport == null)
                         val size = params.getLong("bytes"); require(size in 1..(32L * 1024 * 1024))
@@ -262,7 +270,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun offerUpdate() {
         val value=availableUpdate?:return
-        if(!visible||destroyed||inSession||updateOffered)return
+        if(destroyed||!presentation.mayOfferUpdate(visible)||updateOffered)return
         updateOffered=true
         AlertDialog.Builder(this).setTitle("发现新版本 ${value.version}")
             .setMessage((value.notes.take(3)+"下载约${(value.bytes/1048576.0).toInt()}MB。更新会保留本机存档和设置。").joinToString("\n"))

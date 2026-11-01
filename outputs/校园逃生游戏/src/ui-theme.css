@@ -1,0 +1,8 @@
+:root{--ui-paper:#f4f2e9;--ui-surface:#fcfaf2;--ui-ink:#292b28;--ui-muted:#73786d;--ui-line:#d8d5c9;--ui-accent:#9b4937;--ui-font-heading:CampusSerif,'Noto Serif CJK SC','Songti SC','SimSun',serif;--ui-font-body:'Microsoft YaHei UI','PingFang SC',system-ui,sans-serif;--font-display:var(--ui-font-heading);--font-body:var(--ui-font-body);--font-number:Bahnschrift,'Cascadia Mono',ui-monospace,monospace;--paper:var(--ui-paper);--ink:var(--ui-ink);--muted:var(--ui-muted);--brick:var(--ui-accent);--line:var(--ui-line);font-family:var(--ui-font-body);background:var(--ui-paper);color:var(--ui-ink)}
+.game-shell[data-ui-platform=android]{overscroll-behavior:none}
+.game-shell h1[data-page-heading]:focus{outline:none}
+.game-shell .menu-page-header h1,.game-shell .menu-reading-header h2{font-family:var(--ui-font-heading);font-weight:600}
+.game-shell .menu-page:not(.tactical-menu){--surface-bg:var(--ui-paper);--surface-card:var(--ui-surface);--surface-raised:#fffdf8;--text-primary:var(--ui-ink);--text-muted:var(--ui-muted);--border-subtle:var(--ui-line);--accent-primary:var(--ui-accent);--accent-text:#fffaf0}
+.game-shell[data-ui-platform=android] :is(input,textarea,select){font-size:16px}
+.game-shell[data-ui-platform=android] :is(button,a[role=button]){touch-action:manipulation}
+@media(prefers-reduced-motion:reduce){.game-shell .menu-page,.game-shell .campus-menu{scroll-behavior:auto}}

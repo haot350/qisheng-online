@@ -1,5 +1,8 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {createHash} from 'node:crypto';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
+import {readReleaseConfig} from './release-config.mjs';
+import {androidSourceSnapshot} from './source-snapshot.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const releaseConfig=await readReleaseConfig();
 const args=process.argv.slice(2),argument=name=>{const index=args.indexOf(name);return index<0?undefined:args[index+1];};
 const dist=path.resolve(argument('--web-dist')??'');
 if(!argument('--web-dist')||path.basename(dist)!=='dist')throw Error('Pass the accepted production game --web-dist path');
@@ -40,9 +43,9 @@ for(const [file,kind]of documents){
 const mapBytes=await fs.readFile(path.join(dist,'map/manifest.json')),map=JSON.parse(mapBytes),index=JSON.parse(await fs.readFile(path.join(dist,'map/resource-index.json'),'utf8'));
 if(index.schema!==2||index.manifest.sha256!==sha(mapBytes))throw Error('Map identity does not match the accepted source index');
 const resources=new Map();for(const row of Object.values(index.resources)){const list=[row,...(row.encoding?[{url:row.encoding.decodedUrl,bytes:row.encoding.decodedBytes,sha256:row.encoding.decodedSha256}]:[])];for(const item of list){if(!/^\/assets\/map\/[a-f0-9]{64}\.[a-z0-9]+$/.test(item.url))throw Error('Unexpected native map resource URL');const existing=resources.get(item.url);if(existing&&(existing.bytes!==item.bytes||existing.sha256!==item.sha256))throw Error('Conflicting resource identity');resources.set(item.url,{url:item.url,bytes:item.bytes,sha256:item.sha256});}}
-const info={schema:1,productId:'qisheng-online-android',applicationId:'com.liuframe.qishengonline',version:'0.1.0',versionCode:1,internalOnly:true,available:false,webVersion:metadata.version,protocolVersion:'campus-mp-0.9.4',mapManifestSha256:sha(mapBytes),mapCatalogId:map.mapCatalogId??map.sourceVersion,resources:[...resources.values()]};
+const info={schema:1,...releaseConfig,available:false,webVersion:metadata.version,mapManifestSha256:sha(mapBytes),mapCatalogId:map.mapCatalogId??map.sourceVersion,resources:[...resources.values()]};
 await fs.writeFile(path.join(overlay,'android/bundle-info.json'),JSON.stringify(info));
-const release={version:metadata.version,releaseId:'android-0.1.0-web-'+sha(mapBytes).slice(0,12),protocolVersion:'campus-mp-0.9.4',productId:info.productId,nativeVersion:'0.1.0',internalOnly:true,mapManifestSha256:info.mapManifestSha256};
+const release={version:metadata.version,releaseId:'android-'+releaseConfig.version+'-web-'+sha(mapBytes).slice(0,12),protocolVersion:releaseConfig.protocolVersion,productId:info.productId,nativeVersion:releaseConfig.version,versionCode:releaseConfig.versionCode,channel:releaseConfig.channel,internalOnly:releaseConfig.internalOnly,mapManifestSha256:info.mapManifestSha256};
 const releaseBytes=Buffer.from(JSON.stringify(release));await fs.writeFile(path.join(overlay,'android/release-manifest.json'),releaseBytes);rows.push({path:'android/release-manifest.json',url:'/release-manifest.json',bytes:releaseBytes.length,sha256:sha(releaseBytes)});
 const visit=async(directory,base,prefix='')=>{for(const file of await fs.readdir(path.join(base,directory),{withFileTypes:true})){const relative=directory?directory+'/'+file.name:file.name;if(file.isSymbolicLink())throw Error('APK assets cannot be links');if(file.isDirectory()){if(relative==='.vite'||relative==='android/runtime/.vite'||relative==='android/encoded')continue;await visit(relative,base,prefix);}else if(file.isFile()){
  if(base===dist&&excluded.has(relative))continue;
@@ -58,9 +61,11 @@ const visit=async(directory,base,prefix='')=>{for(const file of await fs.readdir
 await visit('',dist);await visit('',overlay);
 const urls=new Set();for(const row of rows){const url=row.url??'/'+row.path;if(urls.has(url))throw Error('Duplicate local asset URL: '+url);urls.add(url);}
 for(const item of resources.values()){const row=rows.find(row=>(row.url??'/'+row.path)===item.url);if(!row||row.bytes!==item.bytes||row.sha256!==item.sha256)throw Error('Bundled map bytes differ from the accepted resource index');}
-const manifest={schema:1,productId:info.productId,version:'0.1.0',webVersion:metadata.version,internalOnly:true,mapManifestSha256:info.mapManifestSha256,files:rows.sort((a,b)=>a.path.localeCompare(b.path))};
+const manifest={schema:1,productId:info.productId,applicationId:info.applicationId,version:releaseConfig.version,versionCode:releaseConfig.versionCode,channel:releaseConfig.channel,webVersion:metadata.version,internalOnly:releaseConfig.internalOnly,mapManifestSha256:info.mapManifestSha256,files:rows.sort((a,b)=>a.path.localeCompare(b.path))};
 const manifestBytes=Buffer.from(JSON.stringify(manifest));await fs.writeFile(path.join(overlay,'android/asset-manifest.json'),manifestBytes);
-const receipt={preparedAt:new Date().toISOString(),productId:info.productId,applicationId:info.applicationId,version:'0.1.0',versionCode:1,internalOnly:true,available:false,webVersion:metadata.version,webDist:dist,generatedAssets:overlay,bundleDigest:sha(manifestBytes),mapManifestSha256:info.mapManifestSha256,files:rows.length,bytes:rows.reduce((total,row)=>total+row.bytes,0),mapRepresentations:resources.size,modelAssetsCopied:false,productionDistModified:false,publicDownloadEnabled:false};
-await fs.writeFile(path.join(root,'work/bundle-prepared.json'),JSON.stringify(receipt,null,2)+'\n');
 const icon=path.join(dist,'branding/qisheng-online-icon.png');try{await fs.mkdir(path.join(root,'app/src/main/res/drawable-nodpi'),{recursive:true});await fs.copyFile(icon,path.join(root,'app/src/main/res/drawable-nodpi/ic_qisheng_logo.png'));}catch{throw Error('The accepted game icon is required');}
+const source=await androidSourceSnapshot(root,game,{mapManifestSha256:info.mapManifestSha256,bundleManifestSha256:sha(manifestBytes),protocolVersion:info.protocolVersion});
+await fs.writeFile(path.join(root,'work/source-snapshot.json'),JSON.stringify(source,null,2)+'\n');
+const receipt={preparedAt:new Date().toISOString(),...releaseConfig,available:false,sourceHash:source.sourceHash,webVersion:metadata.version,webDist:dist,generatedAssets:overlay,bundleDigest:sha(manifestBytes),mapManifestSha256:info.mapManifestSha256,files:rows.length,bytes:rows.reduce((total,row)=>total+row.bytes,0),mapRepresentations:resources.size,modelAssetsCopied:false,productionDistModified:false,publicDownloadEnabled:false};
+await fs.writeFile(path.join(root,'work/bundle-prepared.json'),JSON.stringify(receipt,null,2)+'\n');
 console.log(JSON.stringify({prepared:true,webVersion:metadata.version,files:receipt.files,bytes:receipt.bytes,mapManifestSha256:receipt.mapManifestSha256,modelAssetsCopied:false,publicDownloadEnabled:false}));

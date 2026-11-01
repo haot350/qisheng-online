@@ -1,4 +1,5 @@
 import './vehicle-ui.css';
+import {MenuChoice} from './MenuChoice';
 import {VEHICLES,vehicleDefinition,type DrivingVehicleId} from './vehicles';
 import './driving-guidance.css';
 import {staticAssetUrl} from './static-assets.ts';
@@ -54,7 +55,8 @@ function DriveHoldButton({api,field,label,value,children,className='',onHeldChan
 }
 
 export function VehicleChoice({value,onChange,disabled=false}:{value:DrivingVehicleId;onChange:(id:DrivingVehicleId)=>void;disabled?:boolean}){
- return <div className="vehicle-choice" role="group" aria-label="选择本局载具">{Object.values(VEHICLES).map(v=><button type="button" className="vehicle-card" key={v.id} aria-pressed={value===v.id} disabled={disabled} onClick={()=>onChange(v.id)}><img src={staticAssetUrl('/vehicles/'+v.id+'-card.webp')} alt=""/><span className="vehicle-card-heading"><strong>{v.label}</strong><i aria-hidden="true">{value===v.id?'✓':'→'}</i></span><small>{v.role}</small><p>{v.description}</p><span className="vehicle-card-spec">{Math.round(v.maximumSpeed)} km/h · 耐久 {v.durability}{v.id==='tank'?' · 8 发炮弹':''}</span></button>)}</div>;
+ const selected=vehicleDefinition(value);
+ return <section className="vehicle-loadout" aria-label="本局载具"><div className="vehicle-choice" role="group" aria-label="选择本局载具">{Object.values(VEHICLES).map(v=><button type="button" className="vehicle-card" key={v.id} aria-pressed={value===v.id} disabled={disabled} onClick={()=>onChange(v.id)}><img src={staticAssetUrl('/vehicles/'+v.id+'-card.webp')} alt=""/><span className="vehicle-card-heading"><strong>{v.id==='scooter'?<>电动<wbr/>滑板车</>:v.label}</strong><i aria-hidden="true">{value===v.id?'✓':'→'}</i></span></button>)}</div><div className="vehicle-details" aria-live="polite"><h3>{selected.label}</h3><p>{selected.description}</p><dl><div><dt>最高车速</dt><dd>{Math.round(selected.maximumSpeed)} <small>km/h</small></dd></div><div><dt>车况</dt><dd>{selected.durability}</dd></div>{selected.id==='tank'&&<div><dt>炮弹</dt><dd>8 <small>发</small></dd></div>}</dl></div></section>;
 }
 function CannonButton({api,driving}:{api:GameAPI|null;driving:DrivingSnapshot}){
  const pointers=useDrivePointers(),[pressed,setPressed]=useState(false),disabled=(driving.cannonAmmo??0)<1||(driving.cannonCooldown??0)>0||driving.countdown>0;
@@ -62,7 +64,7 @@ function CannonButton({api,driving}:{api:GameAPI|null;driving:DrivingSnapshot}){
  return <button className={'drive-button cannon-button '+(pressed?'active':'')} disabled={disabled} aria-label="坦克开炮" onContextMenu={e=>e.preventDefault()} onPointerDown={e=>{e.preventDefault();e.stopPropagation();if(pointers.begin('cannon',e,cancelled=>{setPressed(false);if(cancelled)api?.cancelAction?.('fire');})){setPressed(true);api?.action('fire');}}} onPointerUp={e=>pointers.releasePointer(e.pointerId)} onPointerCancel={e=>{pointers.releasePointer(e.pointerId,true);api?.cancelAction?.('fire');}} onLostPointerCapture={e=>pointers.releasePointer(e.pointerId,true)} onClick={e=>{if(e.detail===0)api?.action('fire');}}><strong>{(driving.cannonAmmo??0)<1?'弹药用尽':(driving.cannonCooldown??0)>0?(driving.cannonCooldown??0).toFixed(1)+' 秒':'开炮'}</strong><small>{driving.cannonAmmo??0} / 8</small></button>;
 }
 export function TransmissionChoice({mode,onChange,disabled=false}:{mode:TransmissionMode;onChange:(mode:TransmissionMode)=>void;disabled?:boolean}){
- return <label className="transmission-choice"><span>驾驶变速</span><select aria-label="驾驶变速" value={mode} disabled={disabled} onChange={e=>onChange(e.target.value==='manual'?'manual':'auto')}><option value="auto">自动换挡</option><option value="manual">手动换挡</option></select></label>;
+ return <div className="transmission-choice"><MenuChoice label="驾驶变速" purpose="transmission" value={mode} disabled={disabled} onChange={onChange} options={[{value:'auto',label:'自动换挡'},{value:'manual',label:'手动换挡'}]}/></div>;
 }
 
 /** Each shift is a single command; pointer ownership never changes a held pedal. */

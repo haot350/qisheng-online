@@ -9,7 +9,7 @@ export async function buildStaticAssets(project,kind='game') {
  if(kind==='game')await (await import('./sync-fresh-helper.mjs')).syncFreshBrowser(project);
  if(kind==='game')console.log('Portrait alpha masks:',await (await import('./build-billboard-masks.mjs')).buildBillboardMasks(project));
  const publicRoot=path.resolve(project,'public');
- const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players','characters/portrait-masks']:['images','poster.jpg'];
+ const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players','characters/portrait-masks','assets/ui-b']:['images','poster.jpg','assets/ui-b'];
  const extensions=new Set(['.glb','.mp3','.wav','.ogg','.m4a','.webp','.png','.jpg','.jpeg','.svg','.woff2','.bin']);
  const resources={};let bytes=0;
  const walk=async logical=>{
@@ -36,6 +36,8 @@ export async function buildStaticAssets(project,kind='game') {
  const indexFile=path.join(generated,'static-assets.json'),indexText=JSON.stringify(urls,null,2)+'\n';
  const previousIndex=await readFile(indexFile,'utf8').catch(error=>{if(error.code==='ENOENT')return null;throw error;});
  if(previousIndex!==indexText)await writeFile(indexFile,indexText);
+ const headingFont=urls['/assets/ui-b/fonts/noto-serif-sc-ui.woff2'];
+ if(headingFont){const fontCss=`@font-face{font-family:CampusSerif;src:url('${headingFont}') format('woff2');font-style:normal;font-weight:400 900;font-display:swap}\n`;await writeFile(path.join(generated,'b-font.css'),fontCss);}
  const release=JSON.parse(await readFile(path.join(project,'package.json'),'utf8')).version;
  const report=path.join(project,'docs','v'+release);await mkdir(report,{recursive:true});
  await writeFile(path.join(report,'static-assets.json'),JSON.stringify({schema:1,kind,files:Object.keys(resources).length,bytes,resources},null,2)+'\n');

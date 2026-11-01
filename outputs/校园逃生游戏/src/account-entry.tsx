@@ -5,5 +5,8 @@ import '@qisheng/shared/community/account.css';
 import {rankingClient} from './ranking/client';
 import {achievementIconUrls} from './achievement-icons';
 import './account-page.css';
-function Page(){useGamePresence();return <main className="account-standalone"><nav className="account-site-nav" aria-label="站点导航"><a href="/" aria-label="返回齐盛Online">齐盛Online</a><a href="/">返回游戏 ↗</a></nav><AccountPage client={rankingClient} iconUrls={achievementIconUrls} publicShortId={new URLSearchParams(location.search).get('profile')??undefined}/><footer className="account-site-footer">© 2026 LIUFRAME INTERACTIVE · 齐盛Online · <a href="/copyright/">版权与许可</a></footer></main>;}
+import './ui-theme.css';
+import {BrandLogo} from './BrandLogo';
+import {staticAssetUrl} from './static-assets';
+function Page(){useGamePresence();return <main className="account-standalone"><nav className="account-site-nav" aria-label="站点导航"><a href="/" aria-label="返回齐盛Online"><BrandLogo/></a><a href="/">返回主菜单</a></nav><AccountPage client={rankingClient} iconUrls={achievementIconUrls} campusArtUrl={staticAssetUrl('/assets/ui-b/courtyard-wide.webp')} publicShortId={new URLSearchParams(location.search).get('profile')??undefined}/><footer className="account-site-footer">© 2026 LIUFRAME INTERACTIVE · 齐盛Online · <a href="/copyright/">版权与许可</a></footer></main>;}
 createRoot(document.getElementById('root')!).render(<Page/>);

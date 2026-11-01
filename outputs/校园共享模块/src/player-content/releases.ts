@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.11.0',sequence:48,date:'2026-11-01',version:'Preview 0.11.0',
+ overview:'熟悉的校园，重新整理的菜单。',
+ summary:['水彩校园与新的页面排版，桌面和手机各有自己的布局。','选装、房间准备和设置更清楚，账号与反馈更方便浏览。','齐盛Online 安卓版开放预览，与网页使用同一账号和房间。'],
+ items:['主菜单加入水彩校园画面，保留真实续玩入口；手机菜单与安卓底部导航分别整理。','突围与驾驶选装采用等面积选项，当前装备、天气与准备操作更容易找到。','账号、排行榜、反馈和小齐更新排版，找回、申诉及已有记录继续保留。','安卓预览版内置完整校园资源，支持网页玩家同房；实际游玩横屏，菜单可随设备旋转。'],
+},
+{
  id:'preview-0.10.2',sequence:47,date:'2026-10-31',version:'Preview 0.10.2',
  overview:'准备完成后，直接开始。',
  summary:['修补准备完成后再次显示人物加载的问题。','大飞开始驾驶时保持介绍与场景连贯。','教学楼玻璃调整为更深的蓝灰色与环境反光。'],

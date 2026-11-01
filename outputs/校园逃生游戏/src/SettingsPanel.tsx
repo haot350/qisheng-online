@@ -7,6 +7,7 @@ import {EscapeMusicChoice, EscapeTouchSettings} from './EscapeUI';
 import {modeCapabilities} from './mode-policy';
 import type {Mode, Settings} from './types';
 import './settings-page.css';
+import {isAndroidApp} from './platform/android';
 
 const sections = [
   {id:'controls', name:'操作', detail:'观察与按键'},
@@ -22,9 +23,11 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
   settings:Settings; onChange:(next:Settings)=>void; onClose:()=>void; mode:Mode;
   canChangeTransmission:boolean; onEditTouch:()=>void; onlineWeather?:WeatherPreset;
 }) {
-  const [section,setSection]=useState<Section>('controls');
+  const [section,setSection]=useState<Section>('controls'),[mobileDetail,setMobileDetail]=useState(false);
+  const [compact,setCompact]=useState(()=>isAndroidApp()||matchMedia('(max-width:760px)').matches);
+  useEffect(()=>{const media=matchMedia('(max-width:760px)'),change=()=>setCompact(isAndroidApp()||media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
   const nav=useRef<HTMLElement>(null),workspace=useRef<HTMLDivElement>(null),changedSection=useRef(false);
-  const chooseSection=(value:Section)=>{if(value===section)return;changedSection.current=true;setSection(value);};
+  const chooseSection=(value:Section)=>{setMobileDetail(true);if(value===section)return;changedSection.current=true;setSection(value);};
   useEffect(()=>{
     if(!changedSection.current)return;
     changedSection.current=false;
@@ -42,13 +45,13 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
   const toggle=(key:'headBob'|'recoilShake'|'aimAssist'|'realityHints'|'onlinePing'|'reducedMotion'|'crosshairOutline',label:string,description?:string)=>
     <label className="settings-toggle"><span><strong>{label}</strong>{description&&<small>{description}</small>}</span><input type="checkbox" role="switch" checked={!!settings[key]} onChange={e=>onChange({...settings,[key]:e.target.checked})}/></label>;
   const current=sections.find(s=>s.id===section)!;
-  return <div ref={workspace} className="settings-workspace">
+  return <div ref={workspace} className="settings-workspace" data-compact={compact} data-mobile-detail={mobileDetail}>
     <nav ref={nav} className="settings-sections" role="tablist" aria-label="设置分类" onKeyDown={e=>{
       if(!['ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Home','End'].includes(e.key))return;
       const index=sections.findIndex(s=>s.id===section),next=e.key==='Home'?0:e.key==='End'?sections.length-1:(index+(['ArrowRight','ArrowDown'].includes(e.key)?1:sections.length-1))%sections.length;
       e.preventDefault();chooseSection(sections[next].id);nav.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({preventScroll:true});
-    }}>{sections.map(item=><button key={item.id} id={'settings-tab-'+item.id} role="tab" type="button" aria-selected={section===item.id} aria-controls={'settings-section-'+item.id} tabIndex={section===item.id?0:-1} onClick={()=>chooseSection(item.id)}><span>{item.name}</span><small>{item.detail}</small><i aria-hidden="true">›</i></button>)}</nav>
-    <div className="settings-body"><header className="settings-section-heading"><h2>{current.name}</h2></header>
+    }}>{sections.map(item=><button key={item.id} id={'settings-tab-'+item.id} role="tab" type="button" aria-selected={section===item.id} aria-controls={'settings-section-'+item.id} tabIndex={section===item.id?0:-1} onClick={()=>chooseSection(item.id)}><span>{item.name}</span><i aria-hidden="true">›</i></button>)}</nav>
+    <div className="settings-body"><button className="settings-category-back" data-mobile-detail-back type="button" onClick={()=>setMobileDetail(false)}>← 设置分类</button><header className="settings-section-heading"><h2>{current.name}</h2></header>
       <section id={'settings-section-'+section} role="tabpanel" aria-labelledby={'settings-tab-'+section} className="settings-section-content" key={section}>
         {section==='controls'&&<>
           {field('操作方式',undefined,<div className="settings-segmented" role="group" aria-label="操作方式">{([['auto','自动'],['desktop','键鼠'],['touch','触屏']] as const).map(([value,label])=><button key={value} aria-pressed={settings.controls===value} onClick={()=>onChange({...settings,controls:value})}>{label}</button>)}</div>)}
@@ -70,7 +73,7 @@ export function SettingsPanel({settings,onChange,onClose,mode,canChangeTransmiss
           {range('crosshairSize','准星大小',.75,1.75,.05,Math.round((settings.crosshairSize??1)*100)+'%')}
           {toggle('crosshairOutline','准星描边','在明暗背景上更容易看清准星。')}
           <div className="settings-reticle-preview" aria-label="准星预览"><svg viewBox="0 0 72 72" aria-hidden="true"><g stroke="#fff" strokeWidth={2*(settings.crosshairSize??1)} style={{filter:settings.crosshairOutline!==false?'drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000)':'none'}}><path d="M36 15V25M36 47V57M15 36H25M47 36H57"/><circle cx="36" cy="36" r={2*(settings.crosshairSize??1)} fill="#fff" stroke="none"/></g></svg></div>
-          <p className="settings-accessibility-note">队伍同时用文字与符号区分：◆ 蓝队 · ▲ 红队。</p>
+          <p className="settings-accessibility-note">队伍同时用文字与符号区分：◆ 蓝队，▲ 红队。</p>
         </>}
         {section==='audio' &&<>
           {range('music','音乐音量',0,1,.01,Math.round(settings.music*100)+'%')}

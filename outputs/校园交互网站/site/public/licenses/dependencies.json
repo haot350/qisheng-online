@@ -1,0 +1,11 @@
+[
+  {
+    "name": "Noto Serif SC",
+    "version": "UI subset f48faf0c674a",
+    "license": "SIL Open Font License 1.1",
+    "files": [
+      "NotoSerifSC-OFL.txt"
+    ],
+    "source": "https://github.com/google/fonts/tree/main/ofl/notoserifsc"
+  }
+]

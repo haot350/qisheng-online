@@ -1,0 +1,9 @@
+.androidCard{display:flex;align-items:center;justify-content:space-between;gap:32px;padding-block:32px;border-top:1px solid #d3d0c3;border-bottom:1px solid #d3d0c3;margin-block:25px 50px;color:#30372f}
+.androidCard>div{min-width:0;max-width:620px}
+.androidCard h2{margin:0 0 12px;font-size:28px;line-height:1.4}
+.androidCard p{margin:10px 0 0;font-size:16px;line-height:1.8}
+.androidCard .metadata{font-size:14px;font-variant-numeric:tabular-nums;color:#666d60}
+.refresh{min-height:44px;padding:10px 18px;border:1px solid #b6b9ac;background:transparent;color:#774c37;font:inherit;cursor:pointer;flex:none}
+.refresh:disabled{opacity:.55;cursor:default}
+.refresh:focus-visible{outline:2px solid #914b39;outline-offset:4px}
+@media(max-width:650px){.androidCard{align-items:stretch;flex-direction:column;gap:20px;padding-block:26px}.androidCard h2{font-size:24px}.androidCard a,.refresh{width:100%;text-align:center}}

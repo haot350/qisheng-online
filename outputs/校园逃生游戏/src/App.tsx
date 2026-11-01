@@ -1,6 +1,9 @@
 import {drivingVehicleId} from './vehicles';
 import {VehicleChoice} from './DrivingUI';
 import {WeatherChoice} from './WeatherChoice';
+import {MenuChoice} from './MenuChoice';
+import {isAndroidApp,waitForAndroidLandscape} from './platform/android';
+import {staticAssetUrl} from './static-assets';
 import type {AssistantMenuAction, AssistantMenuContext} from '@qisheng/shared/assistant';
 import {readRecentPlay,saveRecentPlay,type RecentPlay} from './recent-mode';
 import {GadgetHUD} from './GadgetHUD';
@@ -76,6 +79,7 @@ import { PRIMARY_WEAPONS } from "./rules";
 import { ResourceSlot, SessionOperations, SessionScope } from "./session-flow";
 import { deviceGuidance } from "./story/guidance";
 import "./styles.css";
+import "./ui-theme.css";
 import { gameTelemetry } from "./telemetry";
 import {
   DEFAULT_SETTINGS,
@@ -396,6 +400,7 @@ export default function App() {
     [touchEditor, setTouchEditor] = useState(false),
     [attempt, setAttempt] = useState(0),
     [busy, setBusy] = useState(false),
+    [nativeEnteringWorld, setNativeEnteringWorld] = useState(false),
     [uiError, setUiError] = useState("");
   useEffect(()=>{document.documentElement.dataset.motion=settings.reducedMotion?"reduced":"system";},[settings.reducedMotion]);
   const [primary, setPrimary] = useState<PrimaryWeapon>(loadPrimary),
@@ -965,16 +970,21 @@ export default function App() {
       if (operations.current.finish(ticket, game.current)) setBusy(false);
     }
   };
+  const enterWorld=(work:()=>Promise<unknown>|void,current:()=>boolean):Promise<unknown>|void=>{
+    if(!isAndroidApp())return work();
+    setNativeEnteringWorld(true);
+    return waitForAndroidLandscape(current).then(()=>current()?work():undefined).finally(()=>setNativeEnteringWorld(false));
+  };
   const start = (mode: Mode) => {
     if (!guardEntry(entryFor(mode))) return;
     localRoundAccepted.current = false;
     void runOperation(
-      (api) => {
+      (api,current) => {
         setShowHelp(false);
         setArchiveOpen(false);
         setPlayerAlbumOpen(false);
         setRankingPanel(null);
-        return api.start(
+        return enterWorld(()=>api.start(
           mode,
           mode === "escape"
             ? {
@@ -983,7 +993,7 @@ export default function App() {
                 training: practice,
               }
             : undefined,
-        );
+        ),current);
       },
       {
         label: "Round start failed",
@@ -995,9 +1005,9 @@ export default function App() {
   const prepareIntro = () => {
     if (!guardEntry('dafei')) return;
     void runOperation(
-      (api) => {
+      (api,current) => {
         setShowHelp(false);
-        return api.prepareDafeiIntro();
+        return enterWorld(()=>api.prepareDafeiIntro(),current);
       },
       {
         label: "Driving intro failed",
@@ -1153,7 +1163,7 @@ export default function App() {
         if (file.size > 1048576) throw Error("存档文件过大");
         const text = await file.text();
         if (!current()) return;
-        await api.restoreStory(JSON.parse(text));
+        await enterWorld(()=>api.restoreStory(JSON.parse(text)),current);
         if (current() && keepPaused) api.pause();
       },
       {
@@ -1173,7 +1183,7 @@ export default function App() {
           const cp = await store.load(previous);
           if (!current()) return;
           if (!cp) throw Error("没有可恢复的存档");
-          await api.restoreStory(cp);
+          await enterWorld(()=>api.restoreStory(cp),current);
           if(current()&&keepPaused)api.pause();
         } finally {
           await store.close();
@@ -1426,10 +1436,12 @@ export default function App() {
       return false;
     },
   }));
-  const nativeInSession=!!onlineRoomKey||['intro','playing','paused','won','lost'].includes(snapshot.phase);
+  const nativeWorldActive=nativeEnteringWorld||['intro','playing','paused','won','lost'].includes(snapshot.phase)||!!onlineRoomKey&&onlineView.currentRoom?.phase!=='lobby';
+  const nativeInSession=!!onlineRoomKey||!!onlineView.currentRoom||nativeWorldActive;
+  const nativeOrientation=nativeWorldActive?'landscape':'auto';
   useEffect(()=>{
-    window.dispatchEvent(new CustomEvent('qisheng:native-session-state',{detail:{inSession:nativeInSession,playing}}));
-  },[nativeInSession,playing]);
+    window.dispatchEvent(new CustomEvent('qisheng:native-session-state',{detail:{inSession:nativeInSession,playing,orientation:nativeOrientation}}));
+  },[nativeInSession,playing,nativeOrientation]);
   const openNotices = () => { if (playing) game.current?.pause(); setNoticesOpen(true); };
   const availability = operational.config.modes;
   const menuUnavailable = {story:!availability.story.enabled,roam:!availability.roam.enabled,dafei:!availability.dafei.enabled,single:!availability['escape-solo'].enabled,coop:!availability['escape-coop'].enabled,tdm:!availability['escape-tdm'].enabled,ffa:!availability['escape-ffa'].enabled,escape:['escape-solo','escape-coop','escape-tdm','escape-ffa'].every(id=>!availability[id as ModeEntry].enabled)};
@@ -1467,6 +1479,8 @@ export default function App() {
   );
   return (
     <main
+      data-ui-platform={isAndroidApp()?'android':(primaryTouchInput()||usableViewport.width<900?'web-mobile':'desktop')}
+      data-ui-theme={snapshot.mode==='escape'||isMenu&&selectedMode==='escape'&&menuScreen==='prepare'||onlineOpen?'tactical':'campus'}
       style={{"--ui-text-scale":settings.uiTextScale??1} as React.CSSProperties}
       data-reduced-motion={(!settings.headBob&&!settings.recoilShake)||matchMedia("(prefers-reduced-motion: reduce)").matches}
       className={
@@ -1633,11 +1647,7 @@ export default function App() {
               {selectedMode === "escape" ? (
                 <>
                   <WeaponLoadout value={primary} onChange={id=>setPrimary(id as PrimaryWeapon)} mode="solo" disabled={busy}/>
-                  <div className="menu-difficulty-choice">
-                    <label htmlFor="escape-difficulty">难度</label>
-                    <select id="escape-difficulty" value={settings.escapeDifficulty??"standard"} disabled={busy} onChange={event=>changeSettings({...settings,escapeDifficulty:event.target.value as Settings['escapeDifficulty']})}>{ESCAPE_DIFFICULTIES.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}</select>
-                    <p>{ESCAPE_DIFFICULTIES.find(d=>d.id===(settings.escapeDifficulty??"standard"))?.description}</p>
-                  </div>
+                  <MenuChoice label="难度" purpose="difficulty" value={settings.escapeDifficulty??'standard'} disabled={busy} onChange={escapeDifficulty=>changeSettings({...settings,escapeDifficulty})} options={ESCAPE_DIFFICULTIES.map(d=>({value:d.id,label:d.label}))} hint={ESCAPE_DIFFICULTIES.find(d=>d.id===(settings.escapeDifficulty??'standard'))?.description}/>
                 </>
               ) : selectedMode === "dafei" ? (
                 <>
@@ -1665,7 +1675,7 @@ export default function App() {
       {announcements.flash && playing && <div className="announcement-flash" role="status"><strong>{announcements.flash.title}</strong><span>暂停菜单可查看完整通知</span></div>}
       {modeBlocked && <GameDialog title="玩法暂时不可用" confirmLabel="知道了" onConfirm={()=>setModeBlocked(null)}><p>{modeBlocked}</p></GameDialog>}
       {noticesOpen && <MenuReadingPanel title="游戏通知" onClose={()=>setNoticesOpen(false)}><AnnouncementList items={announcements.list} onRead={announcements.markRead}/></MenuReadingPanel>}
-      {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
+      {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} identity={rankingPlayer?.nickname} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
         {page==='settings'?<SettingsPanel mode={helpMode} onlineWeather={onlineView.currentRoom?(onlineView.currentRoom.weather?.preset??'clear'):undefined} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
         page==='help'?<div className="help-panel">{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题 →</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
         page==='faq'?<MenuFAQ mode={helpMode} context={menuScreen==='prepare'?'prepare':'home'}/>:
@@ -1674,7 +1684,7 @@ export default function App() {
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
         page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} onPlanComplete={plan=>{if(plan.actions.some(action=>action.type==='create_room'||action.type==='join_room')&&onlineClient.current?.view.currentRoom?.phase==='lobby'){pages.clear();setOnlineOpen(true);}}} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
-        page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
+        page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} campusArtUrl={staticAssetUrl('/assets/ui-b/courtyard-wide.webp')} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}
       {leaveConfirmation&&<GameDialog tactical={snapshot.mode==='escape'||!!onlineView.currentRoom} tone="danger" title={leaveDestination==='lobby'?'返回联机大厅？':onlineView.currentRoom?'离开当前房间？':'结束本局？'} busy={leavingRoom} busyLabel="正在离开…" onCancel={()=>setLeaveConfirmation(false)} cancelLabel="留在菜单" confirmLabel={leaveDestination==='lobby'?'返回联机大厅':'返回主菜单'} onConfirm={()=>void (leaveDestination==='lobby'?finishReturnLobby():finishReturnMenu())}><p>{onlineView.currentRoom?'你将退出当前房间并释放席位。其他玩家可以继续对局。':storyMode?'故事进度会保留在本机，下次可以继续。':'本局尚未完成，返回主菜单将结束当前游玩。'}</p></GameDialog>}
       {briefing && (

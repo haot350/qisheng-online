@@ -3,7 +3,9 @@ import type {BundledMapResource} from '@qisheng/shared/map-client';
 
 type NativeObject={postMessage:(message:string)=>void;onmessage:((event:{data:string})=>void)|null};
 type Reply={id:string;ok:boolean;value?:unknown;error?:string};
-export type AndroidBundleInfo={productId:'qisheng-online-android';version:string;webVersion:string;internalOnly:true;mapManifestSha256:string;resources:BundledMapResource[]};
+export type AndroidBundleInfo={productId:'qisheng-online-android';applicationId:'com.liuframe.qishengonline';version:string;versionCode:number;channel:'internal'|'public-preview';webVersion:string;internalOnly:boolean;mapManifestSha256:string;resources:BundledMapResource[]};
+type AndroidIdentity={productId:string;applicationId:string;version:string;versionCode:number;channel:string;internalOnly:boolean;session:string};
+export type AndroidPresentation={inSession:boolean;playing:boolean;orientation:'auto'|'landscape'};
 declare global {interface Window {LiuFrameNative?:NativeObject;__qishengNativeEvent?:(type:string)=>void}}
 const pending=new Map<string,{resolve:(value:unknown)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
 let serial=0,ready=false,token='',sessionQueue:Promise<unknown>=Promise.resolve();
@@ -31,6 +33,26 @@ const secureStore:AccountSessionStore={read:()=>token,write:value=>{
  sessionQueue=sessionQueue.catch(()=>{}).then(()=>request('session.write',{token:value})).catch(()=>notify('本次登录未能保存，重新打开应用后可能需要再次登录。'));
 }};
 export const androidSessionStore=():AccountSessionStore|undefined=>ready?secureStore:undefined;
+export function setAndroidPresentation(value:AndroidPresentation,timeout=15000){
+ if(!ready||typeof value.inSession!=='boolean'||typeof value.playing!=='boolean'||!['auto','landscape'].includes(value.orientation)||value.playing&&!value.inSession)return Promise.reject(Error('应用画面状态无效。'));
+ return request('system.presentation',value,timeout);
+}
+
+export async function waitForAndroidLandscape(current:()=>boolean):Promise<void>{
+ if(!ready)return;
+ const active=()=>{try{return current();}catch{return false;}};
+ if(!active())throw Error('本次准备已取消。');
+ const deadline=performance.now()+3000;
+ try{await setAndroidPresentation({inSession:true,playing:false,orientation:'landscape'},3000);}catch{throw Error(active()?'画面暂未准备好，请稍后重试。':'本次准备已取消。');}
+ await new Promise<void>((resolve,reject)=>{
+  const viewport=window.visualViewport;let settled=false;
+  const cleanup=()=>{window.removeEventListener('resize',check);window.removeEventListener('orientationchange',check);viewport?.removeEventListener('resize',check);clearInterval(poll);clearTimeout(timeout);};
+  const finish=(error?:Error)=>{if(settled)return;settled=true;cleanup();if(error)reject(error);else resolve();};
+  const check=()=>{if(!active()){finish(Error('本次准备已取消。'));return;}if(innerWidth>=innerHeight&&innerWidth>0&&innerHeight>0)finish();};
+  const poll=setInterval(check,50),timeout=setTimeout(()=>finish(Error('请横屏后再次开始游戏。')),Math.max(0,deadline-performance.now()));
+  window.addEventListener('resize',check);window.addEventListener('orientationchange',check);viewport?.addEventListener('resize',check);check();
+ });
+}
 
 export async function initializeAndroid(){
  if(ready)return bundleInfo!;
@@ -42,10 +64,10 @@ export async function initializeAndroid(){
   if(type==='background'){window.dispatchEvent(new Event('qisheng:native-background'));return;}
   if(type==='resume')window.dispatchEvent(new Event('qisheng:native-resume'));
  };
- const [identity,response]=await Promise.all([request<{productId:string;version:string;internalOnly:boolean;session:string}>('init'),fetch('/android/bundle-info.json',{cache:'no-store'})]);
+ const [identity,response]=await Promise.all([request<AndroidIdentity>('init'),fetch('/android/bundle-info.json',{cache:'no-store'})]);
  if(!response.ok)throw Error('应用资源未能读取，请重新安装。');
  const info=await response.json() as AndroidBundleInfo;
- if(identity.productId!=='qisheng-online-android'||identity.internalOnly!==true||info.productId!==identity.productId||info.version!==identity.version||info.internalOnly!==true||!Array.isArray(info.resources)||!/^[a-f0-9]{64}$/.test(info.mapManifestSha256))throw Error('应用资源版本不一致，请重新安装。');
+ if(identity.productId!=='qisheng-online-android'||identity.applicationId!=='com.liuframe.qishengonline'||!['internal','public-preview'].includes(identity.channel)||identity.internalOnly!==(identity.channel==='internal')||!Number.isSafeInteger(identity.versionCode)||identity.versionCode<1||!/^\d+\.\d+\.\d+$/.test(identity.version)||info.productId!==identity.productId||info.applicationId!==identity.applicationId||info.version!==identity.version||info.versionCode!==identity.versionCode||info.channel!==identity.channel||info.internalOnly!==identity.internalOnly||!Array.isArray(info.resources)||!/^[a-f0-9]{64}$/.test(info.mapManifestSha256))throw Error('应用资源版本不一致，请重新安装。');
  if(typeof WebAssembly==='undefined')throw Error('系统网页组件暂不支持此游戏，请更新后重试。');
  const probe=document.createElement('canvas'),gl=probe.getContext('webgl2');
  if(!gl)throw Error('此设备暂不能启用游戏画面，请更新系统网页组件后重试。');
@@ -55,10 +77,28 @@ export async function initializeAndroid(){
  try{localStorage.removeItem('qisheng-ranking-session-v1');}catch{}
  bundleInfo=info;ready=true;
  installDownloadAdapter();
- const sessionState=(event:Event)=>{const value=(event as CustomEvent<{inSession:boolean;playing:boolean}>).detail;if(!value||typeof value.inSession!=='boolean'||typeof value.playing!=='boolean')return;void request('system.orientation',{value:value.inSession?'landscape':'auto'}).catch(()=>{});void request('system.awake',{value:value.playing}).catch(()=>{});};
+ installClipboardAdapter();
+ const sessionState=(event:Event)=>{const value=(event as CustomEvent<AndroidPresentation>).detail;if(!value)return;void setAndroidPresentation(value).catch(()=>{});};
  addEventListener('qisheng:native-session-state',sessionState);
  addEventListener('pagehide',()=>{removeEventListener('qisheng:native-session-state',sessionState);for(const job of pending.values()){clearTimeout(job.timer);job.reject(Error('页面已关闭。'));}pending.clear();},{once:true});
  return info;
+}
+
+function installClipboardAdapter(){
+ const writeText=(text:string)=>{if(typeof text!=='string'||text.length>32000)return Promise.reject(Error('复制内容过长。'));return request('clipboard.write',{text}).then(()=>undefined);};
+ try{if(navigator.clipboard)Object.defineProperty(navigator.clipboard,'writeText',{value:writeText,configurable:true});else Object.defineProperty(navigator,'clipboard',{value:{writeText},configurable:true});}catch{/* Existing browser clipboard remains available when this property is fixed. */}
+}
+
+export function bindAndroidReadingPage(){
+ if(!ready)return;
+ void setAndroidPresentation({inSession:false,playing:false,orientation:'auto'}).catch(()=>{});
+ const back=(event:Event)=>{
+  const escape=new KeyboardEvent('keydown',{key:'Escape',code:'Escape',bubbles:true,cancelable:true});window.dispatchEvent(escape);
+  if(!escape.defaultPrevented)location.replace('/');
+  (event as CustomEvent<{handle?:()=>void}>).detail?.handle?.();
+ };
+ window.addEventListener('qisheng:native-back',back);
+ window.addEventListener('pagehide',()=>window.removeEventListener('qisheng:native-back',back),{once:true});
 }
 
 async function exportBlob(blob:Blob,filename:string){

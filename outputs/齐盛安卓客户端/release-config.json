@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "productId": "qisheng-online-android",
+  "applicationId": "com.liuframe.qishengonline",
+  "version": "0.2.0",
+  "versionCode": 2,
+  "channel": "public-preview",
+  "internalOnly": false,
+  "minimumOS": "Android 10+ · arm64",
+  "protocolVersion": "campus-mp-0.9.4",
+  "signingCertificateSha256": "db2767108060d2593807cf578a30239bf49cf52678fe3b6d31366377543bff07"
+}

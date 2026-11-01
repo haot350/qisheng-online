@@ -1,7 +1,8 @@
 import {RankingUI as SharedRankingUI,type RankingUIProps} from '@qisheng/shared/community';
 import {rankingClient} from './ranking/client';
 import {achievementIconUrls} from './achievement-icons';
+import {staticAssetUrl} from './static-assets';
 import {pendingRankingRuns,retryPendingRanking} from './ranking/recorder';
 const pendingRuns={list:pendingRankingRuns,submit:retryPendingRanking};
 export {RankingResultStatus} from '@qisheng/shared/community';
-export default function RankingUI(props:Omit<RankingUIProps,'client'|'pendingRuns'>){return <SharedRankingUI {...props} iconUrls={props.iconUrls??achievementIconUrls} client={rankingClient} pendingRuns={pendingRuns}/>;}
+export default function RankingUI(props:Omit<RankingUIProps,'client'|'pendingRuns'>){return <SharedRankingUI {...props} iconUrls={props.iconUrls??achievementIconUrls} campusArtUrl={props.campusArtUrl??staticAssetUrl('/assets/ui-b/courtyard-wide.webp')} client={rankingClient} pendingRuns={pendingRuns}/>;}

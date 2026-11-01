@@ -1,9 +1,10 @@
-import {initializeAndroid} from './platform/android';
+import {initializeAndroid,bindAndroidReadingPage} from './platform/android';
 import {configureBundledMapResources} from '@qisheng/shared/map-client';
 
 try{
  const bundle=await initializeAndroid();
  configureBundledMapResources(bundle.resources);
+ if(['account','credits','copyright'].includes(document.documentElement.dataset.qishengEntry??''))bindAndroidReadingPage();
  switch(document.documentElement.dataset.qishengEntry){
   case 'account':await import('./account-entry');break;
   case 'credits':await import('./credits-entry');break;

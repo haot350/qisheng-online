@@ -35,6 +35,7 @@ for(const [logical,resource] of Object.entries(index.resources)){
 const staticAssets=JSON.parse(await readFile(path.join(root,'lib/generated/static-assets.json'),'utf8'));
 for(const url of Object.values(staticAssets)){include(url,path.basename(url).match(/^([a-f0-9]{64})\./)?.[1]);}
 for(const url of ['/favicon.svg','/_headers','/spaces.json'])if(await stat(path.join(source,url)).catch(()=>null))include(url);
+for(const url of ['/licenses/NotoSerifSC-OFL.txt','/licenses/NotoSerifSC-SOURCE.json','/licenses/dependencies.json'])if(await stat(path.join(source,url)).catch(()=>null))include(url);
 let bytes=0;
 for(const [relative,expected] of requested){
  const data=await readFile(path.join(source,relative));if(expected&&hash(data)!==expected)throw Error('Resource checksum failed: '+relative);

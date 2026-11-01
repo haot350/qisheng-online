@@ -1,24 +1,33 @@
 import java.util.Properties
+import groovy.json.JsonSlurper
 
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 
 val webAssets = providers.gradleProperty("qisheng.webAssets").orNull
 val generatedAssets = providers.gradleProperty("qisheng.generatedAssets").orNull
 val bundleDigest = providers.gradleProperty("qisheng.bundleDigest").orElse("")
+val releaseConfig=JsonSlurper().parse(rootProject.file("release-config.json")) as Map<*,*>
+require(releaseConfig["schema"]==1 && releaseConfig["productId"]=="qisheng-online-android" && releaseConfig["applicationId"]=="com.liuframe.qishengonline")
+val releaseVersion=releaseConfig["version"] as String
+val releaseCode=(releaseConfig["versionCode"] as Number).toInt()
+val releaseChannel=releaseConfig["channel"] as String
+val internalOnly=releaseConfig["internalOnly"] as Boolean
+require(Regex("\\d+\\.\\d+\\.\\d+").matches(releaseVersion) && releaseCode>0 && releaseChannel in listOf("internal","public-preview") && internalOnly==(releaseChannel=="internal"))
 
 android {
     namespace = "com.liuframe.qishengonline"
     compileSdk = 35
     buildToolsVersion = "35.0.1"
     defaultConfig {
-        applicationId = "com.liuframe.qishengonline"
+        applicationId = releaseConfig["applicationId"] as String
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = releaseCode
+        versionName = releaseVersion
         buildConfigField("String", "BUNDLE_MANIFEST_SHA256", "\"${bundleDigest.get()}\"")
-        buildConfigField("String", "PRODUCT_ID", "\"qisheng-online-android\"")
-        buildConfigField("boolean", "INTERNAL_ONLY", "true")
+        buildConfigField("String", "PRODUCT_ID", "\"${releaseConfig["productId"]}\"")
+        buildConfigField("String", "RELEASE_CHANNEL", "\"$releaseChannel\"")
+        buildConfigField("boolean", "INTERNAL_ONLY", internalOnly.toString())
     }
     buildTypes {
         getByName("release") { isMinifyEnabled = false }

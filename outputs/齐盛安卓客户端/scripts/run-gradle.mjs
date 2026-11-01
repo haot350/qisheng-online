@@ -3,7 +3,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),confi
 // AGP rejects non-ASCII project roots on Windows. Generate a small host-only
 // working tree at an ASCII path; the actual campus assets remain at their source.
 const stage=path.resolve(root,'../../work/android-online-build/host');await fs.mkdir(stage,{recursive:true});
-const files=['settings.gradle.kts','build.gradle.kts','gradle.properties','app/build.gradle.kts'];
+const files=['settings.gradle.kts','build.gradle.kts','gradle.properties','release-config.json','app/build.gradle.kts'];
 const visit=async directory=>{for(const row of await fs.readdir(path.join(root,directory),{withFileTypes:true})){const name=directory+'/'+row.name;if(row.isSymbolicLink())throw Error('Host source must not contain links');if(row.isDirectory())await visit(name);else if(row.isFile())files.push(name);}};await visit('app/src');
 for(const file of ['app/gradle.lockfile','gradle/verification-metadata.xml'])try{await fs.access(path.join(root,file));files.push(file);}catch{}
 const proof=[];for(const file of files){const bytes=await fs.readFile(path.join(root,file)),to=path.join(stage,file),hash=createHash('sha256').update(bytes).digest('hex');let same=false;try{same=createHash('sha256').update(await fs.readFile(to)).digest('hex')===hash;}catch{}if(!same){await fs.mkdir(path.dirname(to),{recursive:true});await fs.writeFile(to,bytes);}proof.push({path:file,sha256:hash});}

@@ -1,0 +1,14 @@
+{
+  "family": "Noto Serif SC",
+  "source": "https://github.com/google/fonts/tree/main/ofl/notoserifsc",
+  "fontUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf",
+  "license": "SIL Open Font License 1.1",
+  "sourceSha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9",
+  "subsetSha256": "f48faf0c674ab85dfc897df97d47fe5d654552d1d3fec8d05e1ca1036f451624",
+  "subsetBytes": 240292,
+  "uniqueCharacters": 769,
+  "tools": {
+    "fonttools": "4.68.0",
+    "brotli": "1.2.1"
+  }
+}

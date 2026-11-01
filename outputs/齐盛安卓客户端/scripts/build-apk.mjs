@@ -1,0 +1,33 @@
+import fs from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';import {spawn,spawnSync} from 'node:child_process';import {createHash} from 'node:crypto';
+import {readReleaseConfig} from './release-config.mjs';
+import {androidSourceSnapshot} from './source-snapshot.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),release=await readReleaseConfig();
+const tools=JSON.parse(await fs.readFile(path.join(root,'work/toolchain.json'),'utf8'));
+const bundle=JSON.parse(await fs.readFile(path.join(root,'work/bundle-prepared.json'),'utf8'));
+for(const key of ['productId','applicationId','version','versionCode','channel','internalOnly','protocolVersion'])if(bundle[key]!==release[key])throw Error('Prepare the accepted bundle for this Android release first');
+const source=await androidSourceSnapshot(root,path.dirname(bundle.webDist),{mapManifestSha256:bundle.mapManifestSha256,bundleManifestSha256:bundle.bundleDigest,protocolVersion:bundle.protocolVersion});
+if(source.sourceHash!==bundle.sourceHash)throw Error('Android or web source changed after bundle preparation');
+const key=path.join(root,'private/android-release.jks'),password=path.join(root,'private/signing-password.txt');
+// A missing upgrade key is an error, never an invitation to create a new identity.
+await fs.access(key);await fs.access(password);
+const run=async(file,args,options={})=>new Promise((resolve,reject)=>{const child=spawn(file,args,{cwd:root,stdio:'inherit',windowsHide:true,...options});child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error(path.basename(file)+' failed with '+code)));});
+const dist=path.join(root,'dist');await fs.mkdir(dist,{recursive:true});
+const suffix=release.internalOnly?'internal':'preview',file=path.join(dist,`qisheng-online-android-v${release.version}-${suffix}.apk`);
+try{await fs.access(file);throw Error('An archive already exists; retain it and use a new build version');}catch(error){if(error.code!=='ENOENT')throw error;}
+await run(process.execPath,[path.join(root,'scripts/stage-assets.mjs')]);
+await run(process.execPath,[path.join(root,'scripts/run-gradle.mjs'),'testReleaseUnitTest','assembleRelease','--write-locks','-Pqisheng.webAssets='+JSON.parse(await fs.readFile(path.join(root,'work/bundle-prepared.json'),'utf8')).assetView,'-Pqisheng.bundleDigest='+bundle.bundleDigest]);
+const builtSource=await androidSourceSnapshot(root,path.dirname(bundle.webDist),source.identity);
+if(builtSource.sourceHash!==source.sourceHash)throw Error('Android or web source changed during compilation; prepare a fresh bundle');
+const unsigned=path.resolve(root,'../../work/android-online-build/host/app/build/outputs/apk/release/app-release-unsigned.apk');
+const java=path.join(tools.javaSdk,'bin/java.exe'),signer=path.join(tools.androidSdk,'build-tools/35.0.1/lib/apksigner.jar');
+await run(java,['-jar',signer,'sign','--ks',key,'--ks-key-alias','qisheng-online','--ks-pass','file:'+password,'--v1-signing-enabled','false','--v2-signing-enabled','true','--v3-signing-enabled','true','--v4-signing-enabled','false','--out',file,unsigned]);
+const verification=spawnSync(java,['-jar',signer,'verify','--verbose','--print-certs',file],{encoding:'utf8',windowsHide:true});
+await fs.writeFile(path.join(root,'work/apk-signature.txt'),verification.stdout+verification.stderr);
+if(verification.status!==0)throw Error('APK signature verification failed');
+const certificateSha256=/certificate SHA-256 digest:\s*([a-f0-9]{64})/i.exec(verification.stdout)?.[1]?.toLowerCase();
+if(certificateSha256!==release.signingCertificateSha256)throw Error('APK signing certificate changed; release was not accepted');
+await run(path.join(tools.androidSdk,'build-tools/35.0.1/zipalign.exe'),['-c','-P','16','4',file]);
+const bytes=await fs.readFile(file),digest=createHash('sha256').update(bytes).digest('hex');await fs.writeFile(file+'.sha256',digest+'  '+path.basename(file)+'\n');
+const receipt={...release,stage:'candidate',available:false,webVersion:bundle.webVersion,sourceHash:source.sourceHash,mapManifestSha256:bundle.mapManifestSha256,bundleManifestSha256:bundle.bundleDigest,archive:path.basename(file),bytes:bytes.length,sha256:digest,signatureVerified:true,alignmentVerified:true,deviceVerified:false,publicDownloadEnabled:false,createdAt:new Date().toISOString()};
+await fs.writeFile(path.join(dist,'release-candidate.json'),JSON.stringify(receipt,null,2)+'\n');
+console.log(JSON.stringify(receipt));
