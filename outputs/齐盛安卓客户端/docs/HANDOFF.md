@@ -1,6 +1,6 @@
 # 齐盛Online Android 源码接续
 
-当前候选0.4.0／versionCode5，内置网页0.13.0，应用com.liuframe.qishengonline、产品qisheng-online-android；协议campus-mp-0.9.4。正式发行和真机结果以发行记录为准。
+当前已公开0.4.0／versionCode5，内置网页0.13.0，应用com.liuframe.qishengonline、产品qisheng-online-android；协议campus-mp-0.9.4。2026-11-04与网页0.13.0同批发布；签名、完整资源及公网下载通过，安卓真机检查后补，deviceVerified=false。
 
 宿主继续Kotlin＋AndroidX WebKit。业务和账号接口与网页共用，安卓页面独立安排；大厅、选装、房间和战斗按横屏游戏组织，账号、博客及小齐等长内容允许旋转。安全区、IME、系统返回、音频焦点及Keystore会话沿用既有实现。
 
