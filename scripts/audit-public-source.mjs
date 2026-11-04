@@ -55,7 +55,7 @@ for (const file of files) {
   digests.push({file, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex')});
   if (file.endsWith('.tgz')) {
     const tar = gunzipSync(bytes), entries = [];
-    let offset = 0;
+    let offset = 0, packageVersion = null;
     while (offset + 512 <= tar.length) {
       const header = tar.subarray(offset, offset + 512);
       if (header.every(byte => byte === 0)) break;
@@ -70,11 +70,12 @@ for (const file of files) {
       const payload = tar.subarray(offset + 512, offset + 512 + size);
       if (unsafeAsset.test(name) || name.endsWith('.svg') || privateDirectory.test(name) || /(?:^|\/)(?:data|config)(?:\/|$)|(?:^|\/)\.env(?:\.|$)/i.test(name)) issues.push({file, entry: name, kind: 'forbidden-vendor-asset'});
       if (type !== 53) scan(payload.toString('utf8'), file, name);
+      if(name==='package/package.json'){try{packageVersion=JSON.parse(payload.toString('utf8')).version;}catch{issues.push({file,kind:'invalid-vendor-manifest'});}}
       entries.push(name);
       offset += 512 + Math.ceil(size / 512) * 512;
     }
     if (!entries.length) issues.push({file, kind: 'empty-vendor-archive'});
-    vendors.push({file, sha256: createHash('sha256').update(bytes).digest('hex'), entries: entries.length});
+    vendors.push({file, sha256: createHash('sha256').update(bytes).digest('hex'), entries: entries.length, packageVersion});
     continue;
   }
   sourceCount++;
@@ -163,10 +164,11 @@ for (const file of files.filter(file => file.startsWith('outputs/齐盛原生客
 issues.push(...importClosure.issues);
 const trackedOutsideWhitelist=tracked.filter(file=>!allowed.has(file));
 if(phase==='final')for(const file of trackedOutsideWhitelist)issues.push({file,kind:'tracked-file-outside-current-whitelist'});
-const consumerVersions=vendors.map(v=>({file:v.file,version:/qisheng-shared-(\d+\.\d+\.\d+)\.tgz$/.exec(v.file)?.[1]??null}));
-if(phase==='final')for(const item of consumerVersions)if(item.version!==version)issues.push({file:item.file,kind:'vendor-version-mismatch'});
+const consumerVersions=[];
+for(const item of vendors){const manifest=JSON.parse(await readFile(path.join(root,path.dirname(item.file),'..','package.json'),'utf8')),declared=manifest.dependencies?.['@qisheng/shared'],expected='file:vendor/'+path.basename(item.file),vendorVersion=/qisheng-shared-(\d+\.\d+\.\d+)\.tgz$/.exec(item.file)?.[1]??null;consumerVersions.push({file:item.file,version:vendorVersion,consumerVersion:manifest.version,declared,packageVersion:item.packageVersion});if(declared!==expected||!vendorVersion||item.packageVersion!==vendorVersion)issues.push({file:item.file,kind:'vendor-manifest-mismatch'});}
 if(vendors.length!==4)issues.push({kind:'expected-four-shared-vendor-archives',count:vendors.length});
-if(new Set(vendors.map(v=>v.sha256)).size!==1)issues.push({kind:'different-shared-vendor-bytes'});
+const vendorVersions=new Map();for(const item of consumerVersions){const archive=vendors.find(v=>v.file===item.file),known=vendorVersions.get(item.version);if(known&&known!==archive.sha256)issues.push({file:item.file,kind:'different-bytes-for-same-shared-version'});else vendorVersions.set(item.version,archive.sha256);}
+
 const report = {
   version,phase,sourceFrozen:phase==='final',reviewedAt:new Date().toISOString(),status:issues.length||warnings.length?'REVIEW':phase==='final'?'PASS':'PREPARED',
   scope: 'Read-only explicit public whitelist, native/Rust source, Godot UID/export presets and shared vendor archives. No Git mutation, production requests or secret-file reads.',
@@ -174,7 +176,7 @@ const report = {
   newWhitelistedFiles:files.filter(file=>!tracked.includes(file)),trackedOutsideWhitelist,consumerVersions,
   changedWhitelistedFiles: changed.filter(file => allowed.has(file)).length,
   changedWhitelisted: changed.filter(file => allowed.has(file)),
-  vendorArchives: vendors, vendorBytesIdentical: new Set(vendors.map(item => item.sha256)).size === 1,
+  vendorArchives: vendors, vendorBytesIdentical: new Set(vendors.map(item => item.sha256)).size === 1, sameVersionVendorBytesIdentical: !issues.some(item=>item.kind==='different-bytes-for-same-shared-version'),
   importClosure,
   excludedSamples: mustExclude.map(file => ({file, excluded: !allowed.has(file)})), issues, warnings,
   whitelistDigest: createHash('sha256').update(JSON.stringify(digests)).digest('hex'), fileDigests: digests,

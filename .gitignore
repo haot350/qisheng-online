@@ -473,7 +473,7 @@
 !/outputs/校园交互网站/site/scripts/telemetry.test.mjs
 !/outputs/校园交互网站/site/scripts/validate-static-styles.mjs
 !/outputs/校园交互网站/site/tsconfig.json
-!/outputs/校园交互网站/site/vendor/qisheng-shared-0.13.0.tgz
+!/outputs/校园交互网站/site/vendor/qisheng-shared-0.13.1.tgz
 !/outputs/校园交互网站/site/vite.config.ts
 !/outputs/校园交互网站/site/vite.production.config.ts
 !/outputs/校园交互网站/site/vite.ui.config.ts
@@ -950,6 +950,7 @@
 !/outputs/校园逃生游戏/src/input.ts
 !/outputs/校园逃生游戏/src/interaction-placement.ts
 !/outputs/校园逃生游戏/src/interactions.ts
+!/outputs/校园逃生游戏/src/launch-intent.ts
 !/outputs/校园逃生游戏/src/legacy-characters.ts
 !/outputs/校园逃生游戏/src/main.tsx
 !/outputs/校园逃生游戏/src/map-cache.ts
@@ -1175,6 +1176,7 @@
 !/outputs/校园逃生游戏/tests/input.test.ts
 !/outputs/校园逃生游戏/tests/interaction-v065.fixture.tsx
 !/outputs/校园逃生游戏/tests/interactions.test.ts
+!/outputs/校园逃生游戏/tests/launch-intent0131.test.ts
 !/outputs/校园逃生游戏/tests/loading-gate-v070.test.ts
 !/outputs/校园逃生游戏/tests/loading-input-v071.test.ts
 !/outputs/校园逃生游戏/tests/lobby-ui-state-r1.test.ts
@@ -1295,7 +1297,7 @@
 !/outputs/校园逃生游戏/tests/weather-scene-v094.test.ts
 !/outputs/校园逃生游戏/tests/world-ray.test.ts
 !/outputs/校园逃生游戏/tsconfig.json
-!/outputs/校园逃生游戏/vendor/qisheng-shared-0.13.0.tgz
+!/outputs/校园逃生游戏/vendor/qisheng-shared-0.13.1.tgz
 !/outputs/校园逃生游戏/vite.android.config.ts
 !/outputs/校园逃生游戏/vite.config.ts
 !/outputs/校园逃生游戏/vite.production.config.ts

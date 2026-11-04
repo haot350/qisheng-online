@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.13.1',sequence:52,date:'2026-11-04',version:'Preview 0.13.1',
+ overview:'选好这一局，再出发。',
+ summary:['装备、天气选好后再准备，完成后直接进入。','校园突围新增单人和多人双入口，合作、团竞和混战共用大厅。','减少选装与房间准备时的重复刷新。'],
+ items:['准备期间可以取消并返回修改，失败后保留本局选择。','大飞介绍与驾驶场景连续交接，三种载具均沿用本局准备。','多人大厅可同时浏览合作突围、团队对战和个人混战，也可按玩法筛选。','整理房间成员、加载、装备和倒计时的更新，保留准备、开局与重连流程。'],
+},
+{
  id:'preview-0.13.0',sequence:51,date:'2026-11-04',version:'Preview 0.13.0',
  overview:'准备分步进行，任务自动指引。',
  summary:['选装和建房分步进行，返回后可继续修改。','任务自动选择指引，地图重新绘出校园道路、楼栋和楼层。','新增博客与评论，安卓大厅、房间和战斗界面单独整理。'],

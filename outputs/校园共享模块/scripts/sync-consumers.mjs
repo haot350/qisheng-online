@@ -7,7 +7,10 @@ if(!npm)throw Error('Node.js 24 with npm is required to synchronize the shared p
 function run(args,cwd){const r=spawnSync(process.execPath,args,{cwd,encoding:'utf8',windowsHide:true,maxBuffer:8*1024*1024});if(r.status!==0)throw Error(r.stdout+r.stderr);return r.stdout;}
 function cleanOptionalPlaceholders(lock){for(const [key,value]of Object.entries(lock.packages??{}))if(key!==''&&!value.version&&!value.link&&value.optional)delete lock.packages[key];return lock;}
 console.log(run([path.join(root,'scripts/build.mjs')],root));const pack=JSON.parse(run([npm,'pack','--ignore-scripts','--json'],root))[0],tar=pack.filename;
-for(const project of ['校园逃生游戏','校园联机服务','校园排行榜服务','校园交互网站/site']){
+const allProjects=['校园逃生游戏','校园联机服务','校园排行榜服务','校园交互网站/site'];
+const projects=process.env.QISHENG_SYNC_PROJECTS?.split(',')??allProjects;
+if(!projects.length||projects.some(project=>!allProjects.includes(project))||new Set(projects).size!==projects.length)throw Error('Invalid shared consumer selection');
+for(const project of projects){
  const dir=path.join(base,project),packageFile=path.join(dir,'package.json'),lockFile=path.join(dir,'package-lock.json');
  const oldPackage=await readFile(packageFile,'utf8'),oldLock=await readFile(lockFile,'utf8'),previous=JSON.parse(oldLock);
  await mkdir(path.join(dir,'vendor'),{recursive:true});await cp(path.join(root,tar),path.join(dir,'vendor',tar));

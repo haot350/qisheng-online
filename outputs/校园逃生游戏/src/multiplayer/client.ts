@@ -7,6 +7,7 @@ import { entryFor, ModeUnavailableError } from '../game-config-store';
 import { OnlineClock } from "./netcode";
 import { sameMenuView } from './menu-view';
 import {waitForSnapshot} from './snapshot-wait';
+import {FrameDiagnostics} from '../frame-diagnostics';
 import { WireDecoder, type RoomWireMessage } from "./shared/wire";
 import {
   PROTOCOL_VERSION,
@@ -53,6 +54,7 @@ type AdmissionResult = {
 const RESYNC_RETRY_MS = 500;
 const JOIN_TIMEOUT_MS = 12000;
 const PRE_QUEUE_REJECTIONS = new Set(['ADMISSION_ID', 'MAP_MISMATCH', 'TICKET_REQUIRED', 'INVALID_WEATHER', 'INVALID_MODE']);
+type AdmissionPerformance={kind:'create'|'join'|'code';status:'pending'|'ready'|'cancelled'|'failed';elapsedMs:number;stages:{stage:string;elapsedMs:number;durationMs:number}[]};
 const terminalResumeError = (error: unknown) =>
   [522, 524].includes(Number((error as { code?: unknown })?.code));
 export async function localMapIdentity(
@@ -144,6 +146,8 @@ export class OnlineClient {
   private resyncPending = false;
   private resyncLastAt = -Infinity;
   private resyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly messagePerformance=new FrameDiagnostics(180);
+  private readonly admissionPerformance:AdmissionPerformance[]=[];
   constructor(){try{const value=JSON.parse(sessionStorage.getItem(PENDING_ADMISSION_KEY)||'null');if(value&&typeof value.id==='string'&&/^[a-f0-9-]{36}$/i.test(value.id)&&typeof value.playerId==='string'&&value.playerId.length<=100&&['coop','pvp'].includes(value.mode)&&['tdm','ffa'].includes(value.variant))this.pendingAdmission=value;}catch{}}
   private savePendingAdmission(value:PendingAdmission|null){this.pendingAdmission=value;try{if(value)sessionStorage.setItem(PENDING_ADMISSION_KEY,JSON.stringify(value));else sessionStorage.removeItem(PENDING_ADMISSION_KEY);}catch{}}
   hasUncertainAdmission(){return !!this.pendingAdmission;}
@@ -185,8 +189,9 @@ export class OnlineClient {
   }
   subscribeMenu(fn: () => void) {
     let previous=this.view;
-    return this.subscribe(()=>{const next=this.view;if(sameMenuView(previous,next))return;previous=next;fn();});
+    return this.subscribe(()=>{const next=this.view,at=performance.now(),same=sameMenuView(previous,next);this.messagePerformance.phase('menuProjection',performance.now()-at);if(same)return;previous=next;fn();});
   }
+  getPerformanceDiagnostics(){return{messages:this.messagePerformance.snapshot(),admissions:this.admissionPerformance.map(attempt=>({...attempt,stages:attempt.stages.map(stage=>({...stage}))}))};}
   onSnapshot(fn: (s: RoomSnapshot) => void) {
     this.snapshots.add(fn);
     return () => {
@@ -342,11 +347,13 @@ export class OnlineClient {
     signal: AbortSignal,
     timeoutError: RankingError,
   ): Promise<Room> {
+    const began=performance.now();
     return new Promise((resolve, reject) => {
       let settled = false, pendingRoom: Room | null = null;
       const finish = (action: () => void, abandon = false) => {
         if (settled) return false;
         settled = true;
+        this.messagePerformance.phase('handshakeWait',performance.now()-began);
         clearTimeout(timer);
         signal.removeEventListener("abort", cancel);
         if (abandon && pendingRoom) void this.retireRoom(pendingRoom);
@@ -434,6 +441,9 @@ export class OnlineClient {
     const controller = new AbortController();
     this.abort = controller;
     const signal = controller.signal;
+    const began=performance.now(),timing:AdmissionPerformance={kind:inviteCode?'code':roomId?'join':'create',status:'pending',elapsedMs:0,stages:[]};
+    this.admissionPerformance.push(timing);if(this.admissionPerformance.length>8)this.admissionPerformance.shift();
+    const stage=(name:string)=>{const elapsedMs=performance.now()-began,previous=timing.stages.at(-1)?.elapsedMs??0;timing.elapsedMs=elapsedMs;timing.stages.push({stage:name,elapsedMs,durationMs:elapsedMs-previous});};
     const cancel=()=>controller.abort();
     externalSignal?.addEventListener('abort',cancel,{once:true});
     if(externalSignal?.aborted)cancel();
@@ -453,6 +463,7 @@ export class OnlineClient {
         if (!this.current(serial) || signal.aborted) return;
         roomId=info.roomId;
         options={mode:info.mode,variant:info.variant,difficulty:info.difficulty};
+        stage('resolve');
       }
       await gameOperations.check(entryFor('escape',options?.mode==='pvp'?'pvp':'coop',options?.variant==='ffa'?'ffa':'tdm'));
       if (!this.current(serial) || signal.aborted) return;
@@ -463,6 +474,7 @@ export class OnlineClient {
       ]);
       if (!this.current(serial) || signal.aborted) return;
       const playerId = profile?.id;
+      stage('identityAndMap');
       if (!playerId)
         throw new RankingError(
           "先设置昵称，再加入联机对局。",
@@ -487,6 +499,7 @@ export class OnlineClient {
         },
       );
       if (!this.current(serial) || signal.aborted) return;
+      stage('ticket');
       // Creation has a server-side effect. Let its bounded response arrive so a cancelled
       // operation can revoke its own handle instead of orphaning the queue.
       pending={id:crypto.randomUUID(),playerId,mode:options?.mode==='pvp'?'pvp':'coop',variant:options?.variant==='ffa'?'ffa':'tdm'};
@@ -545,8 +558,10 @@ export class OnlineClient {
           "QUEUE_ENDED",
           true,
         );
+      stage('admissionReady');
       // Keep the cancellation handle until the SDK handshake has actually transferred ownership.
       unboundRoom = await this.consumeAdmission(admitted.reservation, signal);
+      stage('handshake');
       if (!this.current(serial) || signal.aborted) {
         void this.cancelAdmission(admission);
         await this.retireRoom(unboundRoom);
@@ -563,7 +578,7 @@ export class OnlineClient {
       unboundRoom = null;
       if (this.queue === admission) this.queue = null;
       admission = null;
-      return await this.waitForOwnSnapshot(signal);
+      const snapshot=await this.waitForOwnSnapshot(signal);stage('ownSnapshot');timing.status='ready';return snapshot;
     } catch (error) {
       const e = playerJoinError(error);
       if (pending && this.pendingAdmission?.id === pending.id && e instanceof RankingError && PRE_QUEUE_REJECTIONS.has(e.code)) this.savePendingAdmission(null);
@@ -576,16 +591,17 @@ export class OnlineClient {
           errorCode: this.pendingAdmission?'ADMISSION_UNCERTAIN':e instanceof RankingError || e instanceof ModeUnavailableError ? e.code : undefined,
           queuePosition: undefined,
         });
-    } finally { externalSignal?.removeEventListener('abort',cancel); }
+    } finally { timing.elapsedMs=performance.now()-began;if(timing.status==='pending')timing.status=signal.aborted||!this.current(serial)?'cancelled':'failed';externalSignal?.removeEventListener('abort',cancel); }
   }
   async waitForOwnSnapshot(signal:AbortSignal=new AbortController().signal):Promise<RoomSnapshot>{
+    const began=performance.now();
     const room=this.room,playerId=this.playerId;
     if(!room||!playerId)throw new RankingError(this.view.error||'暂时未能加入房间，请重试。',this.view.errorCode||'JOIN_RETRY',true);
     const abort=new AbortController(),cancel=()=>abort.abort(),ownSignal=this.abort.signal;
     signal.addEventListener('abort',cancel,{once:true});ownSignal.addEventListener('abort',cancel,{once:true});
     if(signal.aborted||ownSignal.aborted)cancel();
     try{return await waitForSnapshot({read:()=>this.room===room?this.view.currentRoom:null,subscribe:fn=>this.subscribe(fn)},snapshot=>snapshot.roomId===room.roomId&&snapshot.players.some(p=>p.id===playerId),abort.signal,JOIN_TIMEOUT_MS,()=>new RankingError('正在确认原房间席位，请重试连接。','JOIN_PENDING',true));}
-    finally{signal.removeEventListener('abort',cancel);ownSignal.removeEventListener('abort',cancel);}
+    finally{this.messagePerformance.phase('ownSnapshotWait',performance.now()-began);signal.removeEventListener('abort',cancel);ownSignal.removeEventListener('abort',cancel);}
   }
   async selectLoadout(data:ClientMessageMap['loadout'],signal:AbortSignal):Promise<void>{
     const room=this.room,playerId=this.playerId;if(!room||!playerId)throw new RankingError('房间连接已变化，请重试。','JOIN_RETRY',true);
@@ -665,6 +681,7 @@ export class OnlineClient {
     room.onMessage("snapshot", (message: RoomWireMessage | RoomSnapshot) => {
       if (this.room !== room || this.disposed) return;
       const now = performance.now();
+      try{
       const legacy =
           !env?.PROD &&
           !("wireVersion" in message) &&
@@ -673,12 +690,14 @@ export class OnlineClient {
         decoded = legacy
           ? { snapshot: message as RoomSnapshot, needsResync: false }
           : this.decoder.accept(message as RoomWireMessage);
+      this.messagePerformance.phase('decode',performance.now()-now);
       if (decoded.needsResync) {
         this.requestResync(room);
         return;
       }
       const snapshot = decoded.snapshot;
       if (!snapshot) return;
+      const applyAt=performance.now();
       const own=snapshot.players.find(p=>p.id===this.playerId),confirmed=own?.inputReceipt?Math.max(own.inputReceipt.appliedSeq,own.inputReceipt.cancelledThrough):own?.ack??0;
       if(confirmed>this.inputAcknowledged){const sent=this.inputSent.get(confirmed);if(sent!==undefined)this.inputAckAgeMs=now-sent;this.inputAcknowledged=confirmed;for(const seq of this.inputSent.keys())if(seq<=confirmed)this.inputSent.delete(seq);}
       if (legacy || ("kind" in message && message.kind === "full"))
@@ -700,12 +719,17 @@ export class OnlineClient {
             : "lobby",
         ...(changedPhase ? { error: undefined, errorCode: undefined } : {}),
       };
+      this.messagePerformance.phase('clientState',performance.now()-applyAt);
+      const callbacksAt=performance.now();
       for (const s of this.snapshots) s(snapshot);
+      this.messagePerformance.phase('snapshotApply',performance.now()-callbacksAt);
+      const eventsAt=performance.now();
       for (const e of snapshot.events)
         if (e.serial > this.lastSerial) {
           this.lastSerial = e.serial;
           for (const listener of this.events) listener(e);
         }
+      this.messagePerformance.phase('eventDispatch',performance.now()-eventsAt);
       // Gameplay consumes every packet; reading UI does not rerender on every 20 Hz state change.
       if (
         changedPhase ||
@@ -713,8 +737,11 @@ export class OnlineClient {
         now - this.uiAt >= 150
       ) {
         this.uiAt = now;
+        const menuAt=performance.now();
         this.emit();
+        this.messagePerformance.phase('menuDispatch',performance.now()-menuAt);
       }
+      }finally{this.messagePerformance.phase('messageTotal',performance.now()-now);}
     });
     room.onMessage("event", (e: GameEvent) => {
       if (this.room === room && e.serial > this.lastSerial) {

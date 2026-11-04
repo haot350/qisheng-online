@@ -82,7 +82,11 @@ import {achievementIconUrls} from "./achievement-icons";
 import type { RankingPlayer } from "./ranking/shared";
 import { RELEASE_LABEL } from "./release";
 import { PRIMARY_WEAPONS } from "./rules";
-import { ResourceSlot, SessionOperations, SessionScope } from "./session-flow";
+import { SessionOperations, SessionScope } from "./session-flow";
+import {GameAudio} from "./audio";
+import {useDialogFocus} from './dialog-focus';
+import {prepareModeAudio} from "./mode-policy";
+import {freezeLaunch, launchMatches, type LaunchIntent} from "./launch-intent";
 import { deviceGuidance } from "./story/guidance";
 import "./styles.css";
 import "./ui-theme.css";
@@ -428,7 +432,8 @@ export default function App() {
     [pvpVariant, setPvpVariant] = useState<"tdm" | "ffa">("tdm");
   const [practice,setPractice]=useState(()=>new URLSearchParams(location.search).get('practice')==='1');
   const [recentPlay,setRecentPlay]=useState<RecentPlay|null>(readRecentPlay);
-  const prepareRecentPlay=(value:RecentPlay)=>{if(!guardEntry(entryFor(value.mode,value.entry,value.variant)))return;setPractice(false);setSelectedMode(value.mode);setEscapeEntry(value.entry);setPvpVariant(value.variant);setMenuScreen('prepare');};
+  const [skipEscapeEntry,setSkipEscapeEntry]=useState(false);
+  const prepareRecentPlay=(value:RecentPlay)=>{setSkipEscapeEntry(value.mode==='escape'&&value.entry==='single');if(!guardEntry(entryFor(value.mode,value.entry,value.variant)))return;setPractice(false);setSelectedMode(value.mode);setEscapeEntry(value.entry);setPvpVariant(value.variant);setMenuScreen('prepare');if(value.mode==='escape'&&value.entry!=='single')openOnline();};
   const [accountBusy,setAccountBusy] = useState(false);
   const pages = useMenuPages(new URLSearchParams(location.search).get("panel")==="leaderboard"?"ranking":null,accountBusy);
   const [requestedRankPanel,setRequestedRankPanel] = useState<"board"|"recent">("board");
@@ -509,7 +514,7 @@ export default function App() {
   };
   const openOnline = () => {
     if(rankingClient.getPlayer()?.accountStatus!=="active"){openRanking("identity");return;}
-    if (!guardEntry(entryFor('escape', escapeEntry, pvpVariant))) return;
+    if (!['escape-coop','escape-tdm','escape-ffa'].some(entry=>operational.config.modes[entry as ModeEntry].enabled)) { guardEntry('escape-coop'); return; }
     game.current?.pause();
     setOnlineOpen(true);
     onlineClient.current!.playerId = rankingClient.getPlayer()?.id || null;
@@ -709,7 +714,6 @@ export default function App() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [apiRevision, setApiRevision] = useState(0),
-    [prepRevision, setPrepRevision] = useState(0),
     [preparation, setPreparation] = useState({
       state: "idle" as "idle" | "loading" | "ready" | "error",
       progress: 0,
@@ -733,14 +737,10 @@ export default function App() {
     api?.storyOverlay('operations',noticesOpen || !!modeBlocked);
     return ()=>api?.storyOverlay('operations',false);
   }, [noticesOpen, modeBlocked, apiRevision]);
-  const saveData = !!(
-    navigator as Navigator & {
-      connection?: {
-        saveData?: boolean;
-      };
-    }
-  ).connection?.saveData;
-  const [prepareRequested, setPrepareRequested] = useState(false);
+  const [launch, setLaunch] = useState<LaunchIntent | null>(null);
+  const launchRef = useRef(launch); launchRef.current = launch;
+  const launchAudio = useRef<GameAudio | null>(null);
+  const launchSerial = useRef(0);
   const selectedEntry = entryFor(selectedMode, escapeEntry, pvpVariant);
   const selectedAvailable = operational.config.modes[selectedEntry].enabled;
   const localWanted =
@@ -748,20 +748,20 @@ export default function App() {
     menuScreen === "prepare" &&
     !(selectedMode === "escape" && escapeEntry !== "single") &&
     (localRoundAccepted.current || operational.ready && selectedAvailable) &&
-    (!saveData || prepareRequested);
+    (!!launch || localRoundAccepted.current);
   useEffect(() => {
     if (!operational.ready || selectedAvailable || localRoundAccepted.current || onlineRoomKey || menuScreen !== 'prepare') return;
     game.current?.cancelModePreparation?.();
     setPreparation({state:'idle',progress:0,message:''});
     setModeBlocked(operational.config.modes[selectedEntry].reason || '该玩法暂时不可用，请稍后再试。');
   }, [operational.ready, selectedAvailable, selectedEntry, onlineRoomKey, menuScreen]);
-  const onlineLease = useRef(new ResourceSlot()),
-    roomRef = useRef(onlineRoomKey);
-  roomRef.current = onlineRoomKey;
+
   useEffect(() => {
     const scope = new SessionScope();
     const mount = host.current;
     let api: GameAPI | undefined;
+    const primedAudio = onlineRoomKey ? null : launchAudio.current;
+    if (primedAudio) scope.own(() => primedAudio.dispose());
     operations.current.cancel();
     setBusy(false);
     if (!onlineRoomKey && !localWanted) {
@@ -795,7 +795,7 @@ export default function App() {
         })
       : import("./engine").then((m) => {
           scope.signal.throwIfAborted();
-          return m.createGame(mount, publish, settingsRef.current);
+          return m.createGame(mount, publish, launchRef.current?.settings ?? settingsRef.current, primedAudio ?? undefined);
         });
     void work
       .then((result) => {
@@ -807,12 +807,14 @@ export default function App() {
         if (!scope.active) return;
         api = result;
         game.current = result;
-        if (onlineRoomKey) onlineLease.current.clear();
+        if (launchAudio.current === primedAudio) launchAudio.current = null;
         setApiRevision((n) => n + 1);
       })
       .catch((e) => {
         if (!scope.active) return;
         console.warn("Campus initialization failed", e);
+        if (launchAudio.current===primedAudio) launchAudio.current=null;
+        if (!onlineRoomKey) setPreparation(p=>({...p,state:"error",message:"校园暂时未能载入，请重试。"}));
         setSnapshot((s) => ({
           ...s,
           phase: "error",
@@ -826,116 +828,65 @@ export default function App() {
     };
   }, [attempt, onlineRoomKey, localWanted]);
   useEffect(() => {
-    if (
-      onlineRoomKey ||
-      operations.current.busy ||
-      !["menu", "loading", "error"].includes(snapshot.phase)
-    )
-      return;
-    if (menuScreen !== "prepare" || !operational.ready || !selectedAvailable || (saveData && !prepareRequested)) {
-      setPreparation({ state: "idle", progress: 0, message: "" });
-      onlineLease.current.clear();
-      return;
-    }
-    const abort = new AbortController();
-    let releasePreparation: (() => void) | undefined;
-    setPreparation({ state: "loading", progress: 0, message: "正在准备资源" });
-    let completedProgress = 0;
-    const onProgress = (progress: number, message: string) => {
-      if (!abort.signal.aborted) {
-        completedProgress = Math.max(completedProgress, Math.min(99, Math.round(progress * 100)));
-        setPreparation({
-          state: "loading",
-          progress: completedProgress,
-          message,
-        });
+    const request = launch;
+    const api = game.current;
+    if (!request || !api || onlineRoomKey || !operational.ready || !selectedAvailable) return;
+    const ticket = operations.current.begin(api);
+    if (!ticket) return;
+    const controller = new AbortController();
+    const current = () => !controller.signal.aborted && launchRef.current === request && rankingClient.getPlayer()?.id === (request.identity??undefined) && operations.current.current(ticket, game.current);
+    let completed = 0;
+    setBusy(true);
+    setPreparation({state:'loading',progress:0,message:'正在准备校园'});
+    void (async () => {
+      await api.prepareMode?.(request.mode, request.loadout, {signal:controller.signal,onProgress:(ratio,message)=>{
+        if (!current()) return;
+        completed = Math.max(completed, Math.min(99, Math.round(ratio * 100)));
+        setPreparation({state:'loading',progress:completed,message});
+      }});
+      if (!current()) return;
+      setPreparation({state:'ready',progress:100,message:'正在进入'});
+      if (request.resumeStory) {
+        const m = await import('./story/storage');
+        const store = new m.StorySaveStore();
+        try {
+          const checkpoint = await store.load();
+          if (!current()) return;
+          if (!checkpoint) throw Error('没有可恢复的故事进度。');
+          await enterWorld(()=>api.restoreStory(checkpoint),current);
+        } finally { await store.close(); }
+      } else {
+        await enterWorld(()=>request.mode==='dafei' ? api.prepareDafeiIntro() : api.start(request.mode,request.loadout),current);
       }
+      if (!current()) return;
+      localRoundAccepted.current = true;
+      setLaunch(null);
+      setPreparation({state:'idle',progress:100,message:''});
+    })().catch(error=>{
+      if (!current()) return;
+      if (error instanceof ModeUnavailableError) setModeBlocked(error.message);
+      setPreparation(p=>({...p,state:'error',message:error instanceof ModeUnavailableError?error.message:'这一局暂时未能进入，请重试。'}));
+    }).finally(()=>{
+      if (operations.current.finish(ticket,game.current)) setBusy(false);
+    });
+    return ()=>{
+      controller.abort();
+      if (operations.current.current(ticket,game.current)) operations.current.cancel();
     };
-    const onlinePrep = selectedMode === "escape" && escapeEntry !== "single";
-    if (!onlinePrep) game.current?.setSettings(settingsRef.current);
-    const work = onlinePrep
-      ? import("./multiplayer/online-resources").then(async (m) => {
-          if (abort.signal.aborted)
-            throw new DOMException("Cancelled", "AbortError");
-          const release = await m.prepareOnlineResources(
-            escapeEntry === "coop" ? "coop" : "pvp",
-            touchLayout,
-            { signal: abort.signal, onProgress },
-          );
-          if (abort.signal.aborted) {
-            release();
-            throw new DOMException("Cancelled", "AbortError");
-          }
-          releasePreparation = onlineLease.current.replace(release);
-        })
-      : game.current?.prepareMode?.(
-          selectedMode,
-          selectedMode === "escape"
-            ? {
-                primary: practice ? "m4a1" : primary,
-                difficulty: practice ? "easy" : settingsRef.current.escapeDifficulty ?? "standard",
-                training: practice,
-              }
-            : undefined,
-          { signal: abort.signal, onProgress },
-        );
-    if (!work) return () => abort.abort();
-    void work
-      .then(() => {
-        if (!abort.signal.aborted)
-          setPreparation({
-            state: "ready",
-            progress: 100,
-            message: "准备就绪",
-          });
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) {
-          console.warn("Mode preparation failed", e);
-          setPreparation({
-            state: "error",
-            progress: 0,
-            message: "资源暂时未能准备好，请重试。",
-          });
-        }
-      });
-    return () => {
-      abort.abort();
-      if (!roomRef.current) releasePreparation?.();
-    };
-  }, [
-    menuScreen,
-    selectedMode,
-    escapeEntry,
-    primary,
-    settings.quality,
-    settings.weather,
-    settings.fov,
-    settings.drivingVehicle,
-    practice,
-    settings.escapeDifficulty,
-    touchLayout,
-    saveData,
-    prepareRequested,
-    apiRevision,
-    prepRevision,
-    onlineRoomKey,
-    operational.ready,
-    selectedAvailable,
-    pvpVariant,
-  ]);
-  useEffect(
-    () => () => {
-      onlineLease.current.clear();
-    },
-    [],
-  );
+  },[launch,apiRevision,onlineRoomKey,operational.ready,selectedAvailable]);
+  useEffect(()=>{
+    if (!launch || localRoundAccepted.current) return;
+    if (menuScreen!=='prepare' || onlineRoomKey || !selectedAvailable || !launchMatches(launch,{mode:selectedMode,primary,practice,settings,identity:rankingPlayer?.id??null})) {
+      launchRef.current=null; operations.current.cancel(); game.current?.cancelModePreparation?.(); game.current?.menu();
+      setLaunch(null); setBusy(false); setPreparation({state:'idle',progress:0,message:''});
+    }
+  },[launch,menuScreen,onlineRoomKey,selectedAvailable,selectedMode,primary,practice,settings,rankingPlayer?.id]);
   useEffect(() => {
     game.current?.setSettings(settings);
     try {
       localStorage.setItem("qisheng-game-settings", JSON.stringify(settings));
     } catch {}
-  }, [settings]);
+  }, [settings, apiRevision]);
   useEffect(() => {
     try {
       localStorage.setItem("qisheng-game-primary", primary);
@@ -989,7 +940,6 @@ export default function App() {
   };
   const start = (mode: Mode) => {
     if (!guardEntry(entryFor(mode))) return;
-    localRoundAccepted.current = false;
     void runOperation(
       (api,current) => {
         setShowHelp(false);
@@ -1028,26 +978,34 @@ export default function App() {
       },
     );
   };
-  const chooseStart = () => {
-    if (!game.current || operations.current.busy || snapshot.phase !== "menu")
-      return;
-    const loadout=selectedMode==='escape'?{
-      primary:practice?'m4a1' as const:primary,
-      difficulty:practice?'easy' as const:settingsRef.current.escapeDifficulty??'standard',
-      training:practice,
-    }:undefined;
-    // A configuration change can render before its preparation effect runs.
-    // Do not enter using the previous configuration's ready button.
-    if(!game.current.modePrepared?.(selectedMode,loadout)){
-      setPreparation({state:'loading',progress:0,message:'正在准备资源'});
-      setPrepRevision(value=>value+1);
-      return;
-    }
-    if (selectedMode === "dafei") prepareIntro();
-    else if (selectedMode === "escape" && !practice)
-      withBriefing("solo", () => start("escape"));
-    else start(selectedMode);
+  const cancelLaunch = () => {
+    launchRef.current = null;
+    operations.current.cancel(); game.current?.cancelModePreparation?.();
+    if (!onlineRoomKey) game.current?.menu();
+    launchAudio.current?.dispose(); launchAudio.current=null;
+    setLaunch(null); setBusy(false); setPreparation({state:'idle',progress:0,message:''});
   };
+  const chooseStart = (resumeStory = false) => {
+    if (launchRef.current && preparation.state !== 'error' || operations.current.busy || !guardEntry(selectedEntry)) return;
+    const commit = () => {
+      if (!guardEntry(selectedEntry)) return;
+      pages.clear(); setUiError(''); errorRetry.current=null;
+      const request=freezeLaunch(++launchSerial.current,{mode:selectedMode,primary,practice,settings:settingsRef.current,identity:rankingClient.getPlayer()?.id??null,resumeStory});
+      if (!game.current) {
+        launchAudio.current?.dispose();
+        const audio = new GameAudio(); audio.setVolumes(request.settings.music,request.settings.sfx);
+        prepareModeAudio(audio,request.mode,request.settings.escapeMusic??'battle');
+        void (request.mode==='roam'||request.mode==='story'?audio.unlockEffects():audio.unlock());
+        launchAudio.current=audio;
+      } else game.current.unlockAudio(request.mode);
+      localRoundAccepted.current=false;
+      launchRef.current=request; setLaunch(request);
+      if (isAndroidApp()) void waitForAndroidLandscape(()=>launchRef.current===request).catch(()=>{});
+      setPreparation({state:'loading',progress:0,message:'正在打开校园'});
+    };
+    if (selectedMode==='escape'&&!practice) withBriefing('solo',commit); else commit();
+  };
+  const launchPanel = useDialogFocus(!!launch,cancelLaunch,true);
   const resume = () => {
     void runOperation((api) => {if(replayGuidanceOnContinue){api.storyGuidance("replay");setReplayGuidanceOnContinue(false);}return api.resume();}, {
       label: "Game resume failed",
@@ -1068,8 +1026,7 @@ export default function App() {
     const updated = { ...next, transmission };
     if (updated.controls !== settingsRef.current.controls)
       game.current?.clearInput?.();
-    if (canChange) game.current?.setTransmission(transmission);
-    game.current?.setSettings(updated);
+    settingsRef.current = updated;
     setSettings(updated);
   };
   const changeTransmission = (transmission: TransmissionMode) =>
@@ -1086,7 +1043,6 @@ export default function App() {
   }, []);
   const retryEscape = () => {
     if (!guardEntry('escape-solo')) return;
-    localRoundAccepted.current = false;
     if (!game.current?.retryRound) {
       start("escape");
       return;
@@ -1107,6 +1063,7 @@ export default function App() {
     pages.clear();
     setLeaveConfirmation(false);
     localRoundAccepted.current = false;
+    cancelLaunch();
     setNoticesOpen(false);
     setModeBlocked(null);
     setBriefing(null);
@@ -1333,7 +1290,7 @@ export default function App() {
         if(onlineClient.current?.view.currentRoom)throw Error('请先离开房间，再选择其他玩法。');
         const mode=action.mode==='drive'?'dafei':action.mode;
         if(!guardEntry(entryFor(mode,mode==='escape'?'single':undefined)))throw Error('该玩法暂时不可用。');
-        setPractice(false);setSelectedMode(mode);setEscapeEntry('single');setMenuScreen('prepare');setAssistantReturnScreen('prepare');return '玩法已选好。';
+        setSkipEscapeEntry(mode==='escape');setPractice(false);setSelectedMode(mode);setEscapeEntry('single');setMenuScreen('prepare');setAssistantReturnScreen('prepare');return '玩法已选好。';
       }
       case'select_difficulty':if(onlineClient.current?.view.currentRoom)throw Error('房间难度已经确定，请在创建房间时选择。');changeSettings({...settingsRef.current,escapeDifficulty:difficulty(action.difficulty)});return '难度已选好。';
       case'select_weapon':{
@@ -1380,7 +1337,7 @@ export default function App() {
   useEffect(()=>{
     if(previousMenuPage.current&&!pages.active){
       if(onlineView.currentRoom?.phase==='lobby')setOnlineOpen(true);
-      else if(isMenu&&!onlineView.currentRoom){const destination=previousMenuPage.current==='assistant'?assistantReturnScreen:null;if(destination!=='prepare'){game.current?.cancelModePreparation?.();setPrepareRequested(false);}setOnlineOpen(false);setMenuScreen(destination??'home');setAssistantReturnScreen(null);}
+      else if(isMenu&&!onlineView.currentRoom){const destination=previousMenuPage.current==='assistant'?assistantReturnScreen:null;if(destination!=='prepare'){game.current?.cancelModePreparation?.();}setOnlineOpen(false);setMenuScreen(destination??'home');setAssistantReturnScreen(null);}
     }
     previousMenuPage.current=pages.active;
   },[pages.active,isMenu,onlineView.currentRoom?.phase,assistantReturnScreen]);
@@ -1397,24 +1354,9 @@ export default function App() {
         onClick: returnFromAssistant,
       }
     : assistantReturnScreen === 'prepare' ? {
-        label: preparation.state === 'ready' ? '进入游戏'
-          : preparation.state === 'error' ? '重试准备'
-          : saveData && !prepareRequested ? '准备游戏资源' : '正在准备…',
-        detail: preparation.state === 'ready' ? '玩法与装备已选好，随时出发。'
-          : preparation.state === 'loading' || preparation.state === 'error' ? preparation.message : undefined,
-        progress: preparation.state === 'loading' ? preparation.progress / 100 : undefined,
-        disabled: accountBusy || busy || !operational.ready || !selectedAvailable
-          || preparation.state === 'loading' || preparation.state === 'idle' && !(saveData && !prepareRequested),
-        onClick: () => {
-          if (!guardEntry(selectedEntry) || accountBusy || busy || assistantInBattle) return;
-          if (preparation.state !== 'ready') {
-            setPrepareRequested(true);
-            setPrepRevision(n => n + 1);
-            return;
-          }
-          pages.clear();
-          chooseStart();
-        },
+        label: '进入游戏',
+        disabled: accountBusy || busy || !!launch || !operational.ready || !selectedAvailable,
+        onClick: () => { if (!accountBusy&&!busy&&!assistantInBattle) chooseStart(); },
       } : undefined;
   const { unread: feedbackUnread } = useFeedbackUnread(isMenu || feedbackOpen);
   const announcementEntry = isMenu && menuScreen !== 'prepare' ? undefined : onlineView.currentRoom ? entryFor('escape', onlineView.currentRoom.mode==='coop'?'coop':'pvp', onlineView.currentRoom.variant==='ffa'?'ffa':'tdm') : isMenu ? selectedEntry : entryFor(snapshot.mode);
@@ -1423,6 +1365,7 @@ export default function App() {
     background:()=>{game.current?.clearInput?.();game.current?.pause();},
     resume:()=>{void gameOperations.refresh().catch(()=>{});},
     back:()=>{
+      if(launch){cancelLaunch();return true;}
       if(accountBusy||busy||leavingRoom)return true;
       // Let the existing dialog, album and page handlers close their own top
       // layer, including their draft/focus rules, before falling back to menus.
@@ -1507,7 +1450,8 @@ export default function App() {
         (snapshot.mode === "escape" ? " escape-mode" : "")
       }
     >
-      <div className="world" ref={host} />      {online && snapshot.phase === 'loading' && !onlineOpen && !onlineReadingOpen && (
+      <div className="world" ref={host} />
+      {online && snapshot.phase === 'loading' && !onlineOpen && !onlineReadingOpen && (
         <div className={loadingUI.shade}>
           <section className={loadingUI.panel} aria-label="准备进入校园">
             <div className={loadingUI.body}>
@@ -1515,6 +1459,21 @@ export default function App() {
               <p role="status">{snapshot.message || '正在准备场景'}</p>
               <progress aria-label="本局资源准备" max={100} value={Math.max(0,Math.min(100,snapshot.progress))}/>
               <div className={loadingUI.actions}><button onClick={()=>onlineAction({type:'leave'})}>取消并离开房间</button></div>
+            </div>
+          </section>
+        </div>
+      )}
+      {launch && !online && (
+        <div className={loadingUI.shade}>
+          <section ref={launchPanel} className={loadingUI.panel} role="dialog" aria-modal="true" aria-label="准备进入校园">
+            <div className={loadingUI.body}>
+              <h2>{preparation.state==='error'?'暂时未能进入':'准备进入校园'}</h2>
+              <p role={preparation.state==='error'?'alert':'status'}>{preparation.message}</p>
+              {preparation.state!=='error'&&<progress aria-label="本局资源准备" max={100} value={preparation.progress}/>}
+              <div className={loadingUI.actions}>
+                {preparation.state==='error'&&<button className={loadingUI.primary} onClick={()=>{if(snapshot.phase==='error'&&!game.current){chooseStart(launch.resumeStory);setAttempt(n=>n+1);}else chooseStart(launch.resumeStory);}}>重试进入</button>}
+                <button onClick={cancelLaunch}>{preparation.state==='error'?'返回修改':'取消'}</button>
+              </div>
             </div>
           </section>
         </div>
@@ -1542,11 +1501,12 @@ export default function App() {
       {isMenu && (
         <MainMenu
           practice={practice}
-          onTraining={()=>{if(!guardEntry('escape-solo'))return;setPractice(true);setSelectedMode('escape');setEscapeEntry('single');setPrepareRequested(false);setMenuScreen('prepare');}}
+          skipEscapeEntry={skipEscapeEntry}
+          onTraining={()=>{if(!guardEntry('escape-solo'))return;setPractice(true);setSelectedMode('escape');setEscapeEntry('single');setMenuScreen('prepare');}}
           recent={recentPlay}
           onRecent={()=>{if(recentPlay)prepareRecentPlay(recentPlay);}}
           onStoryPrepare={()=>prepareRecentPlay({mode:'story',entry:'single',variant:'tdm'})}
-          active={!pages.active&&!onlineOpen}
+          active={!pages.active&&!onlineOpen&&!launch}
           unavailable={menuUnavailable}
           announcement={<AnnouncementBanner items={announcements.list} onOpen={openNotices}/>}
           screen={menuScreen}
@@ -1554,6 +1514,7 @@ export default function App() {
           entry={escapeEntry}
           variant={pvpVariant}
           onMode={(mode) => {
+            setSkipEscapeEntry(false);
             setPractice(false);
             if (mode==='escape' && menuUnavailable.escape) { guardEntry('escape-solo'); return; }
             if (mode!=='escape' && !guardEntry(entryFor(mode))) return;
@@ -1566,8 +1527,9 @@ export default function App() {
             setMenuScreen("prepare");
           }}
           onHome={() => {
+            cancelLaunch();
             game.current?.cancelModePreparation?.();
-            setPrepareRequested(false);
+
             setPractice(false);
             setMenuScreen("home");
           }}
@@ -1575,24 +1537,18 @@ export default function App() {
           onAbout={() => setMenuReading("about")}
           onEntry={(entry)=>{setPractice(false);const variant=entry==='pvp'&&!availability[entryFor('escape','pvp',pvpVariant)].enabled?(availability['escape-tdm'].enabled?'tdm':'ffa'):pvpVariant;if(guardEntry(entryFor('escape',entry,variant))){setEscapeEntry(entry);setPvpVariant(variant);}}}
           onVariant={(variant)=>{if(guardEntry(entryFor('escape','pvp',variant)))setPvpVariant(variant);}}
-          onStart={() => {
-            if (!guardEntry(selectedEntry)) return;
-            if (preparation.state !== "ready") return;
-            selectedMode === "escape" && escapeEntry !== "single"
-              ? openOnline()
-              : chooseStart();
-          }}
-          onContinue={() => void continueStory()}
+          onMultiplayer={openOnline}
+          onStart={() => chooseStart()}
+          onContinue={() => chooseStart(true)}
           hasSave={savedStory}
-          disabled={preparation.state !== "ready"}
+          disabled={busy || !operational.ready || !selectedAvailable}
           busy={busy}
           prepareState={preparation.state}
           prepareProgress={preparation.progress}
-          saveDataWaiting={saveData && !prepareRequested}
+          saveDataWaiting={false}
           onPrepare={() => {
             if (!guardEntry(selectedEntry)) return;
-            setPrepareRequested(true);
-            setPrepRevision((n) => n + 1);
+            chooseStart();
           }}
           version={RELEASE_LABEL}
           onSettings={openSettings}
@@ -1624,7 +1580,7 @@ export default function App() {
                   <p>{preparation.message}</p>
                   <button
                     className="secondary"
-                    onClick={() => setPrepRevision((n) => n + 1)}
+                    onClick={() => chooseStart()}
                   >
                     重试准备
                   </button>
@@ -2149,7 +2105,7 @@ export default function App() {
                 onClick={resume}
                 disabled={busy || (touchLayout && portrait)}
               >
-                继续游玩
+                {snapshot.message==='点击观察'?'点击观察':'继续游玩'}
                 <Icon name="play" />
               </button>
               <SessionMenuActions onOpen={openMenuPage} onMain={returnMenu} busy={busy}/>
@@ -2252,7 +2208,8 @@ export default function App() {
         !(onlineView.currentRoom?.phase === 'ended' && onlineTransportReady) &&
         !onlineReadingOpen && (
           <MenuPage id="lobby" title={onlineView.currentRoom?(onlineView.currentRoom.mode==='coop'?'合作准备':onlineView.currentRoom.variant==='tdm'?'团队对战准备':'个人混战准备'):'联机大厅'} active tactical showNavigation={false} onBack={returnMenu} backLabel="返回主菜单" onRoot={returnMenu} rootLabel="主菜单" onNavigate={openMenuPage} feedbackUnread={feedbackUnread} wide>
-          <Suspense fallback={<p role="status">正在打开联机大厅…</p>}><ModuleBoundary label="联机大厅" retry={multiplayerComponent} onClose={returnMenu}><MultiplayerUI embedded
+          <Suspense fallback={<p role="status">正在打开联机大厅…</p>}><ModuleBoundary label="联机大厅" retry={multiplayerComponent} onClose={returnMenu}><MultiplayerUI key={rankingPlayer?.id??'guest'} embedded
+             unavailable={{coop:!availability['escape-coop'].enabled,tdm:!availability['escape-tdm'].enabled,ffa:!availability['escape-ffa'].enabled}}
             initialMode={escapeEntry === "pvp" ? "pvp" : "coop"}
             initialVariant={pvpVariant}
             initialWeather={settings.weather??'clear'}

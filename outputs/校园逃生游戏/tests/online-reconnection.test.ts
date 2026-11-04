@@ -43,3 +43,14 @@ test('refreshing room listings cannot turn an uncertain admission into a fresh-c
  try{await client.refresh();assert.equal(client.view.status,'error');assert.equal(client.view.errorCode,'ADMISSION_UNCERTAIN');assert.equal(client.hasUncertainAdmission(),true);}
  finally{(client as any).pendingAdmission=null;client.dispose();globalThis.fetch=originalFetch;}
 });
+
+test('every authoritative packet reaches gameplay while lobby subscribers only receive meaningful changes',()=>{
+ const client=new OnlineClient(),room=fakeRoom();let packets=0,menuUpdates=0;
+ try{
+  client.playerId='p0';(client as any).bind(room);client.onSnapshot(()=>packets++);client.subscribeMenu(()=>menuUpdates++);
+  for(let tick=1;tick<=200;tick++)room.callbacks.get('snapshot')!({roomId:'test',phase:'lobby',tick,countdown:0,pauseLeft:0,pauseVote:null,result:null,players:[{id:'p0',loading:tick>=100,ack:0,position:[tick,0,0]}],events:[]});
+  assert.equal(packets,200);assert.equal(menuUpdates,2);
+  const phases=client.getPerformanceDiagnostics().messages.phases;
+  for(const name of ['decode','clientState','snapshotApply','eventDispatch','menuProjection','menuDispatch','messageTotal'])assert.equal(phases[name].samples,180,name);
+ }finally{client.dispose();}
+});

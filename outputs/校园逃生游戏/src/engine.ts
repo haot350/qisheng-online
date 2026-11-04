@@ -275,6 +275,7 @@ export async function createGame(
   host: HTMLElement,
   publish: (s: Snapshot) => void,
   initial: Settings = DEFAULT_SETTINGS,
+  primedAudio?: GameAudio,
 ): Promise<GameAPI> {
   let ranked: RankingRecorder | null = null;
   const rankGeneration = new Map<number, number>();
@@ -372,7 +373,7 @@ export async function createGame(
   let photographyMarkers: PhotographyMarkers | null = null;
   const shotUrls = new Set<string>(),
     shotUrlById = new Map<string, string>();
-  const audio = new GameAudio(),
+  const audio = primedAudio ?? new GameAudio(),
     input = createInput(canvas, () => pause());
   input.setEscapeAimMode(settings.escapeAimMode ?? "toggle");
   audio.setVolumes(settings.music, settings.sfx);
@@ -2391,7 +2392,7 @@ export async function createGame(
     } else if (next === "roam") void audio.unlockEffects().catch(() => {});
     else void audio.unlock().catch(() => {});
   }
-  async function enter(unlock = true, pointerReady = false) {
+  async function enter(unlock = true, pointerReady = false, allowPointerPrompt = false) {
     const token = ++enterToken;
     input.reset();
     input.setMode(mode);
@@ -2400,13 +2401,16 @@ export async function createGame(
     emit();
     if (unlock) unlockAudio();
     syncObservationCursor(true, true);
-    const result = await Promise.allSettled([pointerReady ? Promise.resolve() : input.lock()]);
+    const result = await Promise.allSettled([pointerReady ? Promise.resolve() : allowPointerPrompt ? Promise.reject(new Error("Pointer gesture required")) : input.lock()]);
     if (dead || token !== enterToken) return;
     if (result[0].status === "rejected") {
       phase = "paused";
       input.reset();
       audio.update(0, true);
+      message = "点击观察";
+      render(0);
       emit();
+      if (allowPointerPrompt) return;
       throw Error(
         "鼠标尚未进入游戏，请点击继续游戏重试，或在设置选择触屏操作。",
       );
@@ -2417,6 +2421,7 @@ export async function createGame(
       return;
     }
     phase = "playing";
+    message = "";
     input.setEnabled(storyOverlays.size === 0);
     input.setSuspended(storyOverlays.has("reality"));
     if (!storyOverlayOpen) photo?.resume();
@@ -2898,8 +2903,7 @@ export async function createGame(
     prepareModeAudio(audio, next, settings.escapeMusic ?? "battle");
     unlockAudio(next);
     // Preserve the original user gesture while resources finish. No delayed auto-lock.
-    const pointer = input.lock();
-    void pointer.catch(() => {});
+    const pointer = input.lock().then(()=>true,()=>false);
     if (!wasPrepared) phase = "loading";
     tracePreparation('start',preparationKey(next,loadout));
     emit();
@@ -2910,7 +2914,7 @@ export async function createGame(
       await permission;
       await ready;
       if (dead || token !== enterToken || controller.signal.aborted) return;
-      await pointer;
+      const pointerReady = await pointer;
       if (dead || token !== enterToken || controller.signal.aborted) return;
       if (!modePrepared(next, loadout)) throw Error("本局准备已更改。");
       if (!loadout?.training && !rankingRetryStarted) {
@@ -2995,7 +2999,7 @@ export async function createGame(
       progress = 100;
       message = "";
       storyGesturePrimed = false;
-      await enter(false,true);
+      await enter(false,pointerReady,true);
       preparationTimings.push({label:'进入校园',durationMs:Math.round(performance.now()-entryStartedAt),complete:true});
     } catch (error) {
       if (dead || token !== enterToken) return;
@@ -3286,7 +3290,7 @@ export async function createGame(
     return true;
   }
   async function restoreStory(cp: StoryCheckpoint) {
-    const requestToken = ++enterToken;
+    const requestToken = phase==='menu' && modePrepared('story') ? enterToken : ++enterToken;
     await gameOperations.check('story');
     if (dead || requestToken !== enterToken) return;
     const sm = await import("./story");
@@ -6602,7 +6606,11 @@ export async function createGame(
       emit();
     },
     setSettings: (s) => {
-      if(s.quality!==settings.quality)qualityGovernor.reset();
+      const previous=settings;
+      if (JSON.stringify(s)===JSON.stringify(previous)) return;
+      const qualityChanged=s.quality!==previous.quality;
+      const renderChanged=qualityChanged || s.weather!==previous.weather;
+      if(qualityChanged)qualityGovernor.reset();
       input.setEscapeAimMode(s.escapeAimMode ?? "toggle");
       const transmission = s.transmission === "manual" ? "manual" : "auto";
       if (
@@ -6630,19 +6638,15 @@ export async function createGame(
               : "search",
         );
       storyAudio.setVolumes(s.music, s.sfx);
-      applyQuality();
-      void refreshQualityTextures();
-      photo?.setQuality(low);
+      if (renderChanged) applyQuality();
+      if (qualityChanged) { void refreshQualityTextures(); photo?.setQuality(low); }
       if (mode === "story") {
         camera.far = 360;
         camera.updateProjectionMatrix();
         scene.fog = new THREE.Fog(scene.background as THREE.Color, 100, 330);
       }
-      if (phase !== "playing") {
-        camera.fov = s.fov;
-        camera.updateProjectionMatrix();
-        render(0);
-      }
+      if (s.fov!==previous.fov) { camera.fov = s.fov; camera.updateProjectionMatrix(); }
+      if (phase !== "playing" && (renderChanged || s.fov!==previous.fov)) render(0);
       emit();
     },
     retryMusic: () => {
