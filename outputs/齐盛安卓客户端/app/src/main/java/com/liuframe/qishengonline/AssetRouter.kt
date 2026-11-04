@@ -11,7 +11,7 @@ import java.io.InputStream
 import java.security.MessageDigest
 
 class AssetRouter(private val assets: AssetManager) {
-    data class Entry(val path: String, val size: Long, val sha256: String)
+    data class Entry(val path: String, val size: Long, val sha256: String, val mimePath: String)
     private val entries = mutableMapOf<String, Entry>()
     val bundle: JSONObject
 
@@ -27,7 +27,9 @@ class AssetRouter(private val assets: AssetManager) {
             check(ResourcePolicy.canonicalPath("/$file") == "/$file")
             val canonical = ResourcePolicy.canonicalPath(row.optString("url", "/$file"))
             check(canonical != null && !ResourcePolicy.onlineOnly(canonical) && !entries.containsKey(canonical))
-            entries[canonical] = Entry(file, row.getLong("bytes"), row.getString("sha256"))
+            val mimePath=row.optString("mimePath",file)
+            check(ResourcePolicy.canonicalPath("/$mimePath")=="/$mimePath")
+            entries[canonical] = Entry(file, row.getLong("bytes"), row.getString("sha256"),mimePath)
         }
         check(entries.containsKey("/index.html"))
         for ((url, file) in ResourcePolicy.htmlRoutes) entries["/$file"]?.let { entries[url] = it }
@@ -50,7 +52,7 @@ class AssetRouter(private val assets: AssetManager) {
         val range = try { ByteRange.parse(request.requestHeaders.entries.firstOrNull { it.key.equals("Range", true) }?.value, entry.size) } catch (_: IllegalArgumentException) {
             return WebResourceResponse("application/octet-stream", null, 416, "Range Not Satisfiable", mapOf("Content-Range" to "bytes */${entry.size}", "Content-Length" to "0", "Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
         }
-        val mime = ResourcePolicy.mime(entry.path)
+        val mime = ResourcePolicy.mime(entry.mimePath)
         val headers = mutableMapOf("Content-Type" to mime, "Content-Length" to range.length.toString(), "Accept-Ranges" to "bytes", "X-Content-Type-Options" to "nosniff", "ETag" to "\"${entry.sha256}\"", "Cache-Control" to if (path.startsWith("/assets/")) "private, max-age=31536000, immutable" else "no-store")
         if (range.partial) headers["Content-Range"] = "bytes ${range.start}-${range.end}/${entry.size}"
         if (mime == "text/html") headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' blob: wss://game.tianhw.top; worker-src 'self' blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'"

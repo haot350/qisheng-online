@@ -568,7 +568,7 @@ export function createInput(
       if (freeCursor()) return;
       if (touchDevice() || document.pointerLockElement === canvas) return;
       if (!canvas.requestPointerLock)
-        throw new Error("浏览器未提供鼠标锁定，请使用支持该功能的浏览器。");
+        throw Object.assign(new Error("当前浏览器无法使用鼠标观察，可在设置中选择触屏操作。"),{code:"POINTER_LOCK_UNAVAILABLE"});
       if (pendingLock) return pendingLock;
       lockRevoked = false;
       // Older browsers return void: wait for the actual lock event rather than
@@ -589,7 +589,7 @@ export function createInput(
           if (document.pointerLockElement === canvas) finish();
         };
         const failed = () =>
-          finish(new Error("浏览器未允许鼠标锁定，请点击继续游戏重试。"));
+          finish(Object.assign(new Error("请重新点击开始，并允许使用鼠标观察。"),{code:"POINTER_LOCK_DENIED"}));
         const timer = setTimeout(failed, 3000);
         cancelLock = (message = "游戏已关闭。") => finish(new Error(message));
         document.addEventListener("pointerlockchange", changed);

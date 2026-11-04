@@ -11,7 +11,7 @@ export const STORY_STAGE={
 };
 export const STORY_START:StoryVec3=[-46,.185,-117];
 export const SPEAKERS:Record<StoryLine['speaker'],string>={'xu-yuan':'许原','lin-cen':'林岑','zhou-xu':'周序',dafei:'大飞老师',principal:'程国涛',narrator:'校园影像'};
-export const PORTRAITS:Partial<Record<StoryLine['speaker'],string>>={'lin-cen':staticAssetUrl('/story/characters/lin-cen.webp'),'zhou-xu':staticAssetUrl('/story/characters/zhou-xu.webp'),dafei:staticAssetUrl('/images/dafei-guide.webp')};
+export const PORTRAITS:Partial<Record<StoryLine['speaker'],string>>={'lin-cen':staticAssetUrl('/story/characters/lin-cen.webp'),'zhou-xu':staticAssetUrl('/story/characters/zhou-xu.webp'),dafei:staticAssetUrl('/characters/fictional/dafei-guide.webp')};
 const yard:StoryVec3=[-46,.18,-103], entry:StoryVec3=[-35.9,.61,-78.14], eastTop:StoryVec3=[-34,4.32,-78.14], westTop:StoryVec3=[-65.31,4.32,-81.54];
 // The first reference is a real wide-angle photograph of the south courtyard.
 // Companions finish beside/behind the photographer, keeping its landmarks clear.

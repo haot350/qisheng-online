@@ -1,3 +1,5 @@
+import {AutomaticObjective} from './automatic-objective';
+import {npcPublicName} from './npc-appearance';
 import {CombatTraining,trainingPlan} from './training';
 import {WeatherScene} from './weather-scene';
 import {CampusGlassEnvironment} from './campus-glass';
@@ -7,6 +9,8 @@ import {CardsPursuit,GADGET_RULES,newGadgetInventory,canCollectGadget,collectGad
 import {GadgetScene} from './gadget-scene';
 import {selectEscapeRoster as orderedEscapeRoster} from './npc-roster';
 import * as THREE from "three";
+import {RenderFrameMeter} from './render-frame-meter';
+import {platformPerformance} from './platform/performance';
 import {AdaptiveRenderQuality,resolveRenderProfile} from '@qisheng/shared/render-profile';
 import {applyRendererProfile} from './render-quality';
 import { FrameDiagnostics } from './frame-diagnostics.ts';
@@ -298,6 +302,7 @@ export async function createGame(
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;
   renderer.autoClear = false;
+  const frameMeter=new RenderFrameMeter(renderer.getContext());
   const canvas = renderer.domElement;
   canvas.tabIndex = 0;
   canvas.setAttribute("aria-label", "第一人称校园游戏画面");
@@ -754,7 +759,7 @@ export async function createGame(
           ? "自由探索"
           : mode === "dafei"
             ? "驾驶挑战"
-            : "返回校门撤离"),
+            : mode === "escape" ? "暂未找到路线" : "返回校门撤离"),
       goalDistance,
       goalAngle,
       extraction,
@@ -1045,6 +1050,7 @@ export async function createGame(
         interaction?.kind === "task" && interaction.available;
     return {
       ...snap,
+      tasks: snap.tasks.map(task=>({...task,selected:training?task.selected:task.id===automaticTaskId&&task.state!=="complete"})),
       interactionAvailable,
       mapOpen: escapeMapOpen,
       playerPosition: position.toArray() as Vec3,
@@ -1073,9 +1079,8 @@ export async function createGame(
   function escapeTarget() {
     const snap = escapeRound?.snapshot(),
       task =
-        snap?.tasks.find((t) => t.selected && t.state !== "complete") ??
-        snap?.tasks.find((t) => t.state !== "complete");
-    if (!task) return escapePlan?.extraction ?? null;
+        snap?.tasks.find((t) => (training?t.selected:t.id===automaticTaskId) && t.state !== "complete");
+    if (!task) return snap?.extractionAvailable ? escapePlan?.extraction ?? null : null;
     return task.kind === "deliver"
       ? task.task.sites[task.carrying ? 1 : 0]
       : task.kind === "activate"
@@ -1097,9 +1102,13 @@ export async function createGame(
         }
       : null;
   }
+  const automaticObjective=new AutomaticObjective();
+  let automaticTaskId:string|undefined;
   function updateGoal() {
-    const pending = goal(),
-      target = pending ? pending.mesh.position : v(world.manifest.extraction);
+    if(mode==="escape"&&escapeRound&&!training){const state=escapeRound.snapshot(),from=position.toArray() as Vec3,candidates=state.tasks.filter(t=>t.state!=="complete").map(t=>({id:t.id,locked:t.carrying||(t.kind==="hold"&&t.state==="active"&&t.blockReason!=="outside"),positions:(t.kind==="deliver"&&t.carrying?t.task.sites.slice(-1):t.task.sites.filter(s=>!t.visited.includes(s.id))).map(s=>s.position)}));const chosen=automaticObjective.choose(from,candidates,(a,b)=>world.path(v(a as Vec3),v(b as Vec3)).map(p=>p.toArray() as Vec3),performance.now());if(chosen!==automaticTaskId){automaticTaskId=chosen;escapeRouteClock=0;escapeRoute=[];escapeStairGuide=null;}if(chosen&&chosen!==escapeRound.selectedTaskId)escapeRound.selectTask(chosen);}
+    const pending = goal();
+    if(mode==="escape"&&escapeRound&&!pending){goalDistance=0;goalAngle=0;escapeRoute=[];escapeStairGuide=null;return null;}
+    const target = pending ? pending.mesh.position : v(world.manifest.extraction);
     if (mode === "escape" && escapeRound) {
       escapeRouteClock -= 1 / 60;
       if (escapeRouteClock <= 0) {
@@ -1225,13 +1234,6 @@ export async function createGame(
     updateGoal();
     emit();
   }
-  function nextEscapeTask() {
-    const tasks =
-      escapeRound?.snapshot().tasks.filter((t) => t.state !== "complete") ?? [];
-    if (!tasks.length) return;
-    const at = tasks.findIndex((t) => t.selected);
-    selectEscapeTask(tasks[(at + 1) % tasks.length].id);
-  }
   function resetTransient(preserveAudioGesture = false) {
     activePreparationKey='';firstPlayablePending=false;
     preparedPresentation=null;
@@ -1246,6 +1248,7 @@ export async function createGame(
     escapeTacticalAgents = [];
     contactProbe = 0;
     escapeRound = null;
+    automaticObjective.reset();automaticTaskId=undefined;
     training = null;
     escapePlan = null;
     escapeMapOpen = false;
@@ -2996,6 +2999,7 @@ export async function createGame(
       preparationTimings.push({label:'进入校园',durationMs:Math.round(performance.now()-entryStartedAt),complete:true});
     } catch (error) {
       if (dead || token !== enterToken) return;
+      if(import.meta.env.DEV)console.warn('Entry preparation failed',error instanceof Error?error.message:String(error));
       if (import.meta.env.DEV)
         (window as any).__gameStartError = {
           next,
@@ -5604,7 +5608,7 @@ export async function createGame(
       void taskMap(true);
       return;
     }
-    if (frame.actions.has("nextTask")) nextEscapeTask();
+
     if (frame.actions.has("pause")) {
       pause();
       return;
@@ -6355,7 +6359,7 @@ export async function createGame(
           skillLeft: n.skill?.left,
           teamTarget: n.team.target,
           teamLeft: n.team.left,
-          name: NPC_IDENTITY[n.identity].name,
+          name: npcPublicName(n.identity,NPC_IDENTITY[n.identity].name),
           position: n.position.toArray(),
           sees: n.sees,
           alert: n.alert,
@@ -6412,6 +6416,7 @@ export async function createGame(
     raf = 0;
     if (dead) return;
     frameDiagnostics.begin(now);
+    frameMeter.begin();
     const realDt = Math.max(0, (now - last) / 1000),
       dt = Math.min(0.1, realDt);
     last = now;
@@ -6427,7 +6432,7 @@ export async function createGame(
       if (import.meta.env.DEV) cpuUpdate += performance.now() - began;
       perfClock += realDt;
       perfFrames++;
-      if(!buffering){const decision=qualityGovernor.observe(realDt,settings.quality);if(decision.changed)applyQuality();if(decision.warn)info('当前画质下帧率较低，可在设置中选择“自动调整”或“优先流畅”。',5);}
+      if(!buffering){const decision=qualityGovernor.observe(realDt,settings.quality,{cpuMs:frameMeter.cpuMs,gpuMs:frameMeter.gpuMs,...platformPerformance()});if(decision.changed)applyQuality();if(decision.warn)info('当前画质下帧率较低，可在设置中选择“自动调整”或“优先流畅”。',5);}
       if (perfClock > 3) {
         fps = Math.round(perfFrames / perfClock);
         if (import.meta.env.DEV) {
@@ -6447,6 +6452,7 @@ export async function createGame(
       firstPlayablePending=false;
       tracePreparation('first-playable');
     }
+    frameMeter.end();
     frameDiagnostics.end();
     if (phaseActive() || (phase === "intro" && !document.hidden)) schedule();
   }
@@ -6485,6 +6491,7 @@ export async function createGame(
     photographyMarkers?.dispose();
     world?.dispose();
     sun.shadow.dispose();
+    frameMeter.dispose();
     renderer.dispose();
     canvas.remove();
   }

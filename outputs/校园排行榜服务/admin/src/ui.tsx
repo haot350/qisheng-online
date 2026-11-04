@@ -14,6 +14,9 @@ import { createPortal } from "react-dom";
 import { stateName, type Row } from "./api";
 export const NotifyContext = createContext<(text: string) => void>(() => {});
 export const useNotify = () => useContext(NotifyContext);
+export function ToggleButton({checked,onChange,disabled=false,onLabel='已开启',offLabel='已关闭',id,'aria-describedby':describedBy}:{checked:boolean;onChange:(value:boolean)=>void;disabled?:boolean;onLabel?:string;offLabel?:string;id?:string;'aria-describedby'?:string}) {
+ return <button type="button" id={id} className={'toggle-button '+(checked?'is-on':'')} role="switch" aria-checked={checked} aria-describedby={describedBy} disabled={disabled} onClick={()=>onChange(!checked)}><span className="toggle-track" aria-hidden="true"><span/></span><span>{checked?onLabel:offLabel}</span></button>;
+}
 export function PageTitle({
   eyebrow,
   title,

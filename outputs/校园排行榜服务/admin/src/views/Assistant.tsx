@@ -1,3 +1,4 @@
+import {ToggleButton} from '../ui';
 import {useEffect, useRef, useState} from 'react';
 import type {AssistantAdminConfig, AssistantUsage} from '@qisheng/shared/assistant';
 import {api, useResource, type Administrator} from '../api';
@@ -36,7 +37,7 @@ export default function Assistant({administrator}:{administrator:Administrator})
    {draft&&<form onSubmit={e=>{e.preventDefault();void act('save');}} className="assistant-admin-grid">
     <Panel title="服务状态">
      <p className="muted">回答会经过生成与独立审核两次调用，审核通过后才展示。关闭服务会停止正在处理的回答。</p>
-     <label className="check"><input type="checkbox" checked={draft.enabled} disabled={busy||(!draft.enabled&&!draft.tested)} onChange={e=>patch('enabled',e.target.checked)}/>启用小齐</label>
+     <label className="check"><ToggleButton checked={draft.enabled} disabled={busy||(!draft.enabled&&!draft.tested)} onChange={value => patch('enabled',value)} />启用小齐</label>
      <p role="status">{draft.keyConfigured?(draft.tested?'连接已验证':'请先保存配置，再测试连接'):'尚未配置密钥'}</p>
      <Field label="接口地址"><input type="url" required value={draft.endpoint} disabled={!administrator.owner||busy} onChange={e=>patch('endpoint',e.target.value)} autoComplete="off" spellCheck={false}/></Field>
      <Field label="模型 ID"><input required maxLength={120} value={draft.model} disabled={!administrator.owner||busy} onChange={e=>patch('model',e.target.value)} autoComplete="off" spellCheck={false}/></Field>

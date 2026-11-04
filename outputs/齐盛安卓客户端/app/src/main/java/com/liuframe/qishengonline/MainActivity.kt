@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
     private var exitDialog: AlertDialog? = null
     @Volatile private var destroyed = false
     private var presentation=PresentationState(false,false,"auto")
+    private var performanceSignals:PerformanceSignals?=null
     private var checkedUpdates=false
     @Volatile private var availableUpdate:NativeUpdate?=null
     private var updateOffered=false
@@ -82,13 +83,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        vault = SessionVault(this)
-        try {
-            if (!Build.SUPPORTED_64_BIT_ABIS.contains("arm64-v8a") && !BuildConfig.DEBUG) throw IllegalStateException("此测试包适用于64位安卓手机。")
-            router = AssetRouter(assets)
-            if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) throw IllegalStateException("请先更新手机的系统网页组件，再重新打开游戏。")
-            createWebView()
-        } catch (error: Exception) { val message=error.message.orEmpty();showFailure(if(message.startsWith("此测试包")||message.startsWith("请先更新")||message.startsWith("安装资源"))message else "游戏暂时无法启动，请重试或更新系统网页组件。") }
+        performanceSignals=PerformanceSignals(this){notifyPerformance()}
+        val boot=FrameLayout(this).apply { setBackgroundColor(Color.rgb(232,230,223)) }
+        boot.addView(android.widget.ProgressBar(this),FrameLayout.LayoutParams(48,48,android.view.Gravity.CENTER))
+        setContentView(boot)
+        // Asset inventory hashing and Keystore initialization do not block the first UI frame.
+        io.execute {
+            try {
+                if (!Build.SUPPORTED_64_BIT_ABIS.contains("arm64-v8a") && !BuildConfig.DEBUG) throw IllegalStateException("此测试包适用于64位安卓手机。")
+                vault=SessionVault(this);router=AssetRouter(assets)
+                runOnUiThread {
+                    if(destroyed)return@runOnUiThread
+                    try {
+                        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) throw IllegalStateException("请先更新手机的系统网页组件，再重新打开游戏。")
+                        createWebView()
+                    }catch(error:Exception){startupFailure(error)}
+                }
+            } catch (error: Exception) { runOnUiThread { if(!destroyed)startupFailure(error) } }
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() { if (web == null) confirmExit() else notifyPage("back") }
         })
@@ -137,7 +149,7 @@ class MainActivity : ComponentActivity() {
                 if (request.isForMainFrame) showFailure("游戏页面未能打开，请重试。")
             }
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                web = null; view.destroy(); showFailure("画面已中断，请重新进入。联机可在进入后重试连接。")
+                web = null; releaseWebView(view); showFailure("画面已中断，请重新进入。联机可在进入后重试连接。")
                 return true
             }
         }
@@ -160,6 +172,12 @@ class MainActivity : ComponentActivity() {
         }
         setContentView(container)
         view.loadUrl(ResourcePolicy.ORIGIN + "/")
+        if(!visible){view.onPause();view.pauseTimers()}
+    }
+
+    private fun startupFailure(error:Exception){
+        val message=error.message.orEmpty()
+        showFailure(if(message.startsWith("此测试包")||message.startsWith("请先更新")||message.startsWith("安装资源"))message else "游戏暂时无法启动，请重试或更新系统网页组件。")
     }
 
     private fun receive(raw: String, reply: JavaScriptReplyProxy) {
@@ -179,6 +197,7 @@ class MainActivity : ComponentActivity() {
                 when (method) {
                     "init" -> {send(reply, response(id, JSONObject().put("productId", BuildConfig.PRODUCT_ID).put("applicationId",BuildConfig.APPLICATION_ID).put("version", BuildConfig.VERSION_NAME).put("versionCode",BuildConfig.VERSION_CODE).put("channel",BuildConfig.RELEASE_CHANNEL).put("internalOnly", BuildConfig.INTERNAL_ONLY).put("session", vault.read())));if(!checkedUpdates&&!destroyed){checkedUpdates=true;updates.execute { checkUpdates() }}}
                     "session.write" -> { vault.write(params.getString("token")); send(reply, response(id, JSONObject().put("saved", true))) }
+                    "system.performance" -> send(reply,response(id,performanceSignals?.snapshot()?:JSONObject()))
                     "system.backUnhandled" -> { runOnUiThread { confirmExit() }; send(reply, response(id, JSONObject())) }
                     "system.presentation" -> {
                         val orientation = params.getString("orientation")
@@ -246,6 +265,15 @@ class MainActivity : ComponentActivity() {
     private fun response(id: String, ok: Boolean, error: String): JSONObject = JSONObject().put("id", id).put("ok", ok).put("error", error)
     private fun send(reply: JavaScriptReplyProxy, payload: JSONObject) { runOnUiThread { try { reply.postMessage(payload.toString()) } catch (_: Exception) { /* A navigation may have ended this local document. */ } } }
     private fun notifyPage(type: String) { web?.evaluateJavascript("window.__qishengNativeEvent ? (window.__qishengNativeEvent(" + JSONObject.quote(type) + "), true) : false") { handled -> if(type=="back"&&handled!="true"&&!destroyed)confirmExit() } }
+    private fun notifyPerformance(){
+        if(!visible||destroyed)return
+        val payload=performanceSignals?.snapshot()?:return
+        web?.evaluateJavascript("window.__qishengNativeEvent?.('performance',"+payload.toString()+")",null)
+    }
+    private fun releaseWebView(view:WebView){
+        (view.parent as? android.view.ViewGroup)?.removeView(view)
+        view.destroy()
+    }
 
     private fun openExternal(uri: Uri) {
         if (uri.scheme !in listOf("https", "http", "mailto")) return
@@ -281,7 +309,7 @@ class MainActivity : ComponentActivity() {
         exitDialog = AlertDialog.Builder(this).setTitle("退出齐盛Online？").setMessage("本机存档和设置会保留。").setNegativeButton("留在游戏", null).setPositiveButton("退出") { _, _ -> finish() }.show()
     }
     private fun showFailure(message: String) {
-        val old = web; web = null; old?.stopLoading(); old?.destroy()
+        val old = web; web = null; old?.stopLoading(); if(old!=null)releaseWebView(old)
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(40, 100, 40, 40); setBackgroundColor(Color.rgb(232, 230, 223)) }
         layout.addView(TextView(this).apply { text = "齐盛Online"; textSize = 28f; setTextColor(Color.rgb(35, 42, 45)) })
         layout.addView(TextView(this).apply { text = message; textSize = 17f; setPadding(0, 28, 0, 28) })
@@ -291,6 +319,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume(); visible = true; web?.onResume(); web?.resumeTimers(); notifyPage("resume")
+        performanceSignals?.resumed()
         offerUpdate()
         val audio = getSystemService(AudioManager::class.java)
         val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()).setOnAudioFocusChangeListener { change -> if (change < 0) notifyPage("background") }.build()
@@ -309,11 +338,16 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         destroyed=true
+        performanceSignals?.close();performanceSignals=null
         fileCallback?.onReceiveValue(null); fileCallback = null
-        web?.destroy(); web = null
+        web?.let { releaseWebView(it) }; web = null
         io.execute { for(export in exports.values)export.file.delete();exports.clear();pendingExport?.first?.file?.delete();pendingExport=null }
         io.shutdown()
         updates.shutdown()
         super.onDestroy()
+    }
+    override fun onTrimMemory(level:Int){
+        super.onTrimMemory(level)
+        if(level!=android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN)performanceSignals?.trim()
     }
 }

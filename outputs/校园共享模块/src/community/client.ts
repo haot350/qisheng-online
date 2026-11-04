@@ -10,7 +10,15 @@ export class RankingClient {
  private avatarCache=new Map<string,{blob:Blob;expires:number}>();private avatarRequests=new Map<string,{work:Promise<Blob>;controller:AbortController}>();private avatarGeneration=0;
  private clearAvatars(){this.avatarGeneration++;this.avatarCache.clear();for(const entry of this.avatarRequests.values())entry.controller.abort();this.avatarRequests.clear();}
  constructor(readonly base:string,private transport:typeof fetch=(...args)=>fetch(...args),private sessionStore?:AccountSessionStore){try{this.token=sessionStore?sessionStore.read():localStorage.getItem(SESSION_KEY)||'';}catch{}if(!sessionStore&&typeof window!=='undefined')window.addEventListener('storage',event=>{if(event.key!==SESSION_KEY)return;const next=event.newValue??'';if(next===this.token)return;this.mutation++;this.clearAvatars();this.token=next;this.player=null;this.account=null;this.loadWork=null;this.emit();if(next)void this.me().catch(()=>{});});}
- getPlayer(){return this.player;}getAccount(){return this.account;}
+ getPlayer(){return this.player;}getAccount(){return this.account;}getIdentityRevision(){return this.mutation;}
+ npcAppearance(signal?:AbortSignal,catalogRevision?:string){return this.request<import('../npc-appearance.ts').NpcAppearanceStatus>('/npc-appearance'+(catalogRevision?'?catalog='+encodeURIComponent(catalogRevision):''),{signal,timeout:3000});}
+ redeemNpcTest(code:string){return this.request<{ok:boolean;expiresAt:number}>('/npc-appearance/redeem',{method:'POST',body:{code}});}
+ async npcAssetBlob(id:string,signal?:AbortSignal):Promise<Blob>{
+  if(!/^[a-f0-9]{64}$/.test(id))throw new RankingError('人物素材不可用。','NPC_ASSET',false);
+  const serial=this.mutation,token=this.token,controller=new AbortController(),abort=()=>controller.abort(),timer=setTimeout(abort,12000);
+  signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+  try{const response=await this.transport(this.base+'/v1/npc-assets/'+id,{headers:token?{Authorization:'Bearer '+token}:{},credentials:'omit',cache:'no-store',signal:controller.signal});if(!response.ok)throw new RankingError('人物素材不可用。','NPC_ASSET',false);if(Number(response.headers.get('Content-Length')??0)>8*1024*1024)throw new RankingError('人物素材不可用。','NPC_ASSET',false);const blob=await response.blob();if(blob.size>8*1024*1024||serial!==this.mutation||token!==this.token)throw new RankingError('登录状态已改变。','CANCELLED',false);return blob;}finally{clearTimeout(timer);signal?.removeEventListener('abort',abort);}
+ }
  onIdentityDeleted(fn:(id:string)=>void){this.deletionListeners.add(fn);return()=>{this.deletionListeners.delete(fn);};}subscribe(fn:()=>void){this.listeners.add(fn);return()=>{this.listeners.delete(fn);};}
  private emit(){for(const fn of this.listeners)fn();}private save(){try{if(this.sessionStore)this.sessionStore.write(this.token);else if(this.token)localStorage.setItem(SESSION_KEY,this.token);else localStorage.removeItem(SESSION_KEY);}catch{}}private clear(){this.clearAvatars();this.player=null;this.account=null;this.token='';this.loadWork=null;this.save();this.emit();}
  isUpgradeDeferred(){const id=this.player?.id;if(!id)return false;try{return localStorage.getItem(DEFER_KEY+id)==='yes';}catch{return false;}}deferUpgrade(){const id=this.player?.id;if(id)try{localStorage.setItem(DEFER_KEY+id,'yes');}catch{}this.emit();}

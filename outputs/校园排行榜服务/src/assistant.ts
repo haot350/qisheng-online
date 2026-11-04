@@ -4,6 +4,7 @@ import { accountFor } from './accounts.js';
 import { AppError } from './validation.js';
 import { AssistantService } from './assistant-service.js';
 import { safeAssistantConfig } from './assistant-config.js';
+import { npcAppearanceVariant } from './npc-appearance.js';
 const services = new WeakMap<object, AssistantService>();
 const allowedKeys = (b: Record<string, unknown>, keys: string[]) => { if (Object.keys(b).some(k => !keys.includes(k)))
     throw new AppError('ASSISTANT_INPUT', '请求格式无效。'); };
@@ -21,7 +22,7 @@ export function assistantRoutes(c: Context) {
         origin(req);
         const b = body(req);
         allowedKeys(b, ['requestId', 'question', 'history', 'visitorToken','menuContext']);
-        const admitted = principal(req), turn = s.chat(admitted, req.ip, b as any);
+        const admitted = {...principal(req),npcVariant:npcAppearanceVariant(c,req)}, turn = s.chat(admitted, req.ip, b as any);
         // Bind disconnect cleanup to the admitted identity, not a later account/session.
         // IncomingMessage close also fires after a normal request body; only response close is cancellation.
         const disconnect = () => { if (!reply.raw.writableEnded) s.cancel(admitted.id, b.requestId); };

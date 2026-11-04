@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import {mkdirSync} from 'node:fs';
 import {dirname} from 'node:path';
+import {BLOG_SCHEMA_SQL} from './blog-schema.js';
+import {NPC_APPEARANCE_SCHEMA_SQL} from './npc-appearance.js';
 export function openDatabase(path:string){
  if(path!==':memory:')mkdirSync(dirname(path),{recursive:true,mode:0o700});
  const db=new Database(path);
@@ -40,7 +42,7 @@ export function openDatabase(path:string){
 export type RankingDatabase=ReturnType<typeof openDatabase>;
 
 function migrate(db:Database.Database){
- const version=Number(db.pragma('user_version',{simple:true}));if(version>7)throw Error('Database schema newer than application');
+ const version=Number(db.pragma('user_version',{simple:true}));if(version>8)throw Error('Database schema newer than application');
  if(version<2)db.transaction(()=>{db.exec(`
  ALTER TABLE runs ADD COLUMN mode TEXT;ALTER TABLE runs ADD COLUMN difficulty TEXT;
  ALTER TABLE runs ADD COLUMN rule_version TEXT;ALTER TABLE runs ADD COLUMN score REAL;ALTER TABLE runs ADD COLUMN elapsed REAL;
@@ -114,5 +116,10 @@ function migrate(db:Database.Database){
  CREATE TABLE account_avatars(account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,revision TEXT NOT NULL UNIQUE,image BLOB NOT NULL,thumbnail BLOB NOT NULL,bytes INTEGER NOT NULL CHECK(bytes>0 AND bytes<=196608),updated INTEGER NOT NULL);
  CREATE TABLE session_details(session_hash TEXT PRIMARY KEY REFERENCES sessions(hash) ON DELETE CASCADE,created INTEGER,last_seen INTEGER,label TEXT NOT NULL DEFAULT '旧登录会话');
  PRAGMA user_version=7;
+ `);})();
+ if(version<8)db.transaction(()=>{db.exec(BLOG_SCHEMA_SQL);db.exec(NPC_APPEARANCE_SCHEMA_SQL);db.exec(`
+ ALTER TABLE join_tickets ADD COLUMN purpose TEXT NOT NULL DEFAULT 'join';
+ ALTER TABLE join_tickets ADD COLUMN admission_id TEXT;
+ PRAGMA user_version=8;
  `);})();
 }

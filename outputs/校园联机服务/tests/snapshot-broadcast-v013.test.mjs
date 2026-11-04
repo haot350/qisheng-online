@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+process.env.REALTIME_SERVICE_TOKEN??='local-snapshot-broadcast-only';
+const {CampusRoom}=await import('../dist/modules/校园联机服务/src/room.js');
+const {PROTOCOL_VERSION}=await import('../dist/modules/校园逃生游戏/src/multiplayer/shared/protocol.js');
+function player(id,team,x){return{id,nickname:id,shortId:id,avatar:'campus-a',team,ready:true,rankConsent:false,connected:true,loading:false,loadingEpoch:1,position:[x,0,0],yaw:0,pitch:0,velocity:[0,0,0],grounded:true,crouched:false,life:'alive',health:73,stamina:82,movementState:{vertical:0,lastSafe:[1000+x,0,0],actualSpeed:0},weapon:'m4a1',primaryWeapon:'m4a1',ammo:19,reserve:57,weaponAction:{phase:'ready',stage:'ready',progress:1,ready:true},aim:false,sprinting:false,sliding:false,ack:12,generation:1,kills:0,deaths:0,assists:0,downs:0,headshots:0,damageTaken:0,reviveLeft:0,respawnLeft:0,protectionLeft:0,carryingTask:null,ping:40,smokes:2};}
+function snapshot(tick){return{protocolVersion:PROTOCOL_VERSION,roomId:'broadcast-qa',inviteCode:'QATEST',hostId:'a',mode:'pvp',variant:'tdm',difficulty:'standard',phase:'playing',tick,elapsed:1,remaining:599,map:{sourceVersion:'synthetic',collisionHash:'c',navigationHash:'n',manifestHash:'m'},players:[player('a','blue',0),player('b','red',10)],npcs:[],tasks:[],drops:[],supplies:[],gadgets:[],projectiles:[],smokes:[],events:[],eventSerial:0,maxPlayers:8,occupancy:2,startedPlayers:2,extraction:{available:false,position:[0,0,0],progress:0,duration:20,blocked:null},teamScores:{blue:0,red:0},pauseVote:null,pauseLeft:0,pauseUses:0,countdown:0,result:null,maintenance:false};}
+test('one room capture serves every recipient without sharing private projections',()=>{
+ const room=new CampusRoom(),sent=new Map([['a',[]],['b',[]]]);let captures=0,captured;
+ room.sim={world:{visible:(from,to)=>(from[0]<5)===(to[0]<5)}};
+ room.captureSnapshot=()=>{captures++;captured=snapshot(captures*3);return captured;};
+ for(const id of ['a','b'])room.clients.push({auth:{player:{id}},ref:{bufferedAmount:0},raw(){},send(type,message){assert.equal(type,'snapshot');sent.get(id).push(message);}});
+ try{room.broadcastSnapshot(true);assert.equal(captures,1);const [a,b]=[sent.get('a')[0],sent.get('b')[0]];assert.equal(a.self.id,'a');assert.equal(b.self.id,'b');assert.deepEqual(a.players,[]);assert.deepEqual(b.players,[]);assert.equal('position' in a.roster.find(row=>row.id==='b'),false);assert.equal('health' in a.roster.find(row=>row.id==='b'),false);a.self.ammo=999;a.room.extraction.position[0]=123;assert.equal(b.self.ammo,19);assert.equal(captured.players[0].ammo,19);assert.equal(b.room.extraction.position[0],0);assert.equal(captured.extraction.position[0],0);room.broadcastSnapshot(true);assert.equal(captures,2);assert.equal(sent.get('a').length,2);assert.equal(sent.get('b').length,2);room.clients.length=0;room.broadcastSnapshot(true);assert.equal(captures,2);}finally{room.clock.stop();}
+});

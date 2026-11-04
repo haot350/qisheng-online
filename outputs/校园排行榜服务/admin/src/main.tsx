@@ -14,6 +14,9 @@ const Overview = lazy(() =>
   Releases = lazy(() => import("./views/Releases")),
   Operations = lazy(() => import("./views/Operations")),
   Assistant = lazy(() => import("./views/Assistant")),
+  Blog=lazy(()=>import("./views/Blog")),
+  BlogComments=lazy(()=>import("./views/Blog").then(m=>({default:m.BlogComments}))),
+  NpcAssets=lazy(()=>import("./views/NpcAssets")),
   Rankings = lazy(() =>
     import("./views/Moderation").then((m) => ({ default: m.Rankings })),
   ),
@@ -33,8 +36,8 @@ const Overview = lazy(() =>
   Appeals = lazy(() => import("./views/PlayerAccounts").then(m=>({default:m.Appeals}))),
   Services = lazy(() => import("./views/Services"));
 const workspaceGroups = [
-  {label:"日常运营",ids:["overview","feedback","issues","operations"]},
-  {label:"版本与AI",ids:["releases","assistant"]},
+  {label:"日常运营",ids:["overview","blog","blog-comments","feedback","issues","operations"]},
+  {label:"版本与AI",ids:["releases","npc-assets","assistant"]},
   {label:"竞技与玩家",ids:["rankings","players","player-accounts","account-appeals","rooms"]},
   {label:"系统与审计",ids:["services","stats","accounts","audit"]},
 ];
@@ -45,6 +48,9 @@ const sections = [
   { id: "releases", label: "版本与发布", scope: "publish" },
   { id: "operations", label: "玩法与通知", scope: "operations" },
   { id: "assistant", label: "小齐助手", scope: "assistant" },
+  {id:"blog",label:"博客",scopes:["blog-edit","blog-publish"]},
+  {id:"blog-comments",label:"评论与举报",scope:"blog-moderate"},
+  {id:"npc-assets",label:"人物与测试",scope:"npc-assets"},
   { id: "rankings", label: "成绩审核", scope: "ranking" },
   { id: "players", label: "玩家", scope: "players" },
   { id: "player-accounts", label: "玩家账号", scope: "player-accounts" },
@@ -179,6 +185,7 @@ function App() {
   const allowed = sections.filter(
     (s) =>
       (!s.scope || has(administrator, s.scope)) &&
+      (!s.scopes || s.scopes.some(scope=>has(administrator,scope))) &&
       (!s.owner || administrator.owner),
   );
   const current = allowed.find((s) => s.id === route);
@@ -192,6 +199,9 @@ function App() {
     releases: Releases,
     operations: Operations,
     assistant: Assistant,
+    blog:Blog,
+    "blog-comments":BlogComments,
+    "npc-assets":NpcAssets,
     rankings: Rankings,
     players: Players,
     'player-accounts': PlayerAccounts,

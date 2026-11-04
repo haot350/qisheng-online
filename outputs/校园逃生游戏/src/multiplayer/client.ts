@@ -168,8 +168,8 @@ export class OnlineClient {
     const work=(async()=>{try{
       const player=await rankingClient.me();if(!valid())throw new DOMException('Cancelled','AbortError');
       if(player?.id!==pending.playerId){if(player?.id){this.handleIdentityChange(player.id);return false;}throw Error('请先登录原账号，再核对加入状态。');}
-      const {ticket}=await rankingClient.request<{ticket:string}>('/multiplayer/tickets',{method:'POST',body:{mode:pending.mode,variant:pending.variant},signal:controller.signal});
-      const result=await this.request<{cleared:boolean;active?:boolean}>('/v1/admission/reconcile',{method:'POST',body:JSON.stringify({ticket,admissionId:pending.id,mode:pending.mode,variant:pending.variant})},controller.signal);
+      const {ticket}=await rankingClient.request<{ticket:string}>('/multiplayer/admissions/credential',{method:'POST',body:{mode:pending.mode,variant:pending.variant,admissionId:pending.id},signal:controller.signal});
+      const result=await this.request<{cleared:boolean;active?:boolean}>('/v1/admission/reconcile',{method:'POST',body:JSON.stringify({ticket,purpose:'reconcile',admissionId:pending.id,mode:pending.mode,variant:pending.variant})},controller.signal);
       if(!valid())throw new DOMException('Cancelled','AbortError');
       if(result.cleared){this.savePendingAdmission(null);this.set({status:'lobby',error:undefined,errorCode:undefined});return true;}
       this.set({status:'error',error:result.active?'原房间连接仍在使用，请回到原页面重连或明确离开。':'原加入请求仍在确认中，请稍后重试连接。',errorCode:'ADMISSION_UNCERTAIN'});return false;

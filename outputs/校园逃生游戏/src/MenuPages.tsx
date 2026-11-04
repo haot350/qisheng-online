@@ -4,7 +4,7 @@ import css from './ui/PageShell.module.css';
 import {RefinedMenuNavigation} from './RefinedMenuShell';
 import {useUIPresentation} from '@qisheng/shared/ui';
 
-export type MenuPageId='settings'|'help'|'faq'|'about'|'updates'|'credits'|'copyright'|'ranking'|'feedback'|'account'|'assistant';
+export type MenuPageId='settings'|'help'|'faq'|'about'|'updates'|'credits'|'copyright'|'ranking'|'feedback'|'account'|'assistant'|'blog'|'test';
 export const MenuNavigation=RefinedMenuNavigation;
 
 /** A page returns to the session menu, never through a browser-like history. */

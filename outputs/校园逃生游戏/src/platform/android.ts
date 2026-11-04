@@ -1,12 +1,13 @@
 import type {AccountSessionStore} from '@qisheng/shared/community/client';
 import type {BundledMapResource} from '@qisheng/shared/map-client';
+import {updatePlatformPerformance} from './performance';
 
 type NativeObject={postMessage:(message:string)=>void;onmessage:((event:{data:string})=>void)|null};
 type Reply={id:string;ok:boolean;value?:unknown;error?:string};
 export type AndroidBundleInfo={productId:'qisheng-online-android';applicationId:'com.liuframe.qishengonline';version:string;versionCode:number;channel:'internal'|'public-preview';webVersion:string;internalOnly:boolean;mapManifestSha256:string;resources:BundledMapResource[]};
 type AndroidIdentity={productId:string;applicationId:string;version:string;versionCode:number;channel:string;internalOnly:boolean;session:string};
 export type AndroidPresentation={inSession:boolean;playing:boolean;orientation:'auto'|'landscape'};
-declare global {interface Window {LiuFrameNative?:NativeObject;__qishengNativeEvent?:(type:string)=>void}}
+declare global {interface Window {LiuFrameNative?:NativeObject;__qishengNativeEvent?:(type:string,detail?:unknown)=>void}}
 const pending=new Map<string,{resolve:(value:unknown)=>void;reject:(error:Error)=>void;timer:ReturnType<typeof setTimeout>}>();
 let serial=0,ready=false,token='',sessionQueue:Promise<unknown>=Promise.resolve();
 let bundleInfo:AndroidBundleInfo|undefined;
@@ -59,10 +60,12 @@ export async function initializeAndroid(){
  const bridge=window.LiuFrameNative;
  if(!bridge||location.origin!=='https://game.tianhw.top')throw Error('请从齐盛Online安卓应用打开。');
  bridge.onmessage=event=>{let reply:Reply;try{reply=JSON.parse(event.data) as Reply;}catch{return;}if(typeof reply.id!=='string')return;const job=pending.get(reply.id);if(!job)return;pending.delete(reply.id);clearTimeout(job.timer);if(reply.ok===true)job.resolve(reply.value);else job.reject(Error(typeof reply.error==='string'?reply.error:'操作暂未完成，请重试。'));};
- window.__qishengNativeEvent=type=>{
+ const refreshPerformance=()=>{if(!document.hidden)void request('system.performance',{},3000).then(updatePlatformPerformance).catch(()=>{});};
+ window.__qishengNativeEvent=(type,detail)=>{
+  if(type==='performance'){updatePlatformPerformance(detail);return;}
   if(type==='back'){let handled=false;window.dispatchEvent(new CustomEvent('qisheng:native-back',{detail:{handle(){handled=true;}}}));if(!handled)void request('system.backUnhandled').catch(()=>{});return;}
   if(type==='background'){window.dispatchEvent(new Event('qisheng:native-background'));return;}
-  if(type==='resume')window.dispatchEvent(new Event('qisheng:native-resume'));
+  if(type==='resume'){refreshPerformance();window.dispatchEvent(new Event('qisheng:native-resume'));}
  };
  const [identity,response]=await Promise.all([request<AndroidIdentity>('init'),fetch('/android/bundle-info.json',{cache:'no-store'})]);
  if(!response.ok)throw Error('应用资源未能读取，请重新安装。');
@@ -76,6 +79,9 @@ export async function initializeAndroid(){
  // Never keep a second plaintext account token in WebView storage.
  try{localStorage.removeItem('qisheng-ranking-session-v1');}catch{}
  bundleInfo=info;ready=true;
+ refreshPerformance();
+ const performanceTimer=setInterval(refreshPerformance,15000);
+ addEventListener('pagehide',()=>clearInterval(performanceTimer),{once:true});
  installDownloadAdapter();
  installClipboardAdapter();
  const sessionState=(event:Event)=>{const value=(event as CustomEvent<AndroidPresentation>).detail;if(!value)return;void setAndroidPresentation(value).catch(()=>{});};

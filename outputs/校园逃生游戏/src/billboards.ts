@@ -7,18 +7,25 @@ import {NPC_LAYOUT_V13} from './npc-layout-v13.ts';
 import {NPC_LAYOUT_MOTION} from './npc-layout-motion.ts';
 import {NPC_LAYOUT_COMBAT} from './npc-layout-combat.ts';
 import {NpcLocomotion,chooseNpcPose,isNpcMovingPose,npcWeaponRaised,npcDisplaySkill,type NpcMotionPose} from './npc-locomotion.ts';
-import {NPC_IDENTITY,npcPoseFilename,type NpcIdentityId,type NpcPose} from './npc-roster.ts';
+import {NPC_IDENTITY,npcPoseFilename,npcRealPoseFilename,npcFallbackPoseFilename,type NpcIdentityId,type NpcPose} from './npc-roster.ts';
+import {ensureNpcAppearance,currentNpcVariant,realNpcAsset,npcAppearanceGeneration,npcAppearanceSnapshot,npcAppearanceSubscribe,npcPublicName} from './npc-appearance';
 import {withDeadline} from './network.ts';
 import {resourceWorkQueue,fetchResource,decodeResourceImage,abortResource,waitForResource} from './resource-leases.ts';
 import {staticAssetUrl} from './static-assets.ts';
 import {retainBillboardMask} from './billboard-masks.ts';
 import type {PortraitMask} from './portrait-mask.ts';
 
-type Pose={texture:THREE.Texture;shape:BodyLayout;hand:readonly [number,number,number];alpha:PortraitMask};
-type Entry={key:string;refs:number;abort:AbortController;promise:Promise<Pose>;pose?:Pose;disposed:boolean;maskRelease?:()=>void};
+type Pose={texture:THREE.Texture;baseTexture:THREE.Texture;shape:BodyLayout;hand:readonly [number,number,number];alpha:PortraitMask};
+type Entry={key:string;refs:number;abort:AbortController;promise:Promise<Pose>;pose?:Pose;disposed:boolean;maskRelease?:()=>void;realFilename:string;fictionalFilename:string;fallbackFilename:string;baseIsFallback:boolean;fullWork?:Promise<void>;realTexture?:THREE.Texture;realAbort?:AbortController;realWork?:Promise<void>;realEpoch?:number;realCatalogRevision?:string};
 const cache=new Map<string,Entry>();
 const poseKey=(id:NpcIdentityId,pose:NpcPose,mobile:boolean)=>`${id}:${pose}:${mobile?'mobile':'desktop'}`;
 const cancelled=()=>new Error('人物图片载入已中止。');
+function disposeTexture(texture:THREE.Texture){texture.dispose();(texture.image as {close?:()=>void})?.close?.();}
+function releaseReal(entry:Entry){entry.realAbort?.abort();entry.realAbort=undefined;if(entry.pose)entry.pose.texture=entry.pose.baseTexture;if(entry.realTexture){disposeTexture(entry.realTexture);entry.realTexture=undefined;}}
+function imageTexture(image:Awaited<ReturnType<typeof decodeResourceImage>>){const texture=new THREE.Texture(image);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=2;texture.needsUpdate=true;return texture;}
+async function loadFullFictional(entry:Entry){if(entry.fullWork)return entry.fullWork;if(!entry.pose||!entry.baseIsFallback||entry.refs<=0||typeof document!=='undefined'&&document.hidden)return;const work=(async()=>{const image=await decodeResourceImage(await fetchResource(staticAssetUrl(entry.fictionalFilename),entry.abort.signal),entry.abort.signal);if(entry.refs<=0||currentNpcVariant()==='real'&&entry.realTexture){(image as {close?:()=>void}).close?.();return;}const texture=imageTexture(image),old=entry.pose!.baseTexture;entry.pose!.baseTexture=texture;if(!entry.realTexture)entry.pose!.texture=texture;entry.baseIsFallback=false;disposeTexture(old);})().catch(()=>{}).finally(()=>{if(entry.fullWork===work)entry.fullWork=undefined;});entry.fullWork=work;return work;}
+async function loadReal(entry:Entry){if(entry.realWork)return entry.realWork;if(!entry.pose||entry.refs<=0||entry.realTexture||currentNpcVariant()!=='real')return;const controller=new AbortController(),epoch=npcAppearanceGeneration();entry.realAbort=controller;entry.realEpoch=epoch;let heldImage:Awaited<ReturnType<typeof decodeResourceImage>>|null=null;const work=(async()=>{const bytes=await realNpcAsset(entry.realFilename,controller.signal);if(!bytes)return;const image=await decodeResourceImage(bytes,controller.signal);heldImage=image;if(controller.signal.aborted||entry.refs<=0||epoch!==npcAppearanceGeneration()||currentNpcVariant()!=='real'){(image as {close?:()=>void}).close?.();return;}if(!entry.baseIsFallback){const fallback=await decodeResourceImage(await fetchResource(staticAssetUrl(entry.fallbackFilename),controller.signal),controller.signal);if(controller.signal.aborted||entry.refs<=0||epoch!==npcAppearanceGeneration()){(image as {close?:()=>void}).close?.();(fallback as {close?:()=>void}).close?.();return;}const old=entry.pose!.baseTexture;entry.pose!.baseTexture=imageTexture(fallback);entry.baseIsFallback=true;disposeTexture(old);}const texture=imageTexture(image);entry.realTexture=texture;entry.realCatalogRevision=npcAppearanceSnapshot().catalogRevision;entry.pose!.texture=texture;heldImage=null;})().catch(()=>{}).finally(()=>{(heldImage as {close?:()=>void}|null)?.close?.();if(entry.realWork===work)entry.realWork=undefined;if(entry.realAbort===controller)entry.realAbort=undefined;if(epoch!==npcAppearanceGeneration()&&currentNpcVariant()==='real'&&entry.refs>0&&!entry.realTexture&&!entry.abort.signal.aborted)void resourceWorkQueue.run(entry.abort.signal,()=>loadReal(entry)).catch(()=>{});});entry.realWork=work;return work;}
+npcAppearanceSubscribe(()=>{for(const entry of cache.values()){if(currentNpcVariant()!=='real'){releaseReal(entry);if(entry.pose&&entry.baseIsFallback)void resourceWorkQueue.run(entry.abort.signal,()=>loadFullFictional(entry)).catch(()=>{});}else{if(entry.realTexture&&entry.realCatalogRevision!==npcAppearanceSnapshot().catalogRevision||entry.realWork&&entry.realEpoch!==npcAppearanceGeneration())releaseReal(entry);if(entry.pose&&!entry.realTexture&&!entry.realWork)void resourceWorkQueue.run(entry.abort.signal,()=>loadReal(entry)).catch(()=>{});}}});
 
 export function npcPortraitLayout(id:NpcIdentityId,pose:NpcPose):{shape:BodyLayout;hand:readonly [number,number,number]}{
  const rows=NPC_LAYOUT_COMBAT as unknown as Record<string,Record<string,BodyLayout&{hand:readonly [number,number,number]}>>;
@@ -42,17 +49,17 @@ function releaseEntry(entry:Entry){
   if(cache.get(entry.key)===entry)cache.delete(entry.key);
   entry.abort.abort();
   entry.maskRelease?.();
-  if(entry.pose&&!entry.disposed){entry.disposed=true;entry.pose.texture.dispose();}
+  releaseReal(entry);if(entry.pose&&!entry.disposed){entry.disposed=true;disposeTexture(entry.pose.baseTexture);}
  }
 }
 function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
  const key=poseKey(id,pose,mobile),existing=cache.get(key);
  if(existing&&!existing.abort.signal.aborted){existing.refs++;return existing;}
- const abort=new AbortController(),entry:Entry={key,refs:1,abort,promise:undefined as unknown as Promise<Pose>,disposed:false};
+ const preferReal=currentNpcVariant()==='real',abort=new AbortController(),entry:Entry={key,refs:1,abort,promise:undefined as unknown as Promise<Pose>,disposed:false,realFilename:npcRealPoseFilename(id,pose,mobile),fictionalFilename:npcPoseFilename(id,pose,mobile),fallbackFilename:npcFallbackPoseFilename(id,pose),baseIsFallback:preferReal};
  cache.set(key,entry);
  const filename=npcPoseFilename(id,pose,mobile);
  entry.promise=resourceWorkQueue.run(abort.signal,async()=>{
-  const bytes=await withDeadline(fetchResource(staticAssetUrl(filename),abort.signal),30000,{signal:abort.signal});
+  const bytes=await withDeadline(fetchResource(staticAssetUrl(preferReal?entry.fallbackFilename:filename),abort.signal),30000,{signal:abort.signal});
   const maskLease=retainBillboardMask(filename,abort.signal);entry.maskRelease=maskLease.release;
   const maskWork=maskLease.mask;void maskWork.catch(()=>{});
   const image=await withDeadline(decodeResourceImage(bytes,abort.signal),30000,{signal:abort.signal});abortResource(abort.signal);
@@ -61,10 +68,10 @@ function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
    texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=2;
    const {shape,hand}=npcPortraitLayout(id,pose),alpha=await maskWork;
    const im=texture.image as {width:number;height:number};
-   if(alpha.width!==im.width||alpha.height!==im.height)throw Error('人物图片与轮廓尺寸不一致。');
+   if(!entry.baseIsFallback&&(alpha.width!==im.width||alpha.height!==im.height))throw Error('人物图片与轮廓尺寸不一致。');
    if(entry.refs===0)throw cancelled();
-   const loaded={texture,shape,hand,alpha};entry.pose=loaded;return loaded;
-  }catch(error){texture.dispose();entry.disposed=true;throw error;}
+   const loaded={texture,baseTexture:texture,shape,hand,alpha};entry.pose=loaded;await loadReal(entry);if(!entry.realTexture)await loadFullFictional(entry);return loaded;
+  }catch(error){disposeTexture(texture);entry.disposed=true;throw error;}
  }).catch(error=>{entry.maskRelease?.();abort.abort();if(cache.get(key)===entry)cache.delete(key);throw error;});
  return entry;
 }
@@ -72,6 +79,7 @@ function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
 /** Load selected identities only; overlapping rounds share identity/pose/quality entries. */
 export async function prepareBillboards(ids:readonly NpcIdentityId[],progress:(p:number)=>void=()=>{},mobile=false,signal?:AbortSignal):Promise<()=>void>{
  if(signal?.aborted)throw cancelled();
+ await ensureNpcAppearance();if(signal?.aborted)throw cancelled();
  const unique=[...new Set(ids)],entries=unique.flatMap(id=>NPC_IDENTITY[id].poses.map(pose=>retainEntry(id,pose,mobile)));
  let released=false,completed=0;
  const release=()=>{if(released)return;released=true;entries.forEach(releaseEntry);};
@@ -97,7 +105,7 @@ export function createBillboardCharacter(identityId:NpcIdentityId,mobile=false){
  const retained=entries as Entry[];retained.forEach(entry=>entry.refs++);
  const poses=Object.fromEntries(def.poses.map((pose,i)=>[pose,retained[i].pose!])) as Record<NpcPose,Pose>;
  const geometries=Object.fromEntries(def.poses.map(pose=>[pose,poseGeometry(poses[pose].shape)])) as Record<NpcPose,THREE.PlaneGeometry>;
- const root=new THREE.Group();root.name=def.name;root.userData.identityId=identityId;
+ const root=new THREE.Group();root.name=npcPublicName(identityId,def.name);root.userData.identityId=identityId;
  const material=new THREE.MeshBasicMaterial({map:poses.idle.texture,alphaTest:.5,side:THREE.DoubleSide,toneMapped:false,depthTest:true,depthWrite:true});
  const plane=new THREE.Mesh(geometries.idle,material);plane.name=`${identityId}-portrait`;root.add(plane);
  const shade=new THREE.Mesh(new THREE.CircleGeometry(.36,20),new THREE.MeshBasicMaterial({color:0x192522,transparent:true,opacity:.17,depthWrite:false}));shade.rotation.x=-Math.PI/2;shade.position.y=.025;root.add(shade);
@@ -108,7 +116,7 @@ export function createBillboardCharacter(identityId:NpcIdentityId,mobile=false){
   const motion=gait.update(dt,state.speed,root.position);
   const displaySkill=npcDisplaySkill(identityId,state.skill,def.skill);
   const next=state.portraitPose&&Object.hasOwn(poses,state.portraitPose)?state.portraitPose:chooseNpcPose(motion,{...state,skill:displaySkill},!!poses.skill);
-  if(next!==variant){variant=next;plane.geometry=geometries[variant];material.map=poses[variant].texture;}plane.userData.pose=variant;
+  if(next!==variant){variant=next;plane.geometry=geometries[variant];}if(material.map!==poses[variant].texture)material.map=poses[variant].texture;root.name=npcPublicName(identityId,def.name);plane.userData.pose=variant;
   plane.scale.y=1-suppressed*.38;plane.position.y=isNpcMovingPose(variant)&&suppressed<.1?(state.portraitBob??motion.bob):0;
   if(camera){camera.getWorldPosition(cameraPosition);plane.rotation.y=Math.atan2(cameraPosition.x-root.position.x,cameraPosition.z-root.position.z)-root.rotation.y;}
   material.color.setHex(state.hit>0?0xffd8c7:state.suppressed>0?0xb4b6bb:0xffffff);
@@ -116,12 +124,12 @@ export function createBillboardCharacter(identityId:NpcIdentityId,mobile=false){
   gun.update(dt,{aimTarget:state.aimTarget,gripWorld:gripWorld.copy(desiredGrip).applyMatrix4(root.matrixWorld),reloadProgress:state.reloadProgress??0,shotSerial:state.shotSerial??0,lowered:!npcWeaponRaised(variant,state),action:state.action});
   gun.root.position.copy(desiredGrip).sub(gun.getAnchorLocal('grip',gripOffset).applyQuaternion(gun.root.quaternion));root.updateWorldMatrix(true,true);
  };
- return{root,update,preparationTextures:Object.values(poses).map(pose=>pose.texture),resetPresentation(){gait.reset();suppressed=0;variant='idle';plane.geometry=geometries.idle;material.map=poses.idle.texture;material.color.setHex(0xffffff);plane.position.set(0,0,0);plane.rotation.set(0,0,0);plane.scale.set(1,1,1);for(const value of [cameraPosition,desiredGrip,gripOffset,gripWorld])value.set(0,0,0);gun.update(0,{reloadProgress:0,shotSerial:0,resetShot:true,lowered:true});},setWeapon(id:WeaponKind){gun.setWeapon(id);},getMuzzleWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleWorld();},getMuzzleDirectionWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleDirectionWorld();},getEjectionWorld(){root.updateWorldMatrix(true,true);return gun.getEjectionWorld();},getAimReady(toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.getAimReady(toleranceRadians);},isAimReady(target:THREE.Vector3,toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.isAimReady(target,toleranceRadians);},hitTest(origin:THREE.Vector3,direction:THREE.Vector3){return portraitHit(origin,direction,plane,poses[variant].shape,poses[variant].alpha);},dispose(){if(disposed)return;disposed=true;gun.dispose();Object.values(geometries).forEach(g=>g.dispose());material.dispose();shade.geometry.dispose();(shade.material as THREE.Material).dispose();root.clear();retained.forEach(releaseEntry);}};
+ return{root,update,preparationTextures:Object.values(poses).flatMap(pose=>pose.texture===pose.baseTexture?[pose.texture]:[pose.baseTexture,pose.texture]),resetPresentation(){gait.reset();suppressed=0;variant='idle';plane.geometry=geometries.idle;material.map=poses.idle.texture;material.color.setHex(0xffffff);plane.position.set(0,0,0);plane.rotation.set(0,0,0);plane.scale.set(1,1,1);for(const value of [cameraPosition,desiredGrip,gripOffset,gripWorld])value.set(0,0,0);gun.update(0,{reloadProgress:0,shotSerial:0,resetShot:true,lowered:true});},setWeapon(id:WeaponKind){gun.setWeapon(id);},getMuzzleWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleWorld();},getMuzzleDirectionWorld(){root.updateWorldMatrix(true,true);return gun.getMuzzleDirectionWorld();},getEjectionWorld(){root.updateWorldMatrix(true,true);return gun.getEjectionWorld();},getAimReady(toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.getAimReady(toleranceRadians);},isAimReady(target:THREE.Vector3,toleranceRadians=.12){root.updateWorldMatrix(true,true);return gun.isAimReady(target,toleranceRadians);},hitTest(origin:THREE.Vector3,direction:THREE.Vector3){return portraitHit(origin,direction,plane,poses[variant].shape,poses[variant].alpha);},dispose(){if(disposed)return;disposed=true;gun.dispose();Object.values(geometries).forEach(g=>g.dispose());material.dispose();shade.geometry.dispose();(shade.material as THREE.Material).dispose();root.clear();retained.forEach(releaseEntry);}};
 }
 
 
 export function billboardResourceDiagnostics(){
- let pixels=0,references=0,ready=0,alphaMaskBytes=0;
- for(const entry of cache.values()){references+=entry.refs;if(entry.pose){ready++;alphaMaskBytes+=entry.pose.alpha.bits.byteLength;const image=entry.pose.texture.image as {width:number;height:number};pixels+=image.width*image.height;}}
- return{entries:cache.size,ready,references,decodedPixels:pixels,approxRgbaBytes:pixels*4,alphaMaskBytes,keys:[...cache.keys()]};
+ let pixels=0,references=0,ready=0,alphaMaskBytes=0,fallbackPixels=0,realTextures=0;
+ for(const entry of cache.values()){references+=entry.refs;if(entry.pose){ready++;alphaMaskBytes+=entry.pose.alpha.bits.byteLength;const image=entry.pose.texture.image as {width:number;height:number};pixels+=image.width*image.height;if(entry.pose.baseTexture!==entry.pose.texture){const fallback=entry.pose.baseTexture.image as {width:number;height:number};pixels+=fallback.width*fallback.height;fallbackPixels+=fallback.width*fallback.height;}if(entry.realTexture)realTextures++;}}
+ return{entries:cache.size,ready,references,decodedPixels:pixels,approxRgbaBytes:pixels*4,fallbackRgbaBytes:fallbackPixels*4,realTextures,alphaMaskBytes,keys:[...cache.keys()]};
 }

@@ -209,6 +209,7 @@ export class ChunkStreamer<T> {
   }
   inCombatView(url:string){return this.combatUrls.has(url);}
   hasCombatLease(){return this.combatLeases.size>0;}
+  private memoryHint=(event:Event)=>{if((event as CustomEvent<{lowMemory?:boolean}>).detail?.lowMemory)this.trimIdle();};
   constructor(
     private chunks: MapChunk[],
     private load: (
@@ -225,6 +226,19 @@ export class ChunkStreamer<T> {
     this.bounds = new Map(chunks.map((c) => [c.url, viewBounds(c)]));
     this.combatCore = chunks.filter(combatStructure);
     this.lodSelection=new MapLodSelection(chunks);
+    if(typeof window!=='undefined')window.addEventListener('qisheng:performance',this.memoryHint);
+  }
+  /** Release only unowned, invisible resources; current and upcoming paths stay ready. */
+  trimIdle(){
+    if(!this.alive)return 0;
+    let removed=0;
+    for(const [url,asset] of this.assets){
+      if(this.pinned(url)||this.neededUrls.has(url)||this.wantedUrls.has(url)||this.combatUrls.has(url)||this.viewUrls.has(url))continue;
+      this.assets.delete(url);this.lastWanted.delete(url);this.release(asset);removed++;this.counters.evictions++;this.counters.budgetEvictions++;
+    }
+    for(const url of [...this.requests.keys()])if(this.priority(url)===Infinity)this.cancelRequest(url);
+    if(removed){this.revision++;this.residencyRevision=-1;this.cachedStatus=null;this.changed();for(const notify of this.listeners)notify();}
+    return removed;
   }
   distanceTo(url: string) {
     return this.distances.get(url) ?? Infinity;
@@ -813,6 +827,7 @@ export class ChunkStreamer<T> {
   }
   dispose() {
     if (!this.alive) return;
+    if(typeof window!=='undefined')window.removeEventListener('qisheng:performance',this.memoryHint);
     this.alive = false;
     this.leases.clear();
     this.combatLeases.clear();

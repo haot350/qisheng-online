@@ -86,7 +86,7 @@ const required = [
   ...NPC_POSE_WEBPS, 'audio/run.mp3',
   'audio/escape-search.wav','audio/escape-combat.wav','audio/escape-extraction.wav','audio/escape-score.json',
   ...['glock','mp5','m4a1','ak47','r870','awm','m249'].flatMap(id=>[`weapons/${id}-near.glb`,`weapons/${id}-far.glb`]),
-  'map/drive-v122.json','vehicles/bao5-v122.manifest.json','vehicles/bao5-v122.glb','images/dafei-guide.webp',
+  'map/drive-v122.json','vehicles/bao5-v122.manifest.json','vehicles/bao5-v122.glb','characters/fictional/dafei-guide.webp',
   ...['tank','scooter'].flatMap(id=>['glb','manifest.json'].map(ext=>'vehicles/campus-'+id+'-r1.'+ext)),
   ...['bao5','tank','scooter'].map(id=>'vehicles/'+id+'-card.webp'),
   'story/archive/manifest.json','story/camera/manifest.json',
@@ -96,7 +96,7 @@ const required = [
 // all runtime resources, and lazy imports may gain assets after initial startup.
 const storyFiles = (await walk(path.join(publicRoot, 'story'))).map(name => 'story/' + name);
 if (!storyFiles.length) throw new Error(`The ${releaseLabel} story resource tree is empty.`);
-const characterPoseWebps = required.filter(name => name.startsWith('characters/billboards/') && name.endsWith('.webp'));
+const characterPoseWebps = required.filter(name => name.startsWith('characters/fictional/') && name.endsWith('.webp') && !name.endsWith('dafei-guide.webp'));
 if (characterPoseWebps.length !== NPC_POSE_WEBP_COUNT || new Set(characterPoseWebps).size !== NPC_POSE_WEBP_COUNT) throw new Error(`The current-character release must include exactly ${NPC_POSE_WEBP_COUNT} distinct pose WebPs, including desktop and mobile locomotion frames.`);
 const drivingManifest=JSON.parse(await fs.readFile((await fileInfo(distRoot,'map/drive-v122.json')).absolute,'utf8'));
 // Public preview numbering does not change the accepted v1.2.2 driving geometry.

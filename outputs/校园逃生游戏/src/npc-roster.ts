@@ -9,7 +9,9 @@ export const NPC_COMBAT_POSES=['combat-walk-a','combat-walk-b','combat-run-a','c
 export type NpcCombatPose=typeof NPC_COMBAT_POSES[number];
 export type NpcPose='idle'|'attack'|'skill'|'walk-a'|'walk-b'|'run-a'|'run-b'|NpcCombatPose;
 /** New art is versioned; originals remain available for earlier releases. */
-export function npcPoseFilename(id:NpcIdentityId,pose:NpcPose,mobile=false){
+export function npcPoseFilename(id:NpcIdentityId,pose:NpcPose,mobile=false){return '/characters/fictional/'+(mobile?'mobile':'desktop')+'/'+id+'-'+pose+'.webp';}
+export function npcFallbackPoseFilename(id:NpcIdentityId,pose:NpcPose){return '/characters/fictional/fallback/'+id+'-'+pose+'.webp';}
+export function npcRealPoseFilename(id:NpcIdentityId,pose:NpcPose,mobile=false){
  if(['wangwenrui','wangdi','wangyuhan'].includes(id)||(id==='meng'&&pose==='skill'))return '/characters/billboards/v090/'+(mobile?'mobile/':'')+id+(pose==='idle'?'':'-'+pose)+'.webp';
  const revision=pose==='attack'||NPC_COMBAT_POSES.includes(pose as NpcCombatPose)?'v032/':'';
  return '/characters/billboards/'+revision+(mobile?'mobile/':'')+id+(pose==='idle'?'':'-'+pose)+'.webp';

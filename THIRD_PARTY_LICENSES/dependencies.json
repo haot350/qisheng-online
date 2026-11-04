@@ -129,6 +129,46 @@
     ]
   },
   {
+    "name": "@tiptap/core",
+    "version": "3.32.2",
+    "license": "MIT",
+    "files": [
+      "@tiptap__core-LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/extension-image",
+    "version": "3.32.2",
+    "license": "MIT",
+    "files": [
+      "@tiptap__extension-image-LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/react",
+    "version": "3.32.2",
+    "license": "MIT",
+    "files": [
+      "@tiptap__react-LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/starter-kit",
+    "version": "3.32.2",
+    "license": "MIT",
+    "files": [
+      "@tiptap__starter-kit-LICENSE.md"
+    ]
+  },
+  {
+    "name": "@tiptap/static-renderer",
+    "version": "3.32.2",
+    "license": "MIT",
+    "files": [
+      "@tiptap__static-renderer-LICENSE.md"
+    ]
+  },
+  {
     "name": "@types/better-sqlite3",
     "version": "7.6.13",
     "license": "MIT",

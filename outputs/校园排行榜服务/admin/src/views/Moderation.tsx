@@ -1,3 +1,4 @@
+import {ToggleButton} from '../ui';
 import { useState } from "react";
 import {
   api,
@@ -373,11 +374,7 @@ function PlayerEdit({
         />
       </Field>
       <label className="check">
-        <input
-          type="checkbox"
-          checked={restricted}
-          onChange={(e) => setRestricted(e.target.checked)}
-        />
+        <ToggleButton checked={restricted} onChange={value => setRestricted(value)} />
         限制参与在线排行榜
       </label>
       <p className="muted">

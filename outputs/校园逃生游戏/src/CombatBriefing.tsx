@@ -2,7 +2,7 @@ import {useDialogFocus} from './dialog-focus';
 import styles from './CombatBriefing.module.css';
 export type CombatBriefingMode='solo'|'coop'|'tdm'|'ffa';
 export const COMBAT_BRIEFINGS:Record<CombatBriefingMode,{title:string;rules:{title:string;body:string}[]}>= {
- solo:{title:'单人突围',rules:[{title:'完成任务，再回校门',body:'本局有三项任务，次序由你决定。完成后回到校门，守住撤离范围。'},{title:'靠近目标，再互动',body:'任务、掉落枪械和绿色补给箱都能互动。画面会提示眼前可以做什么，不必先切换追踪任务。'},{title:'利用掩体，留意补给',body:'生命归零或时间耗尽，本局结束。交火后可以躲进掩体恢复；击倒的追兵还会重新入场。'}]},
+ solo:{title:'单人突围',rules:[{title:'完成任务，再回校门',body:'完成三项任务后回到校门，守住撤离范围。'},{title:'靠近目标，再互动',body:'沿指引前往任务地点。靠近任务、掉落枪械或补给箱时，按提示互动。'},{title:'利用掩体，留意补给',body:'生命归零或时间耗尽，本局结束。交火后可以躲进掩体恢复；击倒的追兵还会重新入场。'}]},
  coop:{title:'合作突围',rules:[{title:'一起完成，一起撤离',body:'全队共享三项任务。全部完成后，能行动的队员一起到校门撤离。'},{title:'队友倒地，靠近救援',body:'倒地后有30秒等待救援。队友在身边持续救援5秒即可扶起；移动或开火会中断救援。'},{title:'菜单不会暂停其他人',body:'需要休息时，可以在菜单申请全员暂停。任务物资可放下交接，补给按每人分别领取。'}]},
  tdm:{title:'团队对战',rules:[{title:'十分钟，比队伍击倒数',body:'蓝队与红队对抗，结束时击倒数较高的一队获胜。队友之间没有友伤。'},{title:'倒下后，等待重新入场',body:'倒下后至少等待5秒，在安全位置复活。出生保护最多2秒，主动开枪后立即结束。'},{title:'选好装备，再出发',body:'每次复活前可以在菜单更换主枪。靠近掉落枪械可主动拾取；打开菜单时对局仍会继续。'}]},
  ffa:{title:'个人混战',rules:[{title:'十分钟，各自为战',body:'场上其他玩家都是对手。结束时先比较击倒数，再比较较少的死亡数。'},{title:'倒下后，等待重新入场',body:'倒下后至少等待5秒，在安全位置复活。出生保护最多2秒，主动开枪后立即结束。'},{title:'留意枪声与周围',body:'敌情提示只会短暂保留。可以靠近掉落枪械主动拾取；打开菜单时对局仍会继续。'}]}

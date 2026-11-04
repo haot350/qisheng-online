@@ -13,7 +13,7 @@ export function stairGuideForRoute(position:Vec3,route:readonly Vec3[],stairs:Ma
   for(const point of stair.points){let best={along:Infinity,distance:Infinity};for(let i=1;i<nodes.length;i++){const hit=projection(point,nodes[i-1],nodes[i]);if(hit.distance<best.distance)best={distance:hit.distance,along:offsets[i-1]+hit.t*distance(nodes[i-1],nodes[i])};}if(best.distance<.6)matches.push({along:best.along,y:point[1],point});}
   if(matches.length<2||Math.max(...matches.map(m=>m.y))-Math.min(...matches.map(m=>m.y))<.6)continue;
   matches.sort((a,b)=>a.along-b.along);const first=matches[0],last=matches[matches.length-1];if(direction==='up'?last.y-first.y<.5:first.y-last.y<.5)continue;
-  if(!result||first.along<result.distance)result={core:stair.core,label:cores.length===2?(stair.core===cores[0]?'西侧楼梯':'东侧楼梯'):'楼梯',direction,floor:targetFloor,position:[...first.point],distance:first.along};
+  if(!result||first.along<result.distance)result={core:stair.core,label:/south|middle|north/.test(stair.core)?(stair.core.startsWith('south')?'南楼':stair.core.startsWith('middle')?'中楼':'北楼')+(/east/.test(stair.core)?'东侧楼梯':'西侧楼梯'):cores.length===2?(stair.core===cores[0]?'西侧楼梯':'东侧楼梯'):'楼梯',direction,floor:targetFloor,position:[...first.point],distance:first.along};
  }
  return result;
 }

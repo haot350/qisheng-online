@@ -41,7 +41,7 @@ export class PreparationProgress {
     this.last = Math.max(this.last, this.work.reduce((sum, item) => sum + item.value, 0) / Math.max(1, this.work.length));
     const done = this.work.filter(item => item.value === 1).length;
     this.publish(this.last, active
-      ? (active === task && detail ? detail : active.label) + ` · ${done}/${this.work.length} 项`
+      ? (active === task && detail ? detail : active.label) + ` ${done}/${this.work.length} 项`
       : '准备完成');
   }
   timings(): PreparationTiming[] {

@@ -4,12 +4,14 @@ import './vehicle-ui.css';
 import {MenuChoice} from './MenuChoice';
 import {VEHICLES,vehicleDefinition,type DrivingVehicleId} from './vehicles';
 import {staticAssetUrl} from './static-assets.ts';
-import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
+import {createContext,useContext,useEffect,useRef,useState,useSyncExternalStore,type ReactNode} from 'react';
 import {DRIVE_RULES} from './driving-rules';
 import {DialoguePlayback} from './dafei-dialogue';
 import type {DriveInput,DrivingSnapshot,GameAPI,TransmissionMode} from './types';
 import {type PointerPosition,type PointerSession} from './pointer-owner';
 import {usePointerSession} from './use-pointer-session';
+import {NpcPortrait} from './NpcPortrait';
+import {npcPublicText,npcAppearanceSubscribe,npcAppearanceSnapshot} from './npc-appearance';
 
 const DrivePointerContext=createContext<PointerSession|null>(null);
 function useDrivePointers(){const shared=useContext(DrivePointerContext),standalone=usePointerSession(true,!shared);return shared??standalone;}
@@ -20,6 +22,7 @@ function Arrow(){return <svg width="22" height="22" viewBox="0 0 24 24" fill="no
 function direction(angle:number){const names=['前方','右前方','右侧','右后方','后方','左后方','左侧','左前方'];return names[((Math.round(angle/(Math.PI/4))%8)+8)%8];}
 
 export function DafeiIntro({onStart,onBack,onCue,onHelp,onRetry,busy,error='',progress=100,suspended=false,touch=false}:{onStart:()=>void;onBack:()=>void;onCue?:()=>void;onHelp:()=>void;onRetry:()=>void;busy:boolean;error?:string;progress?:number;suspended?:boolean;touch?:boolean}){
+  useSyncExternalStore(npcAppearanceSubscribe,npcAppearanceSnapshot);
   const playback=useRef(new DialoguePlayback()),panel=useRef<HTMLDivElement>(null),lastCuedLine=useRef(-1);
   const [state,setState]=useState(()=>playback.current.snapshot),[photoFailed,setPhotoFailed]=useState(false);
   const [environmentPaused,setEnvironmentPaused]=useState(()=>typeof document!=='undefined'&&(document.hidden||(touch&&innerHeight>innerWidth)));
@@ -33,9 +36,9 @@ export function DafeiIntro({onStart,onBack,onCue,onHelp,onRetry,busy,error='',pr
     if((e.key==='Enter'||e.key===' '||e.key==='ArrowRight')&&!(e.target instanceof HTMLButtonElement)){e.preventDefault();advance();}
     if(e.key==='Tab'){const controls=panel.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');if(!controls?.length)return;const first=controls[0],last=controls[controls.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
   }}><div className={d("dafei-intro-panel")} ref={panel}>
-    <figure className={d("dafei-portrait")}>{!photoFailed&&<img src={staticAssetUrl('/images/dafei-guide.webp')} alt="大飞老师的开场肖像" onError={()=>setPhotoFailed(true)}/>}</figure>
-    <div className={d("dafei-dialogue")}><h2 id="dafei-intro-title">大飞老师</h2>
-      {busy?progress<100?<div className={d("intro-loading")} role="status"><p>准备校园与载具</p><progress max={100} value={Math.max(0,Math.min(100,progress))}/></div>:<p className={d("dafei-line")} role="status">正在进入校园…</p>:error?<p className={d("intro-error")} role="alert">{error}</p>:state.ended?<p className={d("dafei-line")}>走吧。先送哪位，你定。</p>:<button className={d("dafei-line dialogue-advance")} aria-label={state.complete?'下一句对白':'显示完整对白'} onClick={advance}><span>{state.text||'\u00a0'}</span><span className={d("dialogue-hint")}>{state.complete?'点击继续':'点击补全'}</span></button>}
+    <figure className={d("dafei-portrait")}>{!photoFailed&&<NpcPortrait logical="/images/dafei-guide.webp" fictional="/characters/fictional/dafei-guide.webp" alt={npcPublicText('大飞老师')} onError={()=>setPhotoFailed(true)}/>}</figure>
+    <div className={d("dafei-dialogue")}><h2 id="dafei-intro-title">{npcPublicText('大飞老师')}</h2>
+      {busy?progress<100?<div className={d("intro-loading")} role="status"><p>准备校园与载具</p><progress max={100} value={Math.max(0,Math.min(100,progress))}/></div>:<p className={d("dafei-line")} role="status">正在进入校园…</p>:error?<p className={d("intro-error")} role="alert">{error}</p>:state.ended?<p className={d("dafei-line")}>走吧。先送哪位，你定。</p>:<button className={d("dafei-line dialogue-advance")} aria-label={state.complete?'下一句对白':'显示完整对白'} onClick={advance}><span>{npcPublicText(state.text)||'\u00a0'}</span><span className={d("dialogue-hint")}>{state.complete?'点击继续':'点击补全'}</span></button>}
       <div className={d("dafei-intro-actions")}>
         {error?<button className={d("primary")} onClick={onRetry} disabled={busy}>重试准备<Arrow/></button>:state.ended&&<><button className={d("primary")} onClick={onStart} disabled={busy}>开始驾驶<Arrow/></button><button className={d("text-button")} onClick={onHelp} disabled={busy}>操作说明</button></>}
         {!state.ended&&!error&&<button className={d("text-button")} onClick={()=>{playback.current.skip();setState(playback.current.snapshot);}} disabled={busy||suspended}>跳过对白</button>}

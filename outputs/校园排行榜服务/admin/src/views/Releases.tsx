@@ -1,3 +1,4 @@
+import {ToggleButton} from '../ui';
 import { useState } from "react";
 import {UE_WINDOWS_PREVIEW} from '@qisheng/shared/player-content';
 import { api, stamp, useResource, type Row } from "../api";
@@ -169,11 +170,7 @@ function ReleaseEditor({
         />
       </Field>
       <label className="check">
-        <input
-          type="checkbox"
-          checked={form.published}
-          onChange={(e) => patch("published", e.target.checked)}
-        />
+        <ToggleButton checked={form.published} onChange={value => patch("published", value)} />
         公开此更新说明
       </label>
       <FormError error={error} />

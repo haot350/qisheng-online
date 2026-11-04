@@ -9,7 +9,7 @@ export async function buildStaticAssets(project,kind='game') {
  if(kind==='game')await (await import('./sync-fresh-helper.mjs')).syncFreshBrowser(project);
  if(kind==='game')console.log('Portrait alpha masks:',await (await import('./build-billboard-masks.mjs')).buildBillboardMasks(project));
  const publicRoot=path.resolve(project,'public');
- const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/billboards','characters/players','characters/portrait-masks','assets/ui-b']:['images','poster.jpg','assets/ui-b'];
+ const roots=kind==='game'?['credits','audio','avatars','images','story','vehicles','weapons','weapon-cards','characters/fictional','characters/players','characters/fictional-masks','assets/ui-b']:['images','poster.jpg','assets/ui-b'];
  const extensions=new Set(['.glb','.mp3','.wav','.ogg','.m4a','.webp','.png','.jpg','.jpeg','.svg','.woff2','.bin']);
  const resources={};let bytes=0;
  const walk=async logical=>{

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {createHash} from 'node:crypto';import {spawn} from 'node:child_process';import {fileURLToPath} from 'node:url';
 import {readReleaseConfig} from './release-config.mjs';
 import {androidSourceSnapshot} from './source-snapshot.mjs';
+import {packAssetEntities} from './asset-entities.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const releaseConfig=await readReleaseConfig();
 const args=process.argv.slice(2),argument=name=>{const index=args.indexOf(name);return index<0?undefined:args[index+1];};
@@ -70,7 +71,7 @@ const info={schema:1,...releaseConfig,available:false,webVersion:metadata.versio
 await fs.writeFile(path.join(overlay,'android/bundle-info.json'),JSON.stringify(info));
 const release={version:metadata.version,releaseId:'android-'+releaseConfig.version+'-web-'+sha(mapBytes).slice(0,12),protocolVersion:releaseConfig.protocolVersion,productId:info.productId,nativeVersion:releaseConfig.version,versionCode:releaseConfig.versionCode,channel:releaseConfig.channel,internalOnly:releaseConfig.internalOnly,mapManifestSha256:info.mapManifestSha256};
 const releaseBytes=Buffer.from(JSON.stringify(release));await fs.writeFile(path.join(overlay,'android/release-manifest.json'),releaseBytes);rows.push({path:'android/release-manifest.json',url:'/release-manifest.json',bytes:releaseBytes.length,sha256:sha(releaseBytes)});
-const visit=async(directory,base,prefix='')=>{for(const file of await fs.readdir(path.join(base,directory),{withFileTypes:true})){const relative=directory?directory+'/'+file.name:file.name;if(file.isSymbolicLink())throw Error('APK assets cannot be links');if(file.isDirectory()){if(relative==='.vite'||relative==='android/runtime/.vite'||relative==='android/encoded')continue;await visit(relative,base,prefix);}else if(file.isFile()){
+const visit=async(directory,base,prefix='')=>{for(const file of await fs.readdir(path.join(base,directory),{withFileTypes:true})){const relative=directory?directory+'/'+file.name:file.name;if(file.isSymbolicLink())throw Error('APK assets cannot be links');if(file.isDirectory()){if(relative==='.vite'||relative==='android/runtime/.vite'||relative==='android/encoded'||relative==='android/content')continue;await visit(relative,base,prefix);}else if(file.isFile()){
  if(base===dist&&excluded.has(relative))continue;
  if(base===overlay&&(relative.startsWith('android/documents/')||relative==='android/release-manifest.json'||relative==='android/asset-manifest.json'||relative==='android/licenses/dependencies.json'))continue;
  if(/(?:^|\/)(?:private|node_modules|\.git|qa)(?:\/|$)|\.(?:jks|keystore|pem|sqlite|db|log)$|(?:^|\/)\.env(?:\.|$)|production\.json/i.test(relative))throw Error('A non-player/private file entered the APK asset source: '+relative);
@@ -84,7 +85,9 @@ const visit=async(directory,base,prefix='')=>{for(const file of await fs.readdir
 await visit('',dist);await visit('',overlay);
 const urls=new Set();for(const row of rows){const url=row.url??'/'+row.path;if(urls.has(url))throw Error('Duplicate local asset URL: '+url);urls.add(url);}
 for(const item of resources.values()){const row=rows.find(row=>(row.url??'/'+row.path)===item.url);if(!row||row.bytes!==item.bytes||row.sha256!==item.sha256)throw Error('Bundled map bytes differ from the accepted resource index');}
-const manifest={schema:1,productId:info.productId,applicationId:info.applicationId,version:releaseConfig.version,versionCode:releaseConfig.versionCode,channel:releaseConfig.channel,webVersion:metadata.version,internalOnly:releaseConfig.internalOnly,mapManifestSha256:info.mapManifestSha256,files:rows.sort((a,b)=>a.path.localeCompare(b.path))};
+const packed=await packAssetEntities(rows,{dist,overlay});
+await fs.writeFile(path.join(root,'work/asset-deduplication.json'),JSON.stringify({createdAt:new Date().toISOString(),...packed.report},null,2)+'\n');
+const manifest={schema:1,productId:info.productId,applicationId:info.applicationId,version:releaseConfig.version,versionCode:releaseConfig.versionCode,channel:releaseConfig.channel,webVersion:metadata.version,internalOnly:releaseConfig.internalOnly,mapManifestSha256:info.mapManifestSha256,files:packed.files.sort((a,b)=>a.url.localeCompare(b.url))};
 const manifestBytes=Buffer.from(JSON.stringify(manifest));await fs.writeFile(path.join(overlay,'android/asset-manifest.json'),manifestBytes);
 const icon=path.join(dist,'branding/qisheng-online-icon.png');try{await fs.mkdir(path.join(root,'app/src/main/res/drawable-nodpi'),{recursive:true});await fs.copyFile(icon,path.join(root,'app/src/main/res/drawable-nodpi/ic_qisheng_logo.png'));}catch{throw Error('The accepted game icon is required');}
 const source=await androidSourceSnapshot(root,game,{mapManifestSha256:info.mapManifestSha256,bundleManifestSha256:sha(manifestBytes),protocolVersion:info.protocolVersion});

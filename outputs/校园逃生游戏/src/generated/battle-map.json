@@ -1,0 +1,1 @@
+{"schema":1,"sourceSha256":"anonymous-demo-map-1","visualRevision":"anonymous-demo-1","bounds":{"min":[-24,-4,-24],"max":[24,10,24]},"buildings":[],"levels":[],"stairs":[],"rooms":[],"landmarks":[{"id":"demo-ground","label":"演示场地","position":[0,0]}],"layers":{"outdoor":{"floor":"","walls":"","road":"","paving":"M-24,-24H24V24H-24Z","green":"","footprint":""}}}

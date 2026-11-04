@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { build } from "vite";
+import { writeAdminNotices } from "./write-admin-notices.mjs";
 const root = fileURLToPath(new URL("../admin/", import.meta.url));
 const check = spawnSync(
   process.execPath,
@@ -14,7 +15,7 @@ const check = spawnSync(
   { stdio: "inherit" },
 );
 if (check.status !== 0) process.exit(check.status ?? 1);
-await build({
+const bundle = await build({
   root,
   base: "/admin/",
   configFile: false,
@@ -26,3 +27,6 @@ await build({
     sourcemap: false,
   },
 });
+const results = Array.isArray(bundle) ? bundle : [bundle];
+const modules = results.flatMap(result => result.output.flatMap(item => item.type === 'chunk' ? Object.keys(item.modules) : []));
+await writeAdminNotices(modules);

@@ -1,6 +1,6 @@
 {
   "name": "@qisheng/shared",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "description": "Canonical game rules, protocol and opt-in browser modules",
@@ -121,6 +121,18 @@
     "./community/appearance": {
       "types": "./src/community/appearance.ts",
       "default": "./dist/community/appearance.js"
+    },
+    "./npc-appearance": {
+      "types": "./src/npc-appearance.ts",
+      "default": "./dist/npc-appearance.js"
+    },
+    "./blog": {
+      "types": "./src/blog.ts",
+      "default": "./dist/blog.js"
+    },
+    "./community/BlogUI": {
+      "types": "./src/community/BlogUI.tsx",
+      "default": "./dist/community/BlogUI.js"
     }
   },
   "files": [

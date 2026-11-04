@@ -1,3 +1,4 @@
+import {ToggleButton} from '../ui';
 import { useState } from "react";
 import {
   api,
@@ -149,11 +150,7 @@ function AccountEdit({
         />
       </Field>
       <label className="check">
-        <input
-          type="checkbox"
-          checked={form.active}
-          onChange={(e) => patch("active", e.target.checked)}
-        />
+        <ToggleButton checked={form.active} onChange={value => patch("active", value)} />
         启用此账号
       </label>
       {item.owner ? (
@@ -164,18 +161,12 @@ function AccountEdit({
           <div className="checks">
             {Object.entries(scopes).map(([k, label]) => (
               <label className="check" key={k}>
-                <input
-                  type="checkbox"
-                  checked={form.scopes.includes(k)}
-                  onChange={(e) =>
-                    patch(
+                <ToggleButton checked={form.scopes.includes(k)} onChange={value => patch(
                       "scopes",
-                      e.target.checked
+                      value
                         ? [...form.scopes, k]
                         : form.scopes.filter((s: string) => s !== k),
-                    )
-                  }
-                />
+                    )} onLabel="已选择" offLabel="选择" />
                 {label}
               </label>
             ))}

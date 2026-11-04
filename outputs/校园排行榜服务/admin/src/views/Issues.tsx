@@ -1,3 +1,4 @@
+import {ToggleButton} from '../ui';
 import { useEffect, useState } from "react";
 import {
   api,
@@ -501,18 +502,11 @@ function LinkedFeedback({
         {data.data?.items.length ? (
           data.data.items.map((r: Row) => (
             <label className="select-record" key={r.id}>
-              <input
-                type="checkbox"
-                disabled={r.status === "resolved"}
-                checked={ids.includes(r.id)}
-                onChange={(e) =>
-                  setIds((old) =>
-                    e.target.checked
+              <ToggleButton disabled={r.status === "resolved"} checked={ids.includes(r.id)} onChange={value => setIds((old) =>
+                    value
                       ? [...old, r.id]
                       : old.filter((x) => x !== r.id),
-                  )
-                }
-              />
+                  )} onLabel="已选择" offLabel="选择" />
               <div>
                 <strong>{r.title}</strong>
                 <div>

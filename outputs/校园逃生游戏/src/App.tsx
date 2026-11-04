@@ -1,3 +1,5 @@
+import {installNpcAppearance,npcAppearanceSubscribe,npcPublicText} from './npc-appearance';
+import {NpcTestPage} from './NpcTestPage';
 import {drivingVehicleId} from './vehicles';
 import {UIPresentationProvider,resolveUIPresentation,screenUIOrientation} from '@qisheng/shared/ui';
 import shellUI from './ui/PageShell.module.css';
@@ -130,6 +132,7 @@ const RankingUI = rankingComponent();
 const FeedbackUI = lazy(()=>loadFeedbackUI());
 const multiplayerComponent=()=>lazy(()=>loadMultiplayerUI());
 const MultiplayerUI=multiplayerComponent();
+const BlogUI=lazy(()=>import('@qisheng/shared/community/BlogUI'));
 const AssistantUI = lazy(()=>import('./AssistantUI'));
 const CreditsPlayer = lazy(()=>import('./CreditsPlayer').then(m=>({default:m.CreditsPlayer})));
 const CopyrightPage = lazy(()=>import('./CopyrightPage').then(m=>({default:m.CopyrightPage})));
@@ -388,7 +391,10 @@ function HelpContent({
     </div>
   );
 }
+function npcPresentedSnapshot(value:Snapshot):Snapshot{return {...value,message:npcPublicText(value.message),notice:npcPublicText(value.notice??''),goalName:npcPublicText(value.goalName??''),driving:value.driving?{...value.driving,guide:npcPublicText(value.driving.guide),targets:value.driving.targets.map(target=>({...target,name:npcPublicText(target.name)}))}:undefined};}
 export default function App() {
+  useEffect(installNpcAppearance,[]);
+  useEffect(()=>npcAppearanceSubscribe(()=>setSnapshot(value=>npcPresentedSnapshot(value))),[]);
   const operational = useGameOperations();
   const localRoundAccepted = useRef(false);
   const [modeBlocked, setModeBlocked] = useState<string|null>(null);
@@ -767,7 +773,7 @@ export default function App() {
     const publish = (s: Snapshot) => {
       if (scope.active) {
         if (!onlineRoomKey && ['playing','paused','won','lost'].includes(s.phase)) localRoundAccepted.current = true;
-        setSnapshot({ ...s });
+        setSnapshot(npcPresentedSnapshot(s));
       }
     };
     const work = onlineRoomKey
@@ -969,6 +975,7 @@ export default function App() {
         }
         console.warn(failure.label, error);
         errorRetry.current = failure.retry ?? null;
+        let inputFailure:unknown=error;for(let depth=0;depth<3&&inputFailure instanceof Error;depth++){const code=(inputFailure as Error&{code?:string}).code;if(code==='POINTER_LOCK_DENIED'||code==='POINTER_LOCK_UNAVAILABLE'){setUiError(inputFailure.message);return;}inputFailure=inputFailure.cause;}
         setUiError(failure.message);
       }
     } finally {
@@ -1443,7 +1450,8 @@ export default function App() {
   }));
   const nativeWorldActive=nativeEnteringWorld||['intro','playing','paused','won','lost'].includes(snapshot.phase)||!!onlineRoomKey&&onlineView.currentRoom?.phase!=='lobby';
   const nativeInSession=!!onlineRoomKey||!!onlineView.currentRoom||nativeWorldActive;
-  const nativeOrientation=nativeWorldActive?'landscape':'auto';
+  const nativeReadingPage=!!pages.active&&pages.active!=='settings';
+  const nativeOrientation=nativeReadingPage?'auto':nativeWorldActive||!pages.active||onlineOpen?'landscape':'auto';
   useEffect(()=>{
     window.dispatchEvent(new CustomEvent('qisheng:native-session-state',{detail:{inSession:nativeInSession,playing,orientation:nativeOrientation}}));
   },[nativeInSession,playing,nativeOrientation]);
@@ -1594,6 +1602,8 @@ export default function App() {
           feedbackUnread={feedbackUnread}
           onFeedback={openFeedback}
           onAssistant={()=>openMenuPage('assistant')}
+          onBlog={()=>openMenuPage('blog')}
+          onTest={()=>openMenuPage('test')}
           onCredits={()=>openMenuPage('credits')}
           onHelp={() => setShowHelp(true)}
           onFAQ={() => setMenuReading("faq")}
@@ -1647,7 +1657,7 @@ export default function App() {
               )}
             </>
           }
-          displayControls={selectedMode==='escape'?<WeaponLoadout value={primary} onChange={id=>setPrimary(id as PrimaryWeapon)} mode="solo" disabled={busy}/>:selectedMode==='dafei'?<VehicleChoice value={drivingVehicleId(settings.drivingVehicle)} onChange={drivingVehicle=>changeSettings({...settings,drivingVehicle})} disabled={busy}/>:undefined}
+          displayControls={selectedMode==='escape'?<WeaponLoadout layout="full" value={primary} onChange={id=>setPrimary(id as PrimaryWeapon)} mode="solo" disabled={busy}/>:selectedMode==='dafei'?<VehicleChoice value={drivingVehicleId(settings.drivingVehicle)} onChange={drivingVehicle=>changeSettings({...settings,drivingVehicle})} disabled={busy}/>:undefined}
           optionControls={<>
             {selectedMode==='escape'&&<MenuChoice label="难度" purpose="difficulty" value={settings.escapeDifficulty??'standard'} disabled={busy} onChange={escapeDifficulty=>changeSettings({...settings,escapeDifficulty})} options={ESCAPE_DIFFICULTIES.map(d=>({value:d.id,label:d.label}))} hint={ESCAPE_DIFFICULTIES.find(d=>d.id===(settings.escapeDifficulty??'standard'))?.description}/>}
             {selectedMode==='dafei'&&<><p>五分钟争取更多积分，车况耗尽会提前结算。</p>{drivingVehicleId(settings.drivingVehicle)==='bao5'&&<TransmissionChoice mode={settings.transmission??'auto'} onChange={changeTransmission} disabled={busy}/>}</>}
@@ -1659,8 +1669,8 @@ export default function App() {
       {announcements.flash && playing && <div className="announcement-flash" role="status"><strong>{announcements.flash.title}</strong><span>暂停菜单可查看完整通知</span></div>}
       {modeBlocked && <GameDialog title="玩法暂时不可用" confirmLabel="知道了" onConfirm={()=>setModeBlocked(null)}><p>{modeBlocked}</p></GameDialog>}
       {noticesOpen && <MenuReadingPanel title="游戏通知" onClose={()=>setNoticesOpen(false)}><AnnouncementList items={announcements.list} onRead={announcements.markRead}/></MenuReadingPanel>}
-      {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} identity={rankingPlayer?.nickname} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
-        {page==='settings'?<SettingsPanel mode={helpMode} onlineWeather={onlineView.currentRoom?(onlineView.currentRoom.weather?.preset??'clear'):undefined} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
+      {pages.visited.map(page => page==='credits'?<Suspense key={page} fallback={pages.active===page?<p role="status">正在打开制作名单…</p>:null}><CreditsPlayer reducedMotion={settings.reducedMotion} active={pages.active===page} volume={settings.music} onClose={()=>closeMenuPage('credits')} onCopyright={()=>openMenuPage('copyright')}/></Suspense>:<MenuPage key={page} id={page} title={{settings:'设置',help:'操作说明',faq:'帮助',about:'关于',updates:'更新记录',copyright:'版权与许可',ranking:'排行榜',feedback:'反馈与进展',account:'账号与档案',assistant:'小齐助手',blog:'博客',test:'参加测试'}[page]} active={pages.active===page} onBack={()=>{if(!accountBusy)pages.back();}} backLabel={menuRootLabel} onRoot={returnMenu} showNavigation={isMenu&&!onlineOpen&&!onlineView.currentRoom&&menuScreen!=='prepare'} rootLabel="开始" navigationDisabled={accountBusy} identity={rankingPlayer?.nickname} feedbackUnread={feedbackUnread} onNavigate={openMenuPage} wide={page==='ranking'||page==='feedback'||page==='account'||page==='assistant'}>
+        {page==='test'?<NpcTestPage/>:page==='blog'?<Suspense fallback={<p role="status">正在打开博客…</p>}><BlogUI client={rankingClient} onAccount={()=>openMenuPage('account')}/></Suspense>:page==='settings'?<SettingsPanel mode={helpMode} onlineWeather={onlineView.currentRoom?(onlineView.currentRoom.weather?.preset??'clear'):undefined} settings={settings} onChange={changeSettings} canChangeTransmission={snapshot.phase==='menu'||snapshot.phase==='paused'} onClose={()=>closeMenuPage('settings')} onEditTouch={()=>{game.current?.clearInput?.();game.current?.pause();setTouchEditor(true);}}/>:
         page==='help'?<div className={shellUI.help}>{online?<OnlineHelp mode={onlineView.currentRoom?.mode??'coop'} variant={onlineView.currentRoom?.variant??'tdm'} touch={touchLayout}/>:<HelpContent mode={helpMode} touchLayout={touchLayout}/>}<button className="secondary" onClick={()=>openMenuPage('faq')}>查看常见问题</button>{(online||helpMode==='escape')&&<button className="secondary" onClick={()=>setBriefing({mode:snapshot.online?snapshot.online.mode==='coop'?'coop':(snapshot.online.variant??pvpVariant):'solo',next:()=>{},readOnly:true})}>查看玩法规则</button>}</div>:
         page==='faq'?<MenuFAQ mode={helpMode} context={menuScreen==='prepare'?'prepare':'home'}/>:
         page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:

@@ -1,6 +1,6 @@
 import {defineConfig,type Plugin} from 'vite';
 import path from 'node:path';
-import {readFile,mkdir,writeFile} from 'node:fs/promises';
+import {readFile,mkdir,writeFile,readdir,lstat,unlink} from 'node:fs/promises';
 import production from './vite.production.config';
 import {isolatedSharedGuard} from './scripts/isolated-shared-guard.mjs';
 import {privateNpcAliases} from './scripts/private-npc-profile.mjs';
@@ -15,7 +15,7 @@ export default defineConfig(async context=>{
   const csp="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' blob: wss://game.tianhw.top; worker-src 'self' blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'";
   if(!/http-equiv=["']Content-Security-Policy/.test(html))html=html.replace(/<meta charset=["']UTF-8["']\s*\/?\s*>/i,match=>match+'<meta http-equiv="Content-Security-Policy" content="'+csp+'">');
   return html;
- },async writeBundle(){await mkdir(path.resolve('dist'),{recursive:true});await writeFile(path.resolve('dist/openqs-profile.json'),JSON.stringify({profile:'production',application:'game',privateNpcCalibration:true})+'\n');}};
+ },async writeBundle(_options,bundle){const output=path.resolve('dist'),assets=path.join(output,'assets');await mkdir(output,{recursive:true});const info=await lstat(assets).catch(e=>{if(e.code==='ENOENT')return null;throw e;});if(info?.isSymbolicLink())throw Error('Refuse generated cleanup through a link');if(info?.isDirectory()){const emitted=new Set(Object.keys(bundle).map(p=>p.replaceAll('\\','/')));for(const entry of await readdir(assets,{withFileTypes:true})){if(!entry.isFile()||!['.js','.css'].includes(path.extname(entry.name)))continue;const file=path.resolve(assets,entry.name);if(path.dirname(file)!==assets)throw Error('Generated cleanup escaped output');if(!emitted.has('assets/'+entry.name))await unlink(file);}}await writeFile(path.resolve('dist/openqs-profile.json'),JSON.stringify({profile:'production',application:'game',privateNpcCalibration:true})+'\n');}};
  const aliases=await privateNpcAliases();
  const sharedCss=['community/ranking.css','community/feedback.css','community/account.css','player-content/reading.css'].map(name=>({find:new RegExp('^@qisheng/shared/'+name.replace('.','\\.')+'$'),replacement:path.resolve('../\u6821\u56ed\u5171\u4eab\u6a21\u5757/src',name)}));
  return {...config,plugins:[...(config.plugins??[]).filter((p:any)=>p?.name!=='runtime-assets-only'),marker,isolatedSharedGuard()],publicDir:false,resolve:{...config.resolve,alias:[...aliases,...sharedCss,...(Array.isArray(config.resolve?.alias)?config.resolve.alias:[]),{find:/^@qisheng\/shared\/(.+)$/,replacement:path.resolve("../\u6821\u56ed\u5171\u4eab\u6a21\u5757/src")+ '/$1'}]},build:{...config.build,copyPublicDir:false,rollupOptions:{...config.build?.rollupOptions,input:{...config.build?.rollupOptions?.input as Record<string,string>,qisheng2027:path.resolve('qisheng-2027/index.html')}}}};

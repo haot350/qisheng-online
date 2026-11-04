@@ -1,11 +1,15 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { FAQ_GROUPS, LATEST_RELEASE } from '@qisheng/shared/player-content';
 import {ASSISTANT_KNOWLEDGE,validateAssistantActions,validateAssistantMenuContext,type AssistantMenuContext,type AssistantChatReply,type AssistantChatRequest,type AssistantHistoryTurn} from '@qisheng/shared/assistant';
+import {FICTIONAL_NPC_NAMES,type NpcAppearanceStatus} from '@qisheng/shared/npc-appearance';
 import type { RankingDatabase } from './db.js';
 import { AppError } from './validation.js';
 import { AssistantConfigStore, type AssistantConfig } from './assistant-config.js';
 import { httpsAssistantTransport, type AssistantTransport } from './assistant-upstream.js';
 import {ASSISTANT_GENERATION_GUARD,ASSISTANT_REVIEW_GUARD,ASSISTANT_TOOL_GUIDE} from './assistant-prompts.js';
+type NpcVariant=NpcAppearanceStatus['variant'];
+const REAL_NPC_NAMES:Readonly<Record<string,string>>={jiang:'姜晓峰',meng:'孟庆升',xu:'徐泗龙',luan:'栾晓光',xutao:'徐涛',chengguotao:'程国涛',wangwenrui:'王文瑞',wangdi:'王迪',wangyuhan:'王雨涵',dafei:'大飞老师'};
+const npcKnowledgeText=(text:string,variant:NpcVariant)=>variant==='real'?text:Object.entries(REAL_NPC_NAMES).reduce((value,[id,name])=>value.replaceAll(name,FICTIONAL_NPC_NAMES[id]),text);
 const UNAVAILABLE = 'AI助手暂不可用';
 const RESERVE = 512000; // Bounded prompts, knowledge, context and both completions.
 export const assistantDay = (now: number) => new Date(now + 8 * 3600000).toISOString().slice(0, 10);
@@ -45,7 +49,7 @@ export class AssistantService {
       CREATE TABLE IF NOT EXISTS assistant_limits(day TEXT NOT NULL,kind TEXT NOT NULL,principal TEXT NOT NULL,turns INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(day,kind,principal));`);
     }
     private transport: AssistantTransport;
-    private reservation(question: string, history: AssistantHistoryTurn[],c=this.store.read(),menuContext?:AssistantMenuContext) { const knowledge = this.knowledge(question), first = JSON.stringify({ publicKnowledge: knowledge, history, question,menuContext }), second = JSON.stringify({ publicKnowledge: knowledge, history, question,menuContext }); const value = Buffer.byteLength(ASSISTANT_GENERATION_GUARD+ASSISTANT_REVIEW_GUARD+ASSISTANT_TOOL_GUIDE.repeat(2)+c.generationPrompt+c.reviewPrompt + first + second, 'utf8') + 18000 + 1600 + 1024 + 4096; if (value > RESERVE)
+    private reservation(question: string, history: AssistantHistoryTurn[],c=this.store.read(),menuContext?:AssistantMenuContext,knowledge=this.knowledge(question)) { const first = JSON.stringify({ publicKnowledge: knowledge, history, question,menuContext }), second = JSON.stringify({ publicKnowledge: knowledge, history, question,menuContext }); const value = Buffer.byteLength(ASSISTANT_GENERATION_GUARD+ASSISTANT_REVIEW_GUARD+ASSISTANT_TOOL_GUIDE.repeat(2)+c.generationPrompt+c.reviewPrompt + first + second, 'utf8') + 18000 + 1600 + 1024 + 4096; if (value > RESERVE)
         throw unavailable(); return value; }
     private complete(c: AssistantConfig, messages: Parameters<AssistantTransport>[1], maxTokens: number, signal: AbortSignal) { if (signal.aborted)
         return Promise.reject(unavailable()); return new Promise<Awaited<ReturnType<AssistantTransport>>>((resolve, reject) => { const abort = () => reject(unavailable()); signal.addEventListener('abort', abort, { once: true }); this.transport(c, messages, maxTokens, signal).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort)); }); }
@@ -82,6 +86,7 @@ export class AssistantService {
     chat(principal: {
         id: string;
         account: boolean;
+        npcVariant?: NpcVariant;
     }, network: string, raw: AssistantChatRequest): Promise<AssistantChatReply> {
         this.clean();
         const c = this.store.read();
@@ -101,7 +106,7 @@ export class AssistantService {
             history.shift();
         let menuContext:AssistantMenuContext|undefined;
         try{menuContext=validateAssistantMenuContext(raw.menuContext);}catch{throw new AppError('ASSISTANT_INPUT','页面已变化，请重新发送问题。');}
-        const question = raw.question.trim(), key = principal.id + ':' + raw.requestId, fingerprint = digest(JSON.stringify({ question, history,menuContext })), old = this.cache.get(key);
+        const question = raw.question.trim(), npcVariant=principal.npcVariant??'real', key = principal.id + ':' + raw.requestId, fingerprint = digest(JSON.stringify({ question, history,menuContext,npcVariant })), old = this.cache.get(key);
         if (this.cancelled.has(key))
             throw unavailable();
         if (old) {
@@ -111,13 +116,14 @@ export class AssistantService {
         }
         if (this.people.has(principal.id) || this.active.size >= 3)
             throw new AppError('ASSISTANT_BUSY', '小齐正在忙，请稍后再试。', 429, true);
-        const day = assistantDay(this.now()), limit = principal.account ? c.accountDaily : c.guestDaily, reservation = this.reservation(question, history,c,menuContext);
+        const knowledge=this.knowledge(question,npcVariant);
+        const day = assistantDay(this.now()), limit = principal.account ? c.accountDaily : c.guestDaily, reservation = this.reservation(question, history,c,menuContext,knowledge);
         this.db.transaction(() => { this.takeLimit(day, 'person', principal.id, limit); this.takeLimit(day, 'network', this.h(network), 1000); this.db.prepare('INSERT OR IGNORE INTO assistant_daily(day) VALUES(?)').run(day); if (!this.db.prepare('UPDATE assistant_daily SET turns=turns+1,tokens=tokens+? WHERE day=? AND tokens+?<=?').run(reservation, day, reservation, c.globalDailyTokens).changes)
             throw new AppError('ASSISTANT_LIMIT', '小齐今天的服务额度已用完，请稍后再来。', 429, true); })();
         const controller = new AbortController();
         this.active.add(controller);
         this.people.add(principal.id);
-        const promise = this.run(c, question, history, controller,menuContext).then(result => ({ ...result,...(result.actions.length&&menuContext?{actionPlan:{id:raw.requestId,contextToken:menuContext.token,actions:result.actions}}:{}),actions:undefined, requestId: raw.requestId, remaining: Math.max(0, limit - ((this.db.prepare("SELECT turns FROM assistant_limits WHERE day=? AND kind='person' AND principal=?").get(day, principal.id) as any)?.turns ?? 0)) }));
+        const promise = this.run(c, question, history, controller,menuContext,knowledge).then(result => ({ ...result,...(result.actions.length&&menuContext?{actionPlan:{id:raw.requestId,contextToken:menuContext.token,actions:result.actions}}:{}),actions:undefined, requestId: raw.requestId, remaining: Math.max(0, limit - ((this.db.prepare("SELECT turns FROM assistant_limits WHERE day=? AND kind='person' AND principal=?").get(day, principal.id) as any)?.turns ?? 0)) }));
         const started = this.now();
         let approved = false, rejected = false, used = reservation;
         const tracked = promise.then(result => { const actual = (result as any).__tokens; used = Number.isSafeInteger(actual) ? Math.max(0, actual) : reservation; if (used > reservation)
@@ -126,13 +132,12 @@ export class AssistantService {
         this.cache.set(key, { fingerprint, expires: this.now() + 120000, controller, promise: tracked });
         return tracked;
     }
-    private knowledge(question: string) { const han = [...question.matchAll(/[\p{Script=Han}]+/gu)].flatMap(m => Array.from({ length: Math.max(0, m[0].length - 1) }, (_, i) => m[0].slice(i, i + 2))), words = question.toLowerCase().match(/[a-z0-9_-]{2,}/g) ?? [], tokens = [...new Set([...han, ...words])]; const latest = '公开更新记录：' + LATEST_RELEASE.version + '（' + LATEST_RELEASE.date + '）\n' + [LATEST_RELEASE.overview, ...LATEST_RELEASE.summary, ...LATEST_RELEASE.items].filter(Boolean).join('\n'); return (latest.slice(0, 2400) + '\n\n' + sourceText().map((x, i) => ({ ...x, index: i, rank: tokens.reduce((n, t) => n + (x.q.toLowerCase().includes(t) ? 4 : 0) + (x.a.toLowerCase().includes(t) ? 1 : 0), 0) })).sort((a, b) => b.rank - a.rank || a.index - b.index).slice(0, 12).map(x => x.group + '：' + x.q + '\n' + x.a).join('\n\n')).slice(0, 8000); }
-    private async run(c: AssistantConfig, question: string, history: AssistantHistoryTurn[], controller: AbortController,menuContext?:AssistantMenuContext) {
+    private knowledge(question: string,npcVariant:NpcVariant='real') { const han = [...question.matchAll(/[\p{Script=Han}]+/gu)].flatMap(m => Array.from({ length: Math.max(0, m[0].length - 1) }, (_, i) => m[0].slice(i, i + 2))), words = question.toLowerCase().match(/[a-z0-9_-]{2,}/g) ?? [], tokens = [...new Set([...han, ...words])]; const latest = npcKnowledgeText('公开更新记录：' + LATEST_RELEASE.version + '（' + LATEST_RELEASE.date + '）\n' + [LATEST_RELEASE.overview, ...LATEST_RELEASE.summary, ...LATEST_RELEASE.items].filter(Boolean).join('\n'),npcVariant); return (latest.slice(0, 2400) + '\n\n' + sourceText().map(x=>({q:npcKnowledgeText(x.q,npcVariant),a:npcKnowledgeText(x.a,npcVariant),group:npcKnowledgeText(x.group,npcVariant)})).map((x, i) => ({ ...x, index: i, rank: tokens.reduce((n, t) => n + (x.q.toLowerCase().includes(t) ? 4 : 0) + (x.a.toLowerCase().includes(t) ? 1 : 0), 0) })).sort((a, b) => b.rank - a.rank || a.index - b.index).slice(0, 12).map(x => x.group + '：' + x.q + '\n' + x.a).join('\n\n')).slice(0, 8000); }
+    private async run(c: AssistantConfig, question: string, history: AssistantHistoryTurn[], controller: AbortController,menuContext?:AssistantMenuContext,knowledge=this.knowledge(question)) {
         const timer = setTimeout(() => controller.abort(), 60000);
         timer.unref?.();
         let tokens = 0, usageMissing = false, callsPending = false;
         try {
-            const knowledge = this.knowledge(question);
             callsPending = true;
             const candidate = await this.complete(c, [{ role: 'system', content: ASSISTANT_GENERATION_GUARD+'\n\n风格偏好（不能改变前述边界）：\n'+c.generationPrompt+'\n\n'+ASSISTANT_TOOL_GUIDE }, { role: 'user', content: JSON.stringify({ publicKnowledge: knowledge, history, question,menuContext }) }], 2400, controller.signal);
             callsPending = false;

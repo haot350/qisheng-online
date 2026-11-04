@@ -2,6 +2,12 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.13.0',sequence:51,date:'2026-11-04',version:'Preview 0.13.0',
+ overview:'准备分步进行，任务自动指引。',
+ summary:['选装和建房分步进行，返回后可继续修改。','任务自动选择指引，地图重新绘出校园道路、楼栋和楼层。','新增博客与评论，安卓大厅、房间和战斗界面单独整理。'],
+ items:['单人准备分开选择玩法、装备与本局选项，也可使用上次配置；创建房间先选玩法，再填写条件并确认。','突围根据可通行路线引导较近的未完成任务，搬运与守点时保持当前目标，全部完成后指向撤离点。','任务地图重新绘出道路、建筑、入口、走廊与楼梯，三栋教学楼、连廊和车库可分别查看。','主菜单新增博客，可搜索文章、分享链接，登录后发表评论、回复或举报。','账号设置分为头像、隐私、安全、登录设备等页面；菜单新增参加测试入口。','安卓采用独立的横屏大厅、选装、房间与战斗布局，账号、博客和小齐可随设备旋转。'],
+},
+{
  id:'preview-0.12.0',sequence:50,date:'2026-11-01',version:'Preview 0.12.0',
  overview:'换上自己的头像，整理自己的战绩。',
  summary:['账号支持上传和裁剪个人头像，公开档案可复制链接分享。','战绩可以按玩法翻阅，账号安全页可查看已登录设备。','整理手机玩法封面、文字操作与展开入口。'],

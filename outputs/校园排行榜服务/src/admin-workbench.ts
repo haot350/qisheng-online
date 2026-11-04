@@ -9,6 +9,7 @@ import type {Context} from './app.js';
 import {AppError} from './validation.js';
 import {feedbackViews, page} from './feedback.js';
 import {readGameConfig} from './operations.js';
+import {readExpectedWorker,compareWorkerCompatibility} from './deployment-compatibility.js';
 
 type Admin = (req: FastifyRequest, write?: boolean, scope?: string) => any;
 const has = (a: any, scope: string) => a.owner || a.scopes.includes(scope);
@@ -45,18 +46,21 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
   adminRoomReadRoutes(c,admin);
   app.get('/admin/services',async req=>{
     admin(req,false,'rooms');
-    let release:any=null;try{const m=JSON.parse(readFileSync('/srv/codex/sites/current/manifest.json','utf8'));release={id:String(m.releaseId??''),version:String(m.version??'')};}catch{}
+    let release:any=null,manifest:any=null;try{manifest=JSON.parse(readFileSync('/srv/codex/sites/current/manifest.json','utf8'));release={id:String(manifest.releaseId??''),version:String(manifest.version??'')};}catch{}
+    const expected=readExpectedWorker(manifest);
     const workerRows=await Promise.all([2567,2568,2569].map(async(port,index)=>{
       const id='w'+(index+1),checkedAt=now();try{
         const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1800)}),h=await response.json() as any;
         if(!response.ok||h.ok!==true||h.worker!==id)throw Error('HEALTH');
         const rooms=db.prepare("SELECT id,state,updated,health FROM online_rooms WHERE worker=? AND state!='closed' AND updated>?").all(id,now()-30000) as any[];
         let map:any=null;try{const mapResponse=await fetch('http://127.0.0.1:'+port+'/map-identity',{signal:AbortSignal.timeout(1800)});if(mapResponse.ok)map=await mapResponse.json();}catch{}
-        return {id,available:true,checkedAt,version:h.version,protocolVersion:h.protocolVersion,map,releaseMatches:release?.version?String(release.version).replace(/^Preview /,'')===String(h.version):null,combatRooms:h.combatRooms,rooms:rooms.map(r=>({...r,health:JSON.parse(r.health??'{}')}))};
+        const compatibility=compareWorkerCompatibility({version:h.version,protocolVersion:h.protocolVersion,map},expected);
+        return {id,available:true,checkedAt,version:h.version,protocolVersion:h.protocolVersion,map,expected,compatibility,releaseMatches:compatibility.compatible,combatRooms:h.combatRooms,rooms:rooms.map(r=>({...r,health:JSON.parse(r.health??'{}')}))};
       }catch{return{id,available:false,checkedAt,rooms:[]};}
     }));
     const target=adminDeploymentTarget();
-    return {checkedAt:now(),target,release,api:{ok:true,node:process.version,uptimeSeconds:Math.floor(process.uptime()),schemaVersion:db.pragma('user_version',{simple:true})},workers:workerRows,deployments:db.prepare('SELECT id,version,site,verified FROM deployments ORDER BY verified DESC LIMIT 6').all()};
+    let apiVersion:string|null=null;try{apiVersion=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;}catch{}
+    return {checkedAt:now(),target,release,api:{ok:true,version:apiVersion,node:process.version,uptimeSeconds:Math.floor(process.uptime()),schemaVersion:db.pragma('user_version',{simple:true})},workers:workerRows,deployments:db.prepare('SELECT id,version,site,verified FROM deployments ORDER BY verified DESC LIMIT 6').all()};
   });
   const directory = fileURLToPath(new URL('../admin/dist/', import.meta.url));
   for (const url of ['/admin', '/admin/']) app.get(url, (_, reply) => {
@@ -77,6 +81,7 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
     const n = (sql: string, ...args: any[]) => (db.prepare(sql).get(...args) as any).n;
     if (has(a, 'feedback')) {out.feedback = n("SELECT count(*) n FROM feedback WHERE status!='closed'"); out.awaitingVerification = n("SELECT count(*) n FROM issues WHERE status='verification'");}
     if (has(a, 'ranking')) out.review = n("SELECT count(*) n FROM runs WHERE status='review'");
+    if (has(a, 'blog-moderate')) out.blogReports = n("SELECT count(*) n FROM blog_reports WHERE state='open'");
     if (has(a, 'rooms')) {out.rooms = n("SELECT count(*) n FROM online_rooms WHERE state!='closed' AND updated>?", now() - 30000); out.maintenance = (db.prepare("SELECT value FROM operations WHERE key='maintenance'").get() as any)?.value === 'true';}
     if (has(a, 'players')) out.players = n('SELECT count(*) n FROM players');
     if (has(a, 'stats')) {

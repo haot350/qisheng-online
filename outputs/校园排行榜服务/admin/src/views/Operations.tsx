@@ -1,3 +1,4 @@
+import {ToggleButton} from '../ui';
 import { useLayoutEffect, useRef, useState } from "react";
 import { api, modeName, stamp, useResource, type Row } from "../api";
 import {
@@ -304,28 +305,18 @@ function OperationEditor({
           <fieldset>
             <legend>显示范围</legend>
             <label className="check">
-              <input
-                type="checkbox"
-                checked={!draft.audiences.length}
-                onChange={() => patch("audiences", [])}
-              />
+              <ToggleButton checked={!draft.audiences.length} onChange={() => patch("audiences", [])} />
               全部玩法
             </label>
             <div className="checks">
               {MODES.map((m) => (
                 <label className="check" key={m}>
-                  <input
-                    type="checkbox"
-                    checked={draft.audiences.includes(m)}
-                    onChange={(e) =>
-                      patch(
+                  <ToggleButton checked={draft.audiences.includes(m)} onChange={value => patch(
                         "audiences",
-                        e.target.checked
+                        value
                           ? [...draft.audiences, m]
                           : draft.audiences.filter((x: string) => x !== m),
-                      )
-                    }
-                  />
+                      )} onLabel="已选择" offLabel="选择" />
                   {modeName[m]}
                 </label>
               ))}

@@ -84,6 +84,12 @@
       ],
       "@qisheng/shared/community/appearance": [
         "../校园共享模块/src/community/appearance.ts"
+      ],
+      "@qisheng/shared/community/BlogUI": [
+        "../校园共享模块/src/community/BlogUI.tsx"
+      ],
+      "@qisheng/shared/npc-appearance": [
+        "../校园共享模块/src/npc-appearance.ts"
       ]
     },
     "noUnusedLocals": true,

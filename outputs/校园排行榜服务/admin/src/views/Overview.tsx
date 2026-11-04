@@ -16,6 +16,7 @@ export function Overview({ administrator }: { administrator: Administrator }) {
     ["feedback", "待处理反馈", "feedback", "feedback"],
     ["awaitingVerification", "待验证议题", "issues", "feedback"],
     ["review", "待审核成绩", "rankings", "ranking"],
+    ["blogReports", "评论举报", "blog-comments", "blog-moderate"],
     ["rooms", "在线房间", "rooms", "rooms"],
     ["disabledModes", "停用玩法", "operations", "operations"],
     ["activeAnnouncements", "当前通知", "operations", "operations"],
@@ -37,14 +38,14 @@ export function Overview({ administrator }: { administrator: Administrator }) {
               {cards
                 .filter((x) => has(administrator, x[3]))
                 .map(([key, label, path]) => (
-                  <a className={"metric-card"+(["feedback","awaitingVerification","review","recentErrors"].includes(key)&&Number(r.data![key])>0?" needs-attention":"")} href={"#" + path} key={key}>
+                  <a className={"metric-card"+(["feedback","awaitingVerification","review","blogReports","recentErrors"].includes(key)&&Number(r.data![key])>0?" needs-attention":"")} href={"#" + path} key={key}>
                     <span>{label}</span>
                     <strong>
                       {Array.isArray(r.data![key])
                         ? r.data![key].length
                         : (r.data![key] ?? "—")}
                     </strong>
-                    <small>{["feedback","awaitingVerification","review","recentErrors"].includes(key)?"查看并处理 →":"查看详情 →"}</small>
+                    <small>{["feedback","awaitingVerification","review","blogReports","recentErrors"].includes(key)?"查看并处理 →":"查看详情 →"}</small>
                   </a>
                 ))}
             </div>
