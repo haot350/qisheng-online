@@ -2261,6 +2261,8 @@ export default function App() {
             />
             {snapshot.gadgets&&<GadgetHUD view={snapshot.gadgets} smokes={snapshot.smokes} touch={touchLayout} api={game.current}/>}
           <OnlineHUD
+              diagnostics={snapshot.onlineDiagnostics}
+              onConnection={() => { game.current?.pause(); setConnectionDetails(true); }}
               stairGuide={snapshot.onlineStairGuide}
               interactionScreen={snapshot.interactionScreen}
               selectedTaskId={snapshot.onlineTrackingTaskId}

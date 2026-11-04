@@ -10,6 +10,7 @@ import type {
 export function createInput(
   canvas: HTMLCanvasElement,
   onPause: () => void,
+  options: { escapeTabTask?: boolean } = {},
 ): InputSource & {
   action: (a: Action, pressed?: boolean) => void;
   cancelAction: (a: Action) => void;
@@ -263,7 +264,7 @@ export function createInput(
     ];
     if (
       !bound.includes(e.code) &&
-      !(mode === "escape" && (e.code === "KeyM" || e.code === "Tab"))
+      !(mode === "escape" && (e.code === "KeyM" || e.code === "Tab" && options.escapeTabTask !== false))
     )
       return;
     if (

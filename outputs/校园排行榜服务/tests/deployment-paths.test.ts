@@ -1,0 +1,5 @@
+import path from 'node:path';
+import test from 'node:test';import assert from 'node:assert/strict';import{deploymentPaths}from'../src/deployment-paths.ts';
+test('default deployment paths retain existing production behavior',()=>{assert.deepEqual(deploymentPaths({}),{staticManifest:'/srv/codex/sites/current/manifest.json',realtimeDirectory:'/srv/codex/realtime/current',workerPorts:[2567,2568,2569]});});
+test('user deployment paths and worker ports can be configured together',()=>{const r=deploymentPaths({QISHENG_STATIC_MANIFEST:'/home/example/game/sites/current/manifest.json',QISHENG_REALTIME_DIRECTORY:'/home/example/game/apps/realtime',QISHENG_REALTIME_HEALTH_PORTS:'22567,22568,22569'});assert.equal(r.workerPorts[0],22567);assert.equal(r.realtimeDirectory,path.normalize('/home/example/game/apps/realtime'));});
+test('invalid port lists and relative directories fail explicitly',()=>{for(const v of ['22567,22567,22569','3000','1,2,3','x,3,4'])assert.throws(()=>deploymentPaths({QISHENG_REALTIME_HEALTH_PORTS:v}));assert.throws(()=>deploymentPaths({QISHENG_REALTIME_DIRECTORY:'relative'}));});

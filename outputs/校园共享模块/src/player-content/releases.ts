@@ -2,6 +2,11 @@
 export type PlayerRelease={id:string;sequence:number;date:string;version:string;overview?:string;summary:readonly string[];items:readonly string[]};
 export const PLAYER_RELEASES:readonly PlayerRelease[]=[
 {
+ id:'preview-0.13.2',sequence:53,date:'2026-11-04',version:'Preview 0.13.2',
+ summary:['联机比赛中按住Tab查看全员战况，手机可点击战况按钮。','合作、团竞和混战分别显示本局数据与连接状态。'],
+ items:['战况页显示当前成员、本人高亮和各项本局统计。','查看延迟与连接状态，断线保留席位标明重连状态。','菜单和输入框保留Tab切换焦点，查看战况时对局继续进行。'],
+},
+{
  id:'preview-0.13.1',sequence:52,date:'2026-11-04',version:'Preview 0.13.1',
  overview:'选好这一局，再出发。',
  summary:['装备、天气选好后再准备，完成后直接进入。','校园突围新增单人和多人双入口，合作、团竞和混战共用大厅。','减少选装与房间准备时的重复刷新。'],

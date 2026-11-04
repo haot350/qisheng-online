@@ -1,3 +1,4 @@
+import {deploymentPaths} from './deployment-paths.js';
 import {adminRoomReadRoutes} from './admin-rooms.js';
 import {readPresence} from './presence.js';
 import {readFileSync, existsSync} from 'node:fs';
@@ -46,9 +47,9 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
   adminRoomReadRoutes(c,admin);
   app.get('/admin/services',async req=>{
     admin(req,false,'rooms');
-    let release:any=null,manifest:any=null;try{manifest=JSON.parse(readFileSync('/srv/codex/sites/current/manifest.json','utf8'));release={id:String(manifest.releaseId??''),version:String(manifest.version??'')};}catch{}
-    const expected=readExpectedWorker(manifest);
-    const workerRows=await Promise.all([2567,2568,2569].map(async(port,index)=>{
+    const runtime=deploymentPaths();let release:any=null,manifest:any=null;try{manifest=JSON.parse(readFileSync(runtime.staticManifest,'utf8'));release={id:String(manifest.releaseId??''),version:String(manifest.version??'')};}catch{}
+    const expected=readExpectedWorker(manifest,runtime.realtimeDirectory);
+    const workerRows=await Promise.all(runtime.workerPorts.map(async(port,index)=>{
       const id='w'+(index+1),checkedAt=now();try{
         const response=await fetch('http://127.0.0.1:'+port+'/health',{signal:AbortSignal.timeout(1800)}),h=await response.json() as any;
         if(!response.ok||h.ok!==true||h.worker!==id)throw Error('HEALTH');

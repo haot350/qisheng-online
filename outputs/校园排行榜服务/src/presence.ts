@@ -83,11 +83,11 @@ export function presenceRoutes(c: Context) {
     const player = c.auth(req, true);
     const account = player ? accountFor(c.db, player.id) : undefined;
     const result = tracker.heartbeat(b.sessionId, b.client, b.active, account?.status === 'active' ? account.id : null);
-    tracker.aggregate();
+    if(c.opts.backgroundJobs!==false)tracker.aggregate();
     return result;
   });
-  const timer = setInterval(() => tracker.aggregate(), 60000);
-  timer.unref();
-  c.app.addHook('onClose', async () => {clearInterval(timer); instances.delete(c);});
+  const timer = c.opts.backgroundJobs!==false?setInterval(() => tracker.aggregate(), 60000):undefined;
+  timer?.unref();
+  c.app.addHook('onClose', async () => {if(timer)clearInterval(timer); instances.delete(c);});
 }
 export const readPresence = (c: Context) => instances.get(c)!.summary();

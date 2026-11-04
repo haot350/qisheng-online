@@ -17,12 +17,12 @@ class Document extends EventTarget {
   documentElement={dataset:{} as Record<string,string>};
   exitPointerLock(){this.pointerLockElement=null;this.dispatchEvent(new Event('pointerlockchange'));}
 }
-async function fixture(run:(input:ReturnType<typeof createInput>,doc:Document,canvas:Canvas,win:EventTarget)=>Promise<void>,onPause=()=>{}){
+async function fixture(run:(input:ReturnType<typeof createInput>,doc:Document,canvas:Canvas,win:EventTarget)=>Promise<void>,onPause=()=>{},options:Parameters<typeof createInput>[2]={}){
   const doc=new Document(),canvas=new Canvas(),win=new EventTarget();
   const globals={document:doc,window:win,navigator:{maxTouchPoints:0},matchMedia:()=>({matches:false})};
   const descriptors=new Map(Object.keys(globals).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   for(const [key,value]of Object.entries(globals))Object.defineProperty(globalThis,key,{configurable:true,value});
-  const input=createInput(canvas as unknown as HTMLCanvasElement,onPause);
+  const input=createInput(canvas as unknown as HTMLCanvasElement,onPause,options);
   try{await run(input,doc,canvas,win);}
   finally{input.dispose();for(const [key,descriptor]of descriptors){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);}}
 }
@@ -42,7 +42,7 @@ test('legacy void requestPointerLock stays pending until this canvas actually ow
 }));
 
 test('pointerlockerror rejects the pending legacy request and permits a fresh retry',async()=>fixture(async(input,doc,canvas)=>{
-  const pending=input.lock();const rejected=assert.rejects(pending,/未允许鼠标锁定/);
+  const pending=input.lock();const rejected=assert.rejects(pending,/请重新点击开始，并允许使用鼠标观察。/);
   doc.dispatchEvent(new Event('pointerlockerror'));await rejected;
   const retry=input.lock();assert.equal(canvas.requests,2);
   doc.pointerLockElement=canvas;doc.dispatchEvent(new Event('pointerlockchange'));await retry;
@@ -596,3 +596,19 @@ test('render-frame look consumption does not consume fixed-step movement or one-
  const frame=input.sample();assert.equal(frame.moveX,.6);assert.equal(frame.moveY,.8);assert.equal(frame.lookX,0);assert.equal(frame.actions.has('jump'),true);assert.equal(input.sample().actions.has('jump'),false);
  input.look(8,4);input.setSuspended(true);assert.deepEqual(input.sampleLook(),{lookX:0,lookY:0});input.setSuspended(false);assert.deepEqual(input.sampleLook(),{lookX:0,lookY:0});
 }));
+
+
+test('online Tab leaves movement held without queuing the former task action',async()=>{
+ let pauses=0;await fixture(async(input,doc,canvas,win)=>{
+  doc.pointerLockElement=canvas;doc.activeElement=canvas;
+  const key=(type:string,code:string)=>win.dispatchEvent(Object.assign(new Event(type,{cancelable:true}),{code,repeat:false}));
+  key('keydown','KeyW');key('keydown','Tab');key('keyup','Tab');
+  const frame=input.sample();assert.equal(frame.moveY,1);assert.equal(frame.actions.has('nextTask'),false);assert.equal(pauses,0);
+ },()=>{pauses++;},{escapeTabTask:false});
+});
+test('singleplayer keeps its existing Tab task input',async()=>fixture(async(input,doc,canvas,win)=>{
+ doc.pointerLockElement=canvas;doc.activeElement=canvas;win.dispatchEvent(Object.assign(new Event('keydown'),{code:'Tab',repeat:false}));assert.equal(input.sample().actions.has('nextTask'),true);
+}));
+test('disabling online Tab task binding does not replace photography cursor behavior',async()=>fixture(async(input,doc,canvas,win)=>{
+ doc.pointerLockElement=canvas;doc.activeElement=canvas;input.setPhotography(true);win.dispatchEvent(Object.assign(new Event('keydown',{cancelable:true}),{code:'Tab',repeat:false}));assert.equal(input.isCursorFree(),true);assert.equal(input.sample().actions.has('nextTask'),false);
+},()=>{},{escapeTabTask:false}));
