@@ -13,7 +13,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import RAPIER from "@dimforge/rapier3d-compat";
 import {
-  init as initNavigation,
+
   importNavMesh,
   NavMeshQuery,
 } from "recast-navigation";
@@ -26,6 +26,8 @@ import {
 } from "./streaming.ts";
 import { SceneResources } from "./resources.ts";
 import { withDeadline } from "./network.ts";
+import {withForegroundDeadline,preparationFailure} from './preparation-lifecycle.ts';
+import {initializeGamePhysics} from './physics-initialization.ts';
 import { loadGameMapBundle, gameMapSession } from "./game-map.ts";
 import {
   createDrivingPhysics,
@@ -151,7 +153,6 @@ const request = async <T>(
     { onTimeout: () => controller.abort() },
   );
 };
-let initPromise: Promise<unknown> | undefined;
 export async function loadWorld(
   scene: THREE.Scene,
   onProgress: (p: number, msg: string) => void,
@@ -160,7 +161,8 @@ export async function loadWorld(
 ): Promise<GameWorld> {
   let photoView: PhotoView | null = null;
   onProgress(0, "读取校园地图");
-  initPromise ??= Promise.all([RAPIER.init(), initNavigation()]);
+  const initialization=withForegroundDeadline(initializeGamePhysics(),90000,{signal,stage:'initialize'});
+  void initialization.catch(()=>{});
   const legacy =
     typeof location === "undefined" ||
     (import.meta.env?.DEV &&
@@ -180,21 +182,14 @@ export async function loadWorld(
     bundle?.collision ?? request(manifest.collisionUrl, (r) => r.arrayBuffer()),
     bundle?.navigation ?? request(manifest.navmeshUrl, (r) => r.arrayBuffer()),
     bundle?.vision ?? (manifest.visionUrl ? request(manifest.visionUrl,r=>r.arrayBuffer()) : undefined),
-    initPromise,
+    initialization,
   ]);
   if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
   const collisionGeometry=readMapCollision(collisionData);
   const physics = new RAPIER.World({ x: 0, y: -18, z: 0 });
-  const vision = new VisionGeometry(visionData);
-  createMapColliders(physics,collisionGeometry);
-  const body = physics.createRigidBody(
-    RAPIER.RigidBodyDesc.kinematicPositionBased(),
-  );
-  let height = 1.75;
-  let capsule = physics.createCollider(
-    RAPIER.ColliderDesc.capsule((height - 0.6) / 2, 0.3),
-    body,
-  );
+  let vision!:VisionGeometry,body!:RAPIER.RigidBody,capsule!:RAPIER.Collider,controller!:RAPIER.KinematicCharacterController;
+  let navMesh!:ReturnType<typeof importNavMesh>['navMesh'],query!:NavMeshQuery;
+  let height=1.75;
   const playerController = () => {
     const value = physics.createCharacterController(0.015);
     value.enableAutostep(0.42, 0.2, false);
@@ -203,16 +198,12 @@ export async function loadWorld(
     value.setMinSlopeSlideAngle(Math.PI * 0.3);
     return value;
   };
-  let controller = playerController();
-  physics.step();
-  let navMesh: ReturnType<typeof importNavMesh>["navMesh"];
-  try {
-    navMesh = importNavMesh(new Uint8Array(navData)).navMesh;
-  } catch (error) {
-    physics.free();
-    throw new Error("校园导航资源未能解码，请重新载入。", { cause: error });
-  }
-  const query = new NavMeshQuery(navMesh,mapNavigationQueryOptions(manifest));
+  try{
+   vision=new VisionGeometry(visionData);createMapColliders(physics,collisionGeometry);
+   body=physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
+   capsule=physics.createCollider(RAPIER.ColliderDesc.capsule((height-.6)/2,.3),body);controller=playerController();physics.step();
+   navMesh=importNavMesh(new Uint8Array(navData)).navMesh;query=new NavMeshQuery(navMesh,mapNavigationQueryOptions(manifest));
+  }catch(error){query?.destroy();navMesh?.destroy();vision?.dispose();physics.free();throw preparationFailure(error,'decode');}
   const root = new THREE.Group();
   root.name = `${manifest.sourceVersion ?? "campus"}-game-campus`;
   scene.add(root);
@@ -239,27 +230,12 @@ export async function loadWorld(
     try {
       await images.prepare(chunk,signal);
       gltf = bundle
-        ? await withDeadline(
-            gameMapSession
-              .read(chunk.url, { signal, priority })
-              .then((bytes) => {byteReady?.(bytes.byteLength);return decodeQueue.run(
-                  () =>
-                    loader.parseAsync(
-                      bytes,
-                      new URL(".", new URL(chunk.url, location.href)).href,
-                    ),
-                  signal,
-                  priority,
-                );}),
-            30000,
-            {
-              signal,
-              onLate: (g) => {
-                resources.retain(g.scene);
-                resources.release(g.scene);
-              },
-            },
-          )
+        ? await gameMapSession.read(chunk.url,{signal,priority}).then(bytes=>{
+            byteReady?.(bytes.byteLength);
+            return decodeQueue.run(()=>withForegroundDeadline(loader.parseAsync(bytes,new URL('.',new URL(chunk.url,location.href)).href),90000,{
+              signal,stage:'decode',onLate:g=>{resources.retain(g.scene);resources.release(g.scene);},
+            }),signal,priority);
+          })
         : await loader.loadAsync(chunk.url);
     } finally {
       signal.removeEventListener("abort", abort);

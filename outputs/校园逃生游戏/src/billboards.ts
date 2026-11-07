@@ -9,7 +9,7 @@ import {NPC_LAYOUT_COMBAT} from './npc-layout-combat.ts';
 import {NpcLocomotion,chooseNpcPose,isNpcMovingPose,npcWeaponRaised,npcDisplaySkill,type NpcMotionPose} from './npc-locomotion.ts';
 import {NPC_IDENTITY,npcPoseFilename,npcRealPoseFilename,npcFallbackPoseFilename,type NpcIdentityId,type NpcPose} from './npc-roster.ts';
 import {ensureNpcAppearance,currentNpcVariant,realNpcAsset,npcAppearanceGeneration,npcAppearanceSnapshot,npcAppearanceSubscribe,npcPublicName} from './npc-appearance';
-import {withDeadline} from './network.ts';
+import {withForegroundDeadline} from './preparation-lifecycle.ts';
 import {resourceWorkQueue,fetchResource,decodeResourceImage,abortResource,waitForResource} from './resource-leases.ts';
 import {staticAssetUrl} from './static-assets.ts';
 import {retainBillboardMask} from './billboard-masks.ts';
@@ -23,8 +23,64 @@ const cancelled=()=>new Error('人物图片载入已中止。');
 function disposeTexture(texture:THREE.Texture){texture.dispose();(texture.image as {close?:()=>void})?.close?.();}
 function releaseReal(entry:Entry){entry.realAbort?.abort();entry.realAbort=undefined;if(entry.pose)entry.pose.texture=entry.pose.baseTexture;if(entry.realTexture){disposeTexture(entry.realTexture);entry.realTexture=undefined;}}
 function imageTexture(image:Awaited<ReturnType<typeof decodeResourceImage>>){const texture=new THREE.Texture(image);texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=2;texture.needsUpdate=true;return texture;}
-async function loadFullFictional(entry:Entry){if(entry.fullWork)return entry.fullWork;if(!entry.pose||!entry.baseIsFallback||entry.refs<=0||typeof document!=='undefined'&&document.hidden)return;const work=(async()=>{const image=await decodeResourceImage(await fetchResource(staticAssetUrl(entry.fictionalFilename),entry.abort.signal),entry.abort.signal);if(entry.refs<=0||currentNpcVariant()==='real'&&entry.realTexture){(image as {close?:()=>void}).close?.();return;}const texture=imageTexture(image),old=entry.pose!.baseTexture;entry.pose!.baseTexture=texture;if(!entry.realTexture)entry.pose!.texture=texture;entry.baseIsFallback=false;disposeTexture(old);})().catch(()=>{}).finally(()=>{if(entry.fullWork===work)entry.fullWork=undefined;});entry.fullWork=work;return work;}
-async function loadReal(entry:Entry){if(entry.realWork)return entry.realWork;if(!entry.pose||entry.refs<=0||entry.realTexture||currentNpcVariant()!=='real')return;const controller=new AbortController(),epoch=npcAppearanceGeneration();entry.realAbort=controller;entry.realEpoch=epoch;let heldImage:Awaited<ReturnType<typeof decodeResourceImage>>|null=null;const work=(async()=>{const bytes=await realNpcAsset(entry.realFilename,controller.signal);if(!bytes)return;const image=await decodeResourceImage(bytes,controller.signal);heldImage=image;if(controller.signal.aborted||entry.refs<=0||epoch!==npcAppearanceGeneration()||currentNpcVariant()!=='real'){(image as {close?:()=>void}).close?.();return;}if(!entry.baseIsFallback){const fallback=await decodeResourceImage(await fetchResource(staticAssetUrl(entry.fallbackFilename),controller.signal),controller.signal);if(controller.signal.aborted||entry.refs<=0||epoch!==npcAppearanceGeneration()){(image as {close?:()=>void}).close?.();(fallback as {close?:()=>void}).close?.();return;}const old=entry.pose!.baseTexture;entry.pose!.baseTexture=imageTexture(fallback);entry.baseIsFallback=true;disposeTexture(old);}const texture=imageTexture(image);entry.realTexture=texture;entry.realCatalogRevision=npcAppearanceSnapshot().catalogRevision;entry.pose!.texture=texture;heldImage=null;})().catch(()=>{}).finally(()=>{(heldImage as {close?:()=>void}|null)?.close?.();if(entry.realWork===work)entry.realWork=undefined;if(entry.realAbort===controller)entry.realAbort=undefined;if(epoch!==npcAppearanceGeneration()&&currentNpcVariant()==='real'&&entry.refs>0&&!entry.realTexture&&!entry.abort.signal.aborted)void resourceWorkQueue.run(entry.abort.signal,()=>loadReal(entry)).catch(()=>{});});entry.realWork=work;return work;}
+type BillboardRenderer={renderer:Pick<THREE.WebGLRenderer,'initTexture'>;active:boolean;tail:Promise<void>};
+const renderers=new Set<BillboardRenderer>();
+export function registerBillboardRenderer(renderer:Pick<THREE.WebGLRenderer,'initTexture'>){
+ const owner:BillboardRenderer={renderer,active:true,tail:Promise.resolve()};renderers.add(owner);
+ return()=>{owner.active=false;renderers.delete(owner);};
+}
+async function prepareReplacementTexture(texture:THREE.Texture,signal:AbortSignal){
+ const own=new AbortController(),cancel=()=>own.abort();signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();
+ const jobs=[...renderers].map(owner=>{
+  const job=owner.tail.catch(()=>{}).then(async()=>{
+   await new Promise<void>(resolve=>typeof requestAnimationFrame==='undefined'?setTimeout(resolve,0):requestAnimationFrame(()=>resolve()));
+   abortResource(own.signal);if(owner.active)owner.renderer.initTexture(texture);
+  });
+  owner.tail=job.catch(()=>{});return job;
+ });
+ try{await withForegroundDeadline(Promise.all(jobs),90000,{signal:own.signal,stage:'gpu',onTimeout:cancel});abortResource(own.signal);}
+ finally{cancel();signal.removeEventListener('abort',cancel);}
+}
+async function decodePortrait(bytes:ArrayBuffer,signal:AbortSignal){
+ return withForegroundDeadline(decodeResourceImage(bytes,signal),90000,{signal,stage:'decode',onLate:image=>(image as {close?:()=>void}).close?.()});
+}
+async function loadFullFictional(entry:Entry){
+ if(entry.fullWork)return entry.fullWork;
+ if(!entry.pose||!entry.baseIsFallback||entry.refs<=0||typeof document!=='undefined'&&document.hidden)return;
+ let held:THREE.Texture|undefined;
+ const work=(async()=>{
+  held=imageTexture(await decodePortrait(await fetchResource(staticAssetUrl(entry.fictionalFilename),entry.abort.signal),entry.abort.signal));
+  await prepareReplacementTexture(held,entry.abort.signal);
+  if(entry.refs<=0||currentNpcVariant()==='real'&&entry.realTexture)return;
+  const old=entry.pose!.baseTexture;entry.pose!.baseTexture=held;if(!entry.realTexture)entry.pose!.texture=held;held=undefined;entry.baseIsFallback=false;disposeTexture(old);
+ })().catch(()=>{}).finally(()=>{if(held)disposeTexture(held);if(entry.fullWork===work)entry.fullWork=undefined;});entry.fullWork=work;return work;
+}
+async function loadReal(entry:Entry){
+ if(entry.realWork)return entry.realWork;
+ if(!entry.pose||entry.refs<=0||entry.realTexture||currentNpcVariant()!=='real')return;
+ const controller=new AbortController(),epoch=npcAppearanceGeneration();entry.realAbort=controller;entry.realEpoch=epoch;
+ const valid=()=>!controller.signal.aborted&&entry.refs>0&&epoch===npcAppearanceGeneration()&&currentNpcVariant()==='real';
+ let held:THREE.Texture|undefined,backup:THREE.Texture|undefined;
+ const work=(async()=>{
+  const bytes=await realNpcAsset(entry.realFilename,controller.signal);if(!bytes||!valid())return;
+  held=imageTexture(await decodePortrait(bytes,controller.signal));
+  await prepareReplacementTexture(held,controller.signal);if(!valid())return;
+  if(!entry.baseIsFallback){
+   backup=imageTexture(await decodePortrait(await fetchResource(staticAssetUrl(entry.fallbackFilename),controller.signal),controller.signal));
+   await prepareReplacementTexture(backup,controller.signal);if(!valid())return;
+   const old=entry.pose!.baseTexture;entry.pose!.baseTexture=backup;backup=undefined;entry.baseIsFallback=true;disposeTexture(old);
+  }
+  entry.realTexture=held;entry.realCatalogRevision=npcAppearanceSnapshot().catalogRevision;entry.pose!.texture=held;held=undefined;
+ })().catch(()=>{}).finally(()=>{
+  if(held)disposeTexture(held);if(backup)disposeTexture(backup);
+  if(entry.realWork===work)entry.realWork=undefined;if(entry.realAbort===controller)entry.realAbort=undefined;
+  if(epoch!==npcAppearanceGeneration()&&currentNpcVariant()==='real'&&entry.refs>0&&!entry.realTexture&&!entry.abort.signal.aborted)void resourceWorkQueue.run(entry.abort.signal,()=>loadReal(entry)).catch(()=>{});
+ });entry.realWork=work;return work;
+}
+function improvePortrait(entry:Entry){
+ // The calibrated fictional silhouette is ready before optional private artwork.
+ void loadReal(entry).then(()=>{if(!entry.realTexture)return loadFullFictional(entry);}).catch(()=>{});
+}
 npcAppearanceSubscribe(()=>{for(const entry of cache.values()){if(currentNpcVariant()!=='real'){releaseReal(entry);if(entry.pose&&entry.baseIsFallback)void resourceWorkQueue.run(entry.abort.signal,()=>loadFullFictional(entry)).catch(()=>{});}else{if(entry.realTexture&&entry.realCatalogRevision!==npcAppearanceSnapshot().catalogRevision||entry.realWork&&entry.realEpoch!==npcAppearanceGeneration())releaseReal(entry);if(entry.pose&&!entry.realTexture&&!entry.realWork)void resourceWorkQueue.run(entry.abort.signal,()=>loadReal(entry)).catch(()=>{});}}});
 
 export function npcPortraitLayout(id:NpcIdentityId,pose:NpcPose):{shape:BodyLayout;hand:readonly [number,number,number]}{
@@ -59,10 +115,10 @@ function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
  cache.set(key,entry);
  const filename=npcPoseFilename(id,pose,mobile);
  entry.promise=resourceWorkQueue.run(abort.signal,async()=>{
-  const bytes=await withDeadline(fetchResource(staticAssetUrl(preferReal?entry.fallbackFilename:filename),abort.signal),30000,{signal:abort.signal});
+  const bytes=await fetchResource(staticAssetUrl(preferReal?entry.fallbackFilename:filename),abort.signal);
   const maskLease=retainBillboardMask(filename,abort.signal);entry.maskRelease=maskLease.release;
   const maskWork=maskLease.mask;void maskWork.catch(()=>{});
-  const image=await withDeadline(decodeResourceImage(bytes,abort.signal),30000,{signal:abort.signal});abortResource(abort.signal);
+  const image=await decodePortrait(bytes,abort.signal);abortResource(abort.signal);
   const texture=new THREE.Texture(image);texture.needsUpdate=true;
   try{
    texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=2;
@@ -70,7 +126,7 @@ function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
    const im=texture.image as {width:number;height:number};
    if(!entry.baseIsFallback&&(alpha.width!==im.width||alpha.height!==im.height))throw Error('人物图片与轮廓尺寸不一致。');
    if(entry.refs===0)throw cancelled();
-   const loaded={texture,baseTexture:texture,shape,hand,alpha};entry.pose=loaded;await loadReal(entry);if(!entry.realTexture)await loadFullFictional(entry);return loaded;
+   const loaded={texture,baseTexture:texture,shape,hand,alpha};entry.pose=loaded;improvePortrait(entry);return loaded;
   }catch(error){disposeTexture(texture);entry.disposed=true;throw error;}
  }).catch(error=>{entry.maskRelease?.();abort.abort();if(cache.get(key)===entry)cache.delete(key);throw error;});
  return entry;
@@ -79,7 +135,7 @@ function retainEntry(id:NpcIdentityId,pose:NpcPose,mobile:boolean):Entry{
 /** Load selected identities only; overlapping rounds share identity/pose/quality entries. */
 export async function prepareBillboards(ids:readonly NpcIdentityId[],progress:(p:number)=>void=()=>{},mobile=false,signal?:AbortSignal):Promise<()=>void>{
  if(signal?.aborted)throw cancelled();
- await ensureNpcAppearance();if(signal?.aborted)throw cancelled();
+ void ensureNpcAppearance();if(signal?.aborted)throw cancelled();
  const unique=[...new Set(ids)],entries=unique.flatMap(id=>NPC_IDENTITY[id].poses.map(pose=>retainEntry(id,pose,mobile)));
  let released=false,completed=0;
  const release=()=>{if(released)return;released=true;entries.forEach(releaseEntry);};

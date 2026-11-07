@@ -37,7 +37,7 @@ test('resource work queue caps decode concurrency and drops only the cancelled q
 test('fetchResource forwards cancellation to fetch instead of only abandoning the result',async()=>{
  const prior=globalThis.fetch,controller=new AbortController();let received:AbortSignal|undefined;
  globalThis.fetch=async(_url,options)=>{received=options?.signal as AbortSignal;return new Promise((_,reject)=>received!.addEventListener('abort',()=>reject(new DOMException('Cancelled','AbortError')),{once:true}));};
- try{const download=fetchResource('/asset.glb',controller.signal);controller.abort();await assert.rejects(download,{name:'AbortError'});assert.equal(received,controller.signal);}finally{globalThis.fetch=prior;}
+ try{const download=fetchResource('/asset.glb',controller.signal);controller.abort();await assert.rejects(download,{name:'AbortError'});assert.equal(received?.aborted,true);}finally{globalThis.fetch=prior;}
 });
 
 test('one cancelled waiter returns immediately while another consumer keeps its download',async()=>{

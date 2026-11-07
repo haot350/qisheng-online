@@ -4,7 +4,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
 import type {WeaponId} from './types';
 import {WEAPON_IDS,type WeaponActionSnapshot} from './rules.ts';
-import {withDeadline} from './network.ts';
+import {withForegroundDeadline} from './preparation-lifecycle.ts';
 import type {WeaponResource} from './weapon-resources.ts';
 import {ResourceLeases,resourceWorkQueue,fetchResource,abortResource,waitForResource} from './resource-leases.ts';
 import {staticAssetUrl} from './static-assets.ts';
@@ -15,8 +15,8 @@ export interface WorldWeapon {root:THREE.Group;setWeapon(id:WeaponId):void;updat
 function disposeShared(object:THREE.Object3D){const geometry=new Set<THREE.BufferGeometry>(),materials=new Set<THREE.Material>();object.traverse(o=>{if(o instanceof THREE.Mesh){geometry.add(o.geometry);(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));}});geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());}
 const resources=new ResourceLeases<THREE.Group>((key,signal)=>resourceWorkQueue.run(signal,async()=>{
  const url=staticAssetUrl('/weapons/'+key+'.glb'),loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
- const bytes=await withDeadline(fetchResource(url,signal),30000,{signal});
- const gltf=await withDeadline(loader.parseAsync(bytes,url.slice(0,url.lastIndexOf('/')+1)),30000,{signal,onLate:g=>disposeShared(g.scene)});
+ const bytes=await fetchResource(url,signal);
+ const gltf=await withForegroundDeadline(loader.parseAsync(bytes,url.slice(0,url.lastIndexOf('/')+1)),90000,{stage:'decode',signal,onLate:g=>disposeShared(g.scene)});
  if(signal.aborted){disposeShared(gltf.scene);abortResource(signal);}
  const group=gltf.scene,tuned=new Set<THREE.Material>();
  if(!group.getObjectByName('muzzle')){disposeShared(group);throw Error('枪口锚点缺失：'+key);}

@@ -1,3 +1,4 @@
+import {readDeploymentOperations,normalizeAdmission} from './deployment-operations.js';
 import {deploymentPaths} from './deployment-paths.js';
 import {adminRoomReadRoutes} from './admin-rooms.js';
 import {readPresence} from './presence.js';
@@ -16,7 +17,7 @@ type Admin = (req: FastifyRequest, write?: boolean, scope?: string) => any;
 const has = (a: any, scope: string) => a.owner || a.scopes.includes(scope);
 export function adminDeploymentTarget(host=hostname(),production=process.env.NODE_ENV==='production'||Boolean(process.env.RANKING_CONFIG)||import.meta.url.startsWith('file:///srv/codex/')){
   const configured=process.env.OPENQS_DEPLOYMENT_TARGET_CONFIG;
-  const files=configured?[configured]:['/srv/codex/sites/deployment-targets.json','/srv/codex/sites/tools/deployment-targets.json'];
+  const files=configured?[configured]:[...(deploymentPaths().workspaceRoot?[join(deploymentPaths().workspaceRoot!,'config/deployment-targets.json')]:[]),'/srv/codex/sites/deployment-targets.json','/srv/codex/sites/tools/deployment-targets.json'];
   for(const file of files)try{
     const config=JSON.parse(readFileSync(file,'utf8'));
     const match=Object.entries(config.targets??{}).find(([id,entry])=>/^[a-z0-9][a-z0-9-]*$/.test(id)&&(entry as any)?.hostname===host);
@@ -60,8 +61,10 @@ export function adminWorkbenchRoutes(c: Context, admin: Admin) {
       }catch{return{id,available:false,checkedAt,rooms:[]};}
     }));
     const target=adminDeploymentTarget();
+    let admission=null;try{const status=await fetch('http://127.0.0.1:'+runtime.workerPorts[0]+'/status',{signal:AbortSignal.timeout(1800)});if(status.ok)admission=normalizeAdmission(await status.json());}catch{}
+    const operations=await readDeploymentOperations(runtime.workspaceRoot,now());
     let apiVersion:string|null=null;try{apiVersion=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;}catch{}
-    return {checkedAt:now(),target,release,api:{ok:true,version:apiVersion,node:process.version,uptimeSeconds:Math.floor(process.uptime()),schemaVersion:db.pragma('user_version',{simple:true})},workers:workerRows,deployments:db.prepare('SELECT id,version,site,verified FROM deployments ORDER BY verified DESC LIMIT 6').all()};
+    return {checkedAt:now(),target,release,admission,operations,api:{ok:true,version:apiVersion,node:process.version,uptimeSeconds:Math.floor(process.uptime()),schemaVersion:db.pragma('user_version',{simple:true})},workers:workerRows,deployments:db.prepare('SELECT id,version,site,verified FROM deployments ORDER BY verified DESC LIMIT 6').all()};
   });
   const directory = fileURLToPath(new URL('../admin/dist/', import.meta.url));
   for (const url of ['/admin', '/admin/']) app.get(url, (_, reply) => {

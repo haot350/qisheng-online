@@ -1,4 +1,5 @@
 /** Shared resource work belongs to its consumers, rather than the first request. */
+import {PreparationFailure,preparationFailure} from './preparation-lifecycle.ts';
 export type ResourceLease<T>={value:Promise<T>;release:()=>void};
 type Entry<T>={refs:number;controller:AbortController;value?:T;work:Promise<T>;disposed:boolean};
 export class ResourceLeases<T>{
@@ -30,7 +31,24 @@ class ResourceWorkQueue{
 }
 export const resourceWorkQueue=new ResourceWorkQueue();
 export function abortResource(signal:AbortSignal){if(signal.aborted)throw new DOMException('Cancelled','AbortError');}
-export async function fetchResource(url:string,signal:AbortSignal){abortResource(signal);const response=await fetch(url,{signal});if(!response.ok)throw Error('Resource HTTP '+response.status);const bytes=await response.arrayBuffer();abortResource(signal);return bytes;}
+export async function fetchResource(url:string,signal:AbortSignal,options:{stallMs?:number}={}){
+ abortResource(signal);const controller=new AbortController(),abort=()=>controller.abort();let stalled=false,timer:ReturnType<typeof setTimeout>|undefined;
+ const progress=()=>{if(timer!==undefined)clearTimeout(timer);timer=setTimeout(()=>{stalled=true;controller.abort();},options.stallMs??30000);};
+ signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();progress();
+ try{
+  const response=await fetch(url,{signal:controller.signal});
+  if(!response.ok)throw Object.assign(Error('Resource HTTP '+response.status),{status:response.status});
+  let bytes:ArrayBuffer;
+  if(response.body){
+   const reader=response.body.getReader(),chunks:Uint8Array[]=[];let length=0;
+   try{while(true){const item=await reader.read();if(item.done)break;if(item.value.byteLength){progress();chunks.push(item.value);length+=item.value.byteLength;}}}
+   finally{reader.releaseLock();}
+   const joined=new Uint8Array(length);let offset=0;for(const chunk of chunks){joined.set(chunk,offset);offset+=chunk.length;}bytes=joined.buffer;
+  }else bytes=await response.arrayBuffer();
+  abortResource(controller.signal);return bytes;
+ }catch(error){if(stalled)throw new PreparationFailure('download','timeout',{cause:error});if(signal.aborted)throw new DOMException('Cancelled','AbortError');throw preparationFailure(error,'download');}
+ finally{if(timer!==undefined)clearTimeout(timer);signal.removeEventListener('abort',abort);controller.abort();}
+}
 
 /** HTML image decoding preserves TextureLoader's UV/alpha orientation. */
 export function decodeResourceImage(bytes:ArrayBuffer,signal:AbortSignal):Promise<HTMLImageElement>{return new Promise((resolve,reject)=>{
@@ -41,7 +59,11 @@ export function decodeResourceImage(bytes:ArrayBuffer,signal:AbortSignal):Promis
 });}
 
 /** A caller may stop waiting without cancelling another consumer's shared work. */
-export function waitForResource<T>(work:Promise<T>,signal?:AbortSignal):Promise<T>{
- if(!signal)return work;if(signal.aborted)return Promise.reject(new DOMException('Cancelled','AbortError'));
- return new Promise((resolve,reject)=>{const abort=()=>{cleanup();reject(new DOMException('Cancelled','AbortError'));},cleanup=()=>signal.removeEventListener('abort',abort);signal.addEventListener('abort',abort,{once:true});void work.then(value=>{cleanup();resolve(value);},error=>{cleanup();reject(error);});});
+export function waitForResource<T>(work:Promise<T>,signal?:AbortSignal,onLate?:(value:T)=>void):Promise<T>{
+ if(!signal)return work;
+ return new Promise((resolve,reject)=>{
+  let settled=false;const cleanup=()=>signal.removeEventListener('abort',abort),abort=()=>{if(settled)return;settled=true;cleanup();reject(new DOMException('Cancelled','AbortError'));};
+  signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
+  void work.then(value=>{if(settled){onLate?.(value);return;}settled=true;cleanup();resolve(value);},error=>{if(settled)return;settled=true;cleanup();reject(error);});
+ });
 }

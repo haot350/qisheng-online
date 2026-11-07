@@ -13,6 +13,7 @@ const policies={
 };
 policies['0.11.0']={...policies['0.10.2'],staticOnly:true,rollbackVersion:'0.10.2',rollbackApiVersion:'0.10.2',expectedPreviousStaticReleaseId:'20261031T160222Z-0.10.2',expectedPreviousRealtimeVersion:'0.10.2',expectedPreviousApiVersions:['0.10.2']};
 policies['0.13.0']={...policies['0.10.2'],schema:8,rollbackVersion:'0.12.0',rollbackApiVersion:'0.13.0',expectedPreviousStaticReleaseId:'20261101T130644Z-0.12.0',expectedPreviousRealtimeVersion:'0.10.2',expectedPreviousApiVersions:['0.12.0']};
+policies['0.13.3']={...policies['0.13.0'],rollbackVersion:'0.13.2',rollbackApiVersion:'0.13.2',expectedPreviousStaticReleaseId:'20261104T123822Z-0.13.2',expectedPreviousRealtimeVersion:'0.13.2',expectedPreviousApiVersions:['0.13.2'],pvpRoomPlayerLimit:8};
 export function releaseVerificationPolicy(version){const p=policies[version];return p?Object.freeze(Object.fromEntries(Object.entries(p).map(([key,value])=>[key,Array.isArray(value)?Object.freeze([...value]):value]))):null;}
 export function assertReleaseMapManifest(manifest,policy){
  if(!policy?.mapCatalogId)return false;

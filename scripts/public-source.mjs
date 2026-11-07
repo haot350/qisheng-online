@@ -13,6 +13,7 @@ const reviewedGenerated=new Set(["outputs/校园逃生游戏/src/generated/battl
 // These checks exercise private model exchange, browser QA or deployment tools.
 // Keep their sources and receipts local rather than exporting incomplete tests.
 const privateChecks=new Set([
+ 'outputs/校园联机服务/tests/room-capacity-v0133.test.mjs',
  'outputs/校园逃生游戏/src/qa',
  'outputs/校园服务器部署/tests/release-webr01-fix1.test.mjs',
  'outputs/校园服务器部署/tests/release-webr01-fix1.test.mjs',

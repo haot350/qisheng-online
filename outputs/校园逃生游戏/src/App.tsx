@@ -91,6 +91,8 @@ import { deviceGuidance } from "./story/guidance";
 import "./styles.css";
 import "./ui-theme.css";
 import { gameTelemetry } from "./telemetry";
+import {preparationErrorView,recordPreparationDiagnostic,preparationDiagnostics} from "./preparation-lifecycle.ts";
+import {refreshCurrentPage} from "./fresh-browser";
 import {
   DEFAULT_SETTINGS,
   parseStoredSettings,
@@ -714,7 +716,7 @@ export default function App() {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [apiRevision, setApiRevision] = useState(0),
-    [preparation, setPreparation] = useState({
+    [preparation, setPreparation] = useState<{state:"idle"|"loading"|"ready"|"error";progress:number;message:string;recovery?:"refresh"|"retry"}>({
       state: "idle" as "idle" | "loading" | "ready" | "error",
       progress: 0,
       message: "",
@@ -814,11 +816,13 @@ export default function App() {
         if (!scope.active) return;
         console.warn("Campus initialization failed", e);
         if (launchAudio.current===primedAudio) launchAudio.current=null;
-        if (!onlineRoomKey) setPreparation(p=>({...p,state:"error",message:"校园暂时未能载入，请重试。"}));
+        const failure=recordPreparationDiagnostic(e,"initialize",{mode:launchRef.current?.mode??selectedMode,quality:settingsRef.current.quality,generation:launchSerial.current}),view=preparationErrorView(failure,"initialize");
+        gameTelemetry().fault(view.code,launchRef.current?.mode??selectedMode);
+        setPreparation(p=>({...p,state:"error",message:view.message,recovery:view.recovery}));
         setSnapshot((s) => ({
           ...s,
           phase: "error",
-          message: "校园暂时未能载入，请重试。",
+          message: view.message,
         }));
       });
     return () => {
@@ -865,7 +869,9 @@ export default function App() {
     })().catch(error=>{
       if (!current()) return;
       if (error instanceof ModeUnavailableError) setModeBlocked(error.message);
-      setPreparation(p=>({...p,state:'error',message:error instanceof ModeUnavailableError?error.message:'这一局暂时未能进入，请重试。'}));
+      const failure=recordPreparationDiagnostic(error,'entry',{mode:request.mode,quality:request.settings.quality,generation:request.id}),view=preparationErrorView(failure,'entry');
+      gameTelemetry().fault(view.code,request.mode);
+      setPreparation(p=>({...p,state:'error',message:error instanceof ModeUnavailableError?error.message:view.message,recovery:view.recovery}));
     }).finally(()=>{
       if (operations.current.finish(ticket,game.current)) setBusy(false);
     });
@@ -1471,7 +1477,7 @@ export default function App() {
               <p role={preparation.state==='error'?'alert':'status'}>{preparation.message}</p>
               {preparation.state!=='error'&&<progress aria-label="本局资源准备" max={100} value={preparation.progress}/>}
               <div className={loadingUI.actions}>
-                {preparation.state==='error'&&<button className={loadingUI.primary} onClick={()=>{if(snapshot.phase==='error'&&!game.current){chooseStart(launch.resumeStory);setAttempt(n=>n+1);}else chooseStart(launch.resumeStory);}}>重试进入</button>}
+                {preparation.state==='error'&&<button className={loadingUI.primary} onClick={()=>{if(preparation.recovery==='refresh'){refreshCurrentPage('game');return;}if(snapshot.phase==='error'&&!game.current){chooseStart(launch.resumeStory);setAttempt(n=>n+1);}else chooseStart(launch.resumeStory);}}>{preparation.recovery==='refresh'?'刷新游戏':'重试进入'}</button>}
                 <button onClick={cancelLaunch}>{preparation.state==='error'?'返回修改':'取消'}</button>
               </div>
             </div>
@@ -1580,9 +1586,9 @@ export default function App() {
                   <p>{preparation.message}</p>
                   <button
                     className="secondary"
-                    onClick={() => chooseStart()}
+                    onClick={() => preparation.recovery==='refresh'?refreshCurrentPage('game'):chooseStart()}
                   >
-                    重试准备
+                    {preparation.recovery==='refresh'?'刷新游戏':'重试准备'}
                   </button>
                 </div>
               )}
@@ -1600,7 +1606,7 @@ export default function App() {
                     </div>
                   </div>
                 )}
-              {snapshot.phase === "error" && (
+              {snapshot.phase === "error" && preparation.state!=="error" && (
                 <div className="load-error" role="alert">
                   <p>{snapshot.message}</p>
                   <button
@@ -1632,7 +1638,7 @@ export default function App() {
         page==='about'?<MenuAbout onUpdates={()=>setMenuReading('updates')} onCopyright={()=>openMenuPage('copyright')}/>:
         page==='updates'?<MenuUpdates/>:page==='copyright'?<Suspense fallback={<p role="status">正在打开版权与许可…</p>}><CopyrightPage active={pages.active===page} embedded/></Suspense>:
         page==='ranking'?<Suspense fallback={<p role="status">正在打开排行榜…</p>}><ModuleBoundary label="排行榜" retry={rankingComponent} onClose={()=>closeMenuPage('ranking')}><RankingUI embedded initialPanel={requestedRankPanel} mode={snapshot.online?.mode==='coop'?'coop':helpMode==='dafei'?'dafei':'escape'} difficulty={rankingDifficulty} onClose={()=>closeMenuPage('ranking')} onAccount={()=>openRanking('identity')}/></ModuleBoundary></Suspense>:
-        page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
+        page==='feedback'?<Suspense fallback={<p role="status">正在打开反馈…</p>}><FeedbackUI embedded onIdentity={()=>openRanking('identity')} onAccount={()=>openRanking('identity')} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height,preparation:preparationDiagnostics()}}/></Suspense>:
         page==='assistant'?<Suspense fallback={<p role="status">正在打开小齐…</p>}><AssistantUI menuContext={assistantContext} onMenuAction={assistantAction} onPlanComplete={plan=>{if(plan.actions.some(action=>action.type==='create_room'||action.type==='join_room')&&onlineClient.current?.view.currentRoom?.phase==='lobby'){pages.clear();setOnlineOpen(true);}}} nextStep={assistantNextStep} onReturn={returnFromAssistant} active={pages.active===page} onHelp={()=>openMenuPage('faq')} onFeedback={openFeedback} connection={snapshot.onlineDiagnostics} diagnostics={{version:RELEASE_LABEL,mode:online?(onlineView.currentRoom?.mode==='pvp'?'online-'+(onlineView.currentRoom.variant??'pvp'):'online-coop'):snapshot.mode,controls:touchLayout?'touch':'keyboard',viewport:usableViewport.width+'×'+usableViewport.height}}/></Suspense>:
         page==='account'?<Suspense fallback={<p role="status">正在打开账号与档案…</p>}><AccountPage client={rankingClient} embedded iconUrls={achievementIconUrls} campusArtUrl={staticAssetUrl('/assets/ui-b/courtyard-wide.webp')} campusPortraitArtUrl={staticAssetUrl('/assets/ui-b/courtyard-portrait.webp')} onBusy={setAccountBusy} onRecent={()=>openRanking('recent')}/></Suspense>:null}
       </MenuPage>)}

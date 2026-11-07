@@ -46,7 +46,7 @@ test('world disposal cancels an active compile and queued chunks without more GP
 test('shader preparation rejects context loss before any scene upload',async()=>{
  const f=fixture(),gl=f.renderer.getContext();let lost=false;f.renderer.getContext=()=>({...gl,isContextLost:()=>lost});
  const preparer=new MapScenePreparer(f.scene,{renderer:f.renderer as unknown as THREE.WebGLRenderer,camera:f.camera}),work=preparer.prepare(f.root,new AbortController().signal);
- for(let i=0;i<20&&!f.calls.includes('compile');i++)await flush();lost=true;await assert.rejects(work,/图形资源/);assert.equal(f.calls.includes('offscreen'),false);assert.equal(preparer.diagnostics().chunks,0);preparer.dispose();f.geometry.dispose();f.material.dispose();f.texture.dispose();
+ for(let i=0;i<20&&!f.calls.includes('compile');i++)await flush();lost=true;await assert.rejects(work,{code:'PREP_GPU_GRAPHICS'});assert.equal(f.calls.includes('offscreen'),false);assert.equal(preparer.diagnostics().chunks,0);preparer.dispose();f.geometry.dispose();f.material.dispose();f.texture.dispose();
 });
 
 test('without parallel shader extension, link readiness still precedes offscreen upload',async()=>{

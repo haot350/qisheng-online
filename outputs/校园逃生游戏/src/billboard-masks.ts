@@ -1,11 +1,10 @@
 import index from './generated/billboard-alpha-index.json' with {type:'json'};
 import {ResourceLeases,fetchResource,waitForResource} from './resource-leases.ts';
-import {withDeadline} from './network.ts';
 import {staticAssetUrl} from './static-assets.ts';
 import {decodePortraitMask} from './portrait-mask.ts';
 type MaskRecord={bundle:string;offset:number;bytes:number;width:number;height:number;imageSha256:string};
 const records=index.records as Record<string,MaskRecord>;
-const bundles=new ResourceLeases<ArrayBuffer>((url,signal)=>withDeadline(fetchResource(url,signal),30000,{signal}),()=>{});
+const bundles=new ResourceLeases<ArrayBuffer>((url,signal)=>fetchResource(url,signal),()=>{});
 export function retainBillboardMask(filename:string,signal:AbortSignal){
  const row=records[filename];if(!row)throw Error('人物轮廓尚未准备好。');
  const imageHash=/\/([a-f0-9]{64})\.[a-z0-9]+$/.exec(staticAssetUrl(filename))?.[1];

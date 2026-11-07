@@ -1,13 +1,21 @@
 import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {SimWorld} from '../../校园逃生游戏/src/multiplayer/shared/sim-world';
+import {performance} from 'node:perf_hooks';
+import {SimWorld,type SimWorldCreationObserver} from '../../校园逃生游戏/src/multiplayer/shared/sim-world';
 import type {MapIdentity} from '../../校园逃生游戏/src/multiplayer/shared/protocol';
 const directory=process.env.MAP_DIRECTORY??path.resolve(process.cwd(),'../校园逃生游戏/public/map');
+const readStarted=performance.now();
 const [manifestBytes,collision,nav]=await Promise.all(['manifest.json','collision.bin','navigation.bin'].map(p=>readFile(path.join(directory,p))));
+const readMs=performance.now()-readStarted,parseStarted=performance.now();
 export const manifest=JSON.parse(manifestBytes.toString());
+const manifestParseMs=performance.now()-parseStarted;
 const vision=manifest.visionUrl?await readFile(path.join(directory,path.basename(manifest.visionUrl))):undefined;
 const hash=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
+const hashStarted=performance.now();
 export const mapIdentity:MapIdentity={sourceVersion:manifest.sourceVersion??manifest.source,manifestHash:hash(manifestBytes),collisionHash:hash(collision),navigationHash:hash(nav),...(vision?{visionHash:hash(vision)}:{})};
-const buffer=(b:Buffer)=>b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength) as ArrayBuffer;
-export const createWorld=()=>SimWorld.create(manifest,buffer(collision),new Uint8Array(nav),vision?buffer(vision):undefined);
+const buffer=(b:Buffer)=>(b.byteOffset===0&&b.byteLength===b.buffer.byteLength?b.buffer:b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)) as ArrayBuffer;
+export const mapSourceMetrics=Object.freeze({readMs,manifestParseMs,hashMs:performance.now()-hashStarted,bytes:manifestBytes.length+collision.length+nav.length+(vision?.length??0)});
+// Importers copy into their own WASM worlds; the source binary identities remain read-only.
+const collisionSource=buffer(collision),navigationSource=new Uint8Array(nav.buffer,nav.byteOffset,nav.byteLength),visionSource=vision?buffer(vision):undefined;
+export const createWorld=(observer?:SimWorldCreationObserver)=>SimWorld.create(manifest,collisionSource,navigationSource,visionSource,observer);

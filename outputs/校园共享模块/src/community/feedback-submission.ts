@@ -1,6 +1,6 @@
-import {safeConnectionSummary,type ConnectionFeedbackSummary} from '../connection-summary.ts';
+import {safeConnectionSummary,safePreparationSummary,type ConnectionFeedbackSummary,type PreparationFeedbackSummary} from '../connection-summary.ts';
 
-export type FeedbackDiagnostics={connection?:ConnectionFeedbackSummary;version?:string;mode?:string;controls?:string;browser?:string;os?:string;viewport?:string;errorCode?:string};
+export type FeedbackDiagnostics={connection?:ConnectionFeedbackSummary;preparation?:PreparationFeedbackSummary;version?:string;mode?:string;controls?:string;browser?:string;os?:string;viewport?:string;errorCode?:string};
 export type FeedbackAttachmentSelection={includeDiagnostics:boolean;includeConnection:boolean};
 
 /** A connection-only report contains no device fields. */
@@ -10,6 +10,7 @@ export function selectedFeedbackDiagnostics(diagnostics:FeedbackDiagnostics,conn
   for(const key of ['version','mode','controls','browser','os','viewport','errorCode'] as const){
    const value=diagnostics[key];if(typeof value==='string'&&value)selected[key]=value;
   }
+  const preparation=safePreparationSummary(diagnostics.preparation);if(preparation)selected.preparation=preparation;
  }
  if(selection.includeConnection){
   const summary=safeConnectionSummary(connection??diagnostics.connection);

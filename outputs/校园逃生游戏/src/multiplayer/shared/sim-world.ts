@@ -1,8 +1,10 @@
+import {withForegroundDeadline} from '../../preparation-lifecycle.ts';
+import {initializeGamePhysics} from '../../physics-initialization.ts';
 import {mapNavigationQueryOptions} from '../../navigation/query-config';
 import {readMapCollision,createMapColliders} from '../../map-collision';
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
-import {init as initNavigation,importNavMesh,NavMeshQuery} from 'recast-navigation';
+import {importNavMesh,NavMeshQuery} from 'recast-navigation';
 import type {MapManifest} from '../../types';
 import type {Vec3} from './protocol';
 import {storyCurbLift,storyDirectRoute} from '../../story-curb';
@@ -11,15 +13,34 @@ import {NavigationAvoidance,normalizeCampusRoute} from '../../navigation/avoidan
 import {VisionGeometry} from '../../vision-geometry';
 import {StaticTriangleBlockers} from '../../triangle-blocker';
 export const CAPSULE={standing:1.75,crouching:1.15,radius:.3,skin:.015,step:.42,stepDepth:.20,snap:.30,gravity:14,jump:4.1} as const;
-const copyPoint=(p:Vec3):Vec3=>[...p];const v=(p:Vec3)=>new THREE.Vector3(...p);let initialized:Promise<unknown>|undefined;
+const copyPoint=(p:Vec3):Vec3=>[...p];const v=(p:Vec3)=>new THREE.Vector3(...p);
+const collisionGeometryCache=new WeakMap<ArrayBuffer,ReturnType<typeof readMapCollision>>();
+export type SimWorldCreationPhase='initialize'|'collisionDecode'|'colliders'|'blockers'|'vision'|'navigation'|'firstStep';
+export type SimWorldCreationObserver=(phase:SimWorldCreationPhase,milliseconds:number,detail?:{cached?:boolean})=>void;
+function reportCreation(observer:SimWorldCreationObserver|undefined,phase:SimWorldCreationPhase,at:number,detail?:{cached?:boolean}){try{observer?.(phase,performance.now()-at,detail);}catch{/* Diagnostics never change authoritative physics. */}}
+
 type Actor={body:RAPIER.RigidBody;collider:RAPIER.Collider;controller:RAPIER.KinematicCharacterController;height:number;team:string;kind:'human'|'npc';};
 export class SimWorld {
  readonly actors=new Map<string,Actor>();readonly physics:RAPIER.World;readonly query:NavMeshQuery;private avoidance=new NavigationAvoidance();private actorIds=new Map<string,number>();private actorSerial=0;private numericId(id:string){if(!this.actorIds.has(id))this.actorIds.set(id,++this.actorSerial);return this.actorIds.get(id)!;}private nav:ReturnType<typeof importNavMesh>['navMesh'];
  private vision:VisionGeometry;private blockers:StaticTriangleBlockers;private staticCollider:RAPIER.Collider|null;
  private visibilityCounters={proofHits:0,physicalFallbacks:0,visionQueries:0,learned:0,unmapped:0};
  visibilityQueryStats(){return {...this.visibilityCounters};}
- private constructor(readonly manifest:MapManifest,collision:ArrayBuffer,navData:Uint8Array,vision?:ArrayBuffer){const geometry=readMapCollision(collision),{positions,indices}=geometry;this.physics=new RAPIER.World({x:0,y:-18,z:0});this.staticCollider=createMapColliders(this.physics,geometry).meshCollider;this.blockers=new StaticTriangleBlockers(positions,indices);this.vision=new VisionGeometry(vision);this.nav=importNavMesh(navData).navMesh;this.query=new NavMeshQuery(this.nav,mapNavigationQueryOptions(manifest));this.physics.step();}
- static async create(manifest:MapManifest,collision:ArrayBuffer,nav:Uint8Array,vision?:ArrayBuffer){initialized??=Promise.all([RAPIER.init(),initNavigation()]);await initialized;return new SimWorld(manifest,collision,nav,vision);}
+ private constructor(readonly manifest:MapManifest,collision:ArrayBuffer,navData:Uint8Array,visionData?:ArrayBuffer,observer?:SimWorldCreationObserver){
+  let at=performance.now(),geometry=collisionGeometryCache.get(collision);const cached=!!geometry;
+  if(!geometry){geometry=readMapCollision(collision);collisionGeometryCache.set(collision,geometry);}
+  reportCreation(observer,'collisionDecode',at,{cached});
+  const physics=new RAPIER.World({x:0,y:-18,z:0});
+  let blockers:StaticTriangleBlockers|undefined,vision:VisionGeometry|undefined,nav:ReturnType<typeof importNavMesh>['navMesh']|undefined,query:NavMeshQuery|undefined,staticCollider:RAPIER.Collider|null=null;
+  try{
+   at=performance.now();staticCollider=createMapColliders(physics,geometry).meshCollider;reportCreation(observer,'colliders',at);
+   at=performance.now();blockers=new StaticTriangleBlockers(geometry.positions,geometry.indices);reportCreation(observer,'blockers',at);
+   at=performance.now();vision=new VisionGeometry(visionData);reportCreation(observer,'vision',at);
+   at=performance.now();nav=importNavMesh(navData).navMesh;query=new NavMeshQuery(nav,mapNavigationQueryOptions(manifest));reportCreation(observer,'navigation',at);
+   at=performance.now();physics.step();reportCreation(observer,'firstStep',at);
+  }catch(error){query?.destroy();nav?.destroy();vision?.dispose();blockers?.clear();physics.free();throw error;}
+  this.physics=physics;this.staticCollider=staticCollider;this.blockers=blockers;this.vision=vision;this.nav=nav;this.query=query;
+ }
+ static async create(manifest:MapManifest,collision:ArrayBuffer,nav:Uint8Array,vision?:ArrayBuffer,observer?:SimWorldCreationObserver){const at=performance.now();try{await withForegroundDeadline(initializeGamePhysics(),90000,{stage:'initialize'});}finally{reportCreation(observer,'initialize',at);}return new SimWorld(manifest,collision,nav,vision,observer);}
  addActor(id:string,position:Vec3,team='none',kind:'human'|'npc'='human'){if(this.actors.has(id))this.removeActor(id);const body=this.physics.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()),collider=this.physics.createCollider(RAPIER.ColliderDesc.capsule((CAPSULE.standing-.6)/2,.3),body),controller=this.physics.createCharacterController(.015);controller.enableAutostep(.42,.20,false);controller.enableSnapToGround(.30);controller.setMaxSlopeClimbAngle(Math.PI*.27);controller.setMinSlopeSlideAngle(Math.PI*.30);this.actors.set(id,{body,collider,controller,height:1.75,team,kind});this.restore(id,position);}
  removeActor(id:string){const a=this.actors.get(id);if(!a)return;this.physics.removeCharacterController(a.controller);this.physics.removeRigidBody(a.body);this.actors.delete(id);this.avoidance.remove(this.numericId(id));this.actorIds.delete(id);}
  restore(id:string,point:Vec3){const a=this.actors.get(id);if(!a)return;const p={x:point[0],y:point[1]+a.height/2,z:point[2]};a.body.setTranslation(p,true);a.body.setNextKinematicTranslation(p);this.physics.propagateModifiedBodyPositionsToColliders();}

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {MapDecodeQueue} from './map-decode.ts';
-import {withDeadline} from './network.ts';
-import {warmScreenPixel} from './screen-gpu-warmup';
+import {withForegroundDeadline} from './preparation-lifecycle.ts';
+import {warmScreenPixel} from './screen-gpu-warmup.ts';
 import {prepareCampusGlass,ownsGlassEnvironment} from './campus-glass.ts';
 
 export type MapRenderContext={renderer:THREE.WebGLRenderer;camera:THREE.PerspectiveCamera};
@@ -49,7 +49,7 @@ export async function compileMapShaders(renderer:THREE.WebGLRenderer,root:THREE.
    timer=setTimeout(poll,extension?0:10);
   }catch(error){finish(error as Error);}
  });
- try{await withDeadline(work,30000,{signal,onTimeout:()=>timeout.abort()});}
+ try{await withForegroundDeadline(work,90000,{signal,stage:'gpu',onTimeout:()=>timeout.abort()});}
  finally{signal.removeEventListener('abort',abort);timeout.abort();}
 }
 

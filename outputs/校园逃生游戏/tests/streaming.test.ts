@@ -25,7 +25,7 @@ test('cancelling a prepared cinematic aborts unused requests and disposes their 
 });
 test('a failed cinematic preload releases its other pending view and can prepare the same views on retry',async()=>{
  let fail=true;const pending:{signal:AbortSignal;resolve:(v:string)=>void}[]=[],released:string[]=[];
- const stream=new ChunkStreamer([chunk('failed',180),chunk('other',220)],(c,signal)=>c.url==='failed'?fail?Promise.reject(Error('offline')):Promise.resolve('ready'):new Promise<string>(resolve=>pending.push({signal,resolve})),s=>released.push(s));
+ const stream=new ChunkStreamer([chunk('failed',180),chunk('other',220)],(c,signal)=>c.url==='failed'?fail?Promise.reject(Error('offline')):Promise.resolve('ready'):new Promise<string>(resolve=>pending.push({signal,resolve})),s=>released.push(s),()=>performance.now(),()=>{},1);
  const view={origin:[0,0,0] as [number,number,number],direction:[1,0,0] as [number,number,number],fov:13,aspect:1.5,far:360};await assert.rejects(stream.prepareViews([view],new AbortController().signal),/重试/);assert.equal(pending[0].signal.aborted,true);pending[0].resolve('late');await flush();assert.deepEqual(released,['late']);fail=false;const prepared=stream.prepareViews([view],new AbortController().signal);await flush();pending[1].resolve('other');const release=await prepared;assert.equal(stream.status().resident,2);release();stream.dispose();
 });
 test('telephoto scenery gates the shutter independently and stays resident for thirty seconds',async()=>{
@@ -63,15 +63,13 @@ test('far regions unload and may load again; late work after disposal frees its 
   stream.update([0,0,0],[],true);pending.get('a')!('a');await flush();
   now=30000;stream.update([200,0,0],[],true);assert.deepEqual(released,['a']);stream.dispose();pending.get('b')!('b');await flush();assert.deepEqual(released,['a','b']);
 });
-test('hung requests expire, release concurrency slots, retry successfully and dispose obsolete late scenes',async()=>{
-  let now=0;const calls:{url:string;signal:AbortSignal;resolve:(s:string)=>void}[]=[],released:string[]=[];
-  const stream=new ChunkStreamer([chunk('a',0),chunk('b',2)],(c,signal)=>new Promise<string>(resolve=>calls.push({url:c.url,signal,resolve})),asset=>released.push(asset),()=>now);
-  stream.update([0,0,0],[],true);assert.equal(calls.length,2);
-  now=3600000;const timedOut=stream.update([0,0,0],[],true);assert.equal(timedOut.failed,true);assert.ok(calls.slice(0,2).every(c=>c.signal.aborted));
-  stream.retry();assert.equal(calls.length,4,'both occupied slots are available for retries');calls[2].resolve('new a');calls[3].resolve('new b');await flush();
-  assert.equal(stream.status().blocked,false);assert.equal(stream.status().resident,2);
-  calls[0].resolve('obsolete a');calls[1].resolve('obsolete b');await flush();assert.deepEqual(released,['obsolete a','obsolete b']);
-  stream.dispose();assert.deepEqual(released,['obsolete a','obsolete b','new a','new b']);
+test('active loader failures release concurrency while queue age alone leaves healthy work running',async()=>{
+ let now=0;const calls:{url:string;signal:AbortSignal;resolve:(s:string)=>void;reject:(e:Error)=>void}[]=[],released:string[]=[];
+ const stream=new ChunkStreamer([chunk('a',0),chunk('b',2)],(c,signal)=>new Promise<string>((resolve,reject)=>calls.push({url:c.url,signal,resolve,reject})),asset=>released.push(asset),()=>now);
+ stream.update([0,0,0],[],true);assert.equal(calls.length,2);now=3600000;assert.equal(stream.update([0,0,0],[],true).failed,false);assert.ok(calls.every(c=>!c.signal.aborted));
+ calls[0].reject(Error('Active download timeout'));calls[1].reject(Error('Active download timeout'));await flush();assert.equal(stream.status().failed,true);
+ stream.retry();assert.equal(calls.length,4);calls[2].resolve('new a');calls[3].resolve('new b');await flush();assert.equal(stream.status().blocked,false);assert.equal(stream.status().resident,2);
+ stream.dispose();assert.deepEqual(released,['new a','new b']);
 });
 test('an unrelated upper-floor failure cannot freeze a ground-floor player but stairs require both adjacent landings',async()=>{
   const floors=[{id:1,elevation:.61},{id:2,elevation:4.32},{id:3,elevation:8.34}];
@@ -161,10 +159,10 @@ test('stationary streaming reuses geometry while residency deadlines continue to
  for(let i=1;i<30;i++){now=i*1000;const state=stream.update([0,0,0],[],true);assert.equal(state.blocked,false);assert.equal(state.viewReady,true);assert.equal(state.resident,2);}
  assert.equal(boundsReads,reads,'The unmoving view recomputed chunk geometry');now=30000;assert.equal(stream.update([0,0,0],[],true).resident,1);assert.deepEqual(released,['far']);assert.equal(boundsReads,reads);stream.dispose();
 });
-test('cached stationary views still expire requests and respond to changed mode and floor metadata',async()=>{
+test('cached stationary views preserve queued requests and respond to changed mode and floor metadata',async()=>{
  let now=0;const calls:{url:string;signal:AbortSignal;resolve:(s:string)=>void}[]=[],floors=[{id:1,elevation:0}];
  const room={...chunk('room',0),kind:'interior' as const,floor:1},stream=new ChunkStreamer([room,chunk('distance-23',24)],(c,signal)=>new Promise<string>(resolve=>calls.push({url:c.url,signal,resolve})),()=>{},()=>now);
- stream.update([0,0,0],[],true,floors,{isDriving:false,outdoorOnly:false});now=30000;assert.equal(stream.update([0,0,0],[],true,floors,{isDriving:false,outdoorOnly:false}).failed,true);assert.equal(calls[0].signal.aborted,true);
+ stream.update([0,0,0],[],true,floors,{isDriving:false,outdoorOnly:false});now=30000;assert.equal(stream.update([0,0,0],[],true,floors,{isDriving:false,outdoorOnly:false}).failed,false);assert.equal(calls[0].signal.aborted,false);
  floors[0].elevation=4;assert.equal(stream.update([0,0,0],[],true,floors,{isDriving:false,outdoorOnly:false}).needed,0);
  assert.equal(stream.update([0,0,0],[],true,floors,{isDriving:true,outdoorOnly:true}).needed,1);stream.retry();calls.filter(c=>c.url==='distance-23').at(-1)!.resolve('road');await flush();assert.equal(stream.status().blocked,false);stream.dispose();
 });

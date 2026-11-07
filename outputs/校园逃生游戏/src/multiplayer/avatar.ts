@@ -5,7 +5,7 @@ import {clone as cloneSkeleton} from 'three/examples/jsm/utils/SkeletonUtils.js'
 import {createWorldWeapon} from '../weapons.ts';
 import type {AvatarId,PlayerState,WeaponId} from './shared/protocol';
 import {resourceWorkQueue,fetchResource,waitForResource} from '../resource-leases.ts';
-import {withDeadline} from '../network.ts';
+import {withForegroundDeadline} from '../preparation-lifecycle.ts';
 import {staticAssetUrl} from '../static-assets.ts';
 
 const STYLES:AvatarId[]=['campus-a','campus-b','tactical-a','tactical-b'];
@@ -20,7 +20,7 @@ function disposeSource(scene:THREE.Group){
 function release(style:AvatarId,entry:Entry){entry.refs=Math.max(0,entry.refs-1);if(entry.refs!==0)return;if(assets.get(style)===entry)assets.delete(style);entry.controller.abort();if(entry.scene){disposeSource(entry.scene);entry.scene=undefined;}}
 function retain(style:AvatarId){let entry=assets.get(style);if(!entry||entry.controller.signal.aborted){
  const created:Entry={refs:0,work:Promise.resolve(new THREE.Group()),controller:new AbortController()};entry=created;assets.set(style,created);
- created.work=resourceWorkQueue.run(created.controller.signal,async()=>{const signal=created.controller.signal,url=staticAssetUrl(BASE+style+'.glb'),loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);const bytes=await withDeadline(fetchResource(url,signal),30000,{signal});const gltf=await withDeadline(loader.parseAsync(bytes,url.slice(0,url.lastIndexOf('/')+1)),30000,{signal,onLate:g=>disposeSource(g.scene)});if(signal.aborted||created.refs===0){disposeSource(gltf.scene);throw new DOMException('Cancelled','AbortError');}created.scene=gltf.scene;let triangles=0;gltf.scene.traverse(o=>{const mesh=o as THREE.Mesh;if(mesh.isMesh)triangles+=(mesh.geometry.index?.count??mesh.geometry.getAttribute('position').count)/3;});gltf.scene.userData.triangles=triangles;return gltf.scene;}).catch(error=>{created.controller.abort();if(assets.get(style)===created)assets.delete(style);throw error;});
+ created.work=resourceWorkQueue.run(created.controller.signal,async()=>{const signal=created.controller.signal,url=staticAssetUrl(BASE+style+'.glb'),loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);const bytes=await fetchResource(url,signal);const gltf=await withForegroundDeadline(loader.parseAsync(bytes,url.slice(0,url.lastIndexOf('/')+1)),90000,{stage:'decode',signal,onLate:g=>disposeSource(g.scene)});if(signal.aborted||created.refs===0){disposeSource(gltf.scene);throw new DOMException('Cancelled','AbortError');}created.scene=gltf.scene;let triangles=0;gltf.scene.traverse(o=>{const mesh=o as THREE.Mesh;if(mesh.isMesh)triangles+=(mesh.geometry.index?.count??mesh.geometry.getAttribute('position').count)/3;});gltf.scene.userData.triangles=triangles;return gltf.scene;}).catch(error=>{created.controller.abort();if(assets.get(style)===created)assets.delete(style);throw error;});
  }entry.refs++;return entry;}
 
 /** Required assets are prepared before the server receives loading-ready. */

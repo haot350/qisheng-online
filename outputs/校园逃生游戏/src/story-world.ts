@@ -3,13 +3,13 @@ import * as THREE from 'three';
 import type {StorySnapshot,StoryVec3} from './story/types';
 import {STORY_STAGE} from './story/content';
 import type {GameWorld} from './world';
-import {withDeadline} from './network';
+import {withForegroundDeadline} from './preparation-lifecycle.ts';
 import {ResourceLeases,resourceWorkQueue,fetchResource,decodeResourceImage,abortResource,waitForResource} from './resource-leases.ts';
 import {StoryCompanionAvoidance} from './story-companion-avoidance';
 
 type ActorRig={mesh:THREE.Mesh<THREE.PlaneGeometry,THREE.MeshStandardMaterial>;textures:THREE.Texture[];poses:Record<string,THREE.Texture>;position:THREE.Vector3;heading:number;clock:number;pose:string;path:THREE.Vector3[];routeClock:number;target:THREE.Vector3;avoidance:StoryCompanionAvoidance};
 const storyPictures=new ResourceLeases<THREE.Texture>((url,signal)=>resourceWorkQueue.run(signal,async()=>{
- const bytes=await withDeadline(fetchResource(url,signal),20000,{signal}),image=await withDeadline(decodeResourceImage(bytes,signal),20000,{signal});abortResource(signal);const texture=new THREE.Texture(image);texture.needsUpdate=true;texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
+ const bytes=await fetchResource(url,signal),image=await withForegroundDeadline(decodeResourceImage(bytes,signal),90000,{stage:'decode',signal});abortResource(signal);const texture=new THREE.Texture(image);texture.needsUpdate=true;texture.colorSpace=THREE.SRGBColorSpace;texture.anisotropy=4;return texture;
 }),texture=>texture.dispose());
 export async function createStoryWorld(scene:THREE.Scene,world:GameWorld,sourceSignal:AbortSignal){
  const controller=new AbortController(),signal=controller.signal,abort=()=>controller.abort();sourceSignal.addEventListener('abort',abort,{once:true});if(sourceSignal.aborted)controller.abort();

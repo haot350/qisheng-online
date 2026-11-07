@@ -2,7 +2,7 @@ import {staticAssetUrl} from './static-assets.ts';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
-import {withDeadline} from './network.ts';
+import {withForegroundDeadline} from './preparation-lifecycle.ts';
 import {ResourceLeases,resourceWorkQueue,fetchResource,waitForResource,abortResource} from './resource-leases.ts';
 import type {VehicleState} from './vehicle-physics.ts';
 import {vehicleDefinition,type DrivingVehicleId} from './vehicles.ts';
@@ -13,8 +13,8 @@ function release(root:THREE.Object3D){
  geometry.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());
 }
 const vehicleResources=new ResourceLeases<THREE.Group>((url,signal)=>resourceWorkQueue.run(signal,async()=>{
- const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),bytes=await withDeadline(fetchResource(url,signal),30000,{signal});
- const loaded=await withDeadline(loader.parseAsync(bytes,url.slice(0,url.lastIndexOf('/')+1)),30000,{signal,onLate:g=>release(g.scene)});if(signal.aborted){release(loaded.scene);abortResource(signal);}
+ const loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),bytes=await fetchResource(url,signal);
+ const loaded=await withForegroundDeadline(loader.parseAsync(bytes,url.slice(0,url.lastIndexOf('/')+1)),90000,{stage:'decode',signal,onLate:g=>release(g.scene)});if(signal.aborted){release(loaded.scene);abortResource(signal);}
  return loaded.scene;
 }),release);
 /** Local -Z points forward; source dimensions are metres, root is the road anchor. */

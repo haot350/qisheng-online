@@ -24,6 +24,7 @@ import {
   billboardResourceDiagnostics,
   createBillboardCharacter as createCharacter,
   prepareBillboards,
+  registerBillboardRenderer,
 } from "./billboards";
 import type { CameraVisual } from "./camera-model";
 import { createViewWeapon, type ViewWeapon } from "./characters";
@@ -90,6 +91,8 @@ import { pickupReachable } from "./interactions";
 import { modeCapabilities, prepareModeAudio } from "./mode-policy";
 import { nearbyInteractionSummary } from "./nearby-interaction";
 import { withDeadline } from "./network.ts";
+import {waitForResource} from "./resource-leases";
+import {withForegroundDeadline,preparationFailure} from "./preparation-lifecycle.ts";
 import {
   NpcMovingAccuracy,
   npcAimDirection,
@@ -296,6 +299,7 @@ export async function createGame(
     antialias: !touch,
     powerPreference: "high-performance",
   });
+  const releaseBillboardRenderer=registerBillboardRenderer(renderer);
   renderer.setClearColor(0xccdce3);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2536,9 +2540,7 @@ export async function createGame(
       modePreparation?.key === key &&
       !modePreparation.controller.signal.aborted
     ) {
-      return withDeadline(modePreparation.work, 90000, {
-        signal: options.signal,
-      });
+      return waitForResource(modePreparation.work,options.signal);
     }
     const previousPreparation = modePreparation?.work;
     const preserveAudioGesture = next === 'story' && storyGesturePrimed;
@@ -2606,7 +2608,7 @@ export async function createGame(
         const update = (index:number,ratio:number,text:string) => stages.update(String(index),ratio,text);
         const worldReady = Promise.all([
           ensureWorld(token, signal, (p, msg) => update(3, p, msg)),
-          preloadModeUI(next),
+          withForegroundDeadline(preloadModeUI(next),90000,{signal,stage:'initialize'}),
         ]);
         const weapons = roundWeaponResources(
           next,
@@ -2739,7 +2741,9 @@ export async function createGame(
           throw new DOMException("Cancelled", "AbortError");
         }
         value.views = dropViews;
-        await prepareRoundGpu(value,signal,r=>stages.update('gpu',r,'准备画面'));
+        const gpuWork=prepareRoundGpu(value,signal,r=>stages.update('gpu',r,'准备画面'));
+        try{await withForegroundDeadline(gpuWork,90000,{signal,stage:'gpu',onTimeout:()=>controller.abort()});}
+        catch(error){controller.abort();await gpuWork.catch(()=>{});throw error;}
         if(signal.aborted || token!==enterToken)throw new DOMException('Cancelled','AbortError');
         value.presentationReady = true;
         preparedMode = value;
@@ -2747,6 +2751,7 @@ export async function createGame(
         report(1, "");
         tracePreparation('ready',key);
       } catch (error) {
+        tracePreparation('failed:'+preparationFailure(error,'entry').code,key);
         controller.abort();
         if (!committed) releasePrepared(value);
         throw error;
@@ -2760,15 +2765,11 @@ export async function createGame(
   }
   async function prepareCar(token: number, signal: AbortSignal,vehicleId:DrivingVehicleId="bao5") {
     if (!driveMap) {
-      const map: DriveMap = await withDeadline(
-        gameMapSession
+      const map: DriveMap = await gameMapSession
           .read("/map/drive-v122.json", { signal, priority: 0 })
           .then(
             (bytes) => JSON.parse(new TextDecoder().decode(bytes)) as DriveMap,
-          ),
-        30000,
-        { signal },
-      );
+          );
       if (dead || token !== enterToken || signal.aborted) return null;
       if (
         !map.npcRegions ||
@@ -2792,11 +2793,7 @@ export async function createGame(
     }
     const module = await import("./vehicle-visual.ts");
     if (dead || token !== enterToken || signal.aborted) return null;
-    const value = await withDeadline(
-      module.createVehicleVisual(scene, signal,vehicleId),
-      30000,
-      { signal, onLate: (car) => car.dispose() },
-    );
+    const value = await module.createVehicleVisual(scene, signal,vehicleId);
     if (dead || token !== enterToken || signal.aborted) {
       value.dispose();
       return null;
@@ -6496,6 +6493,7 @@ export async function createGame(
     world?.dispose();
     sun.shadow.dispose();
     frameMeter.dispose();
+    releaseBillboardRenderer();
     renderer.dispose();
     canvas.remove();
   }

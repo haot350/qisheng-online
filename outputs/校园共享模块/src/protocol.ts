@@ -2,10 +2,11 @@ import type {GadgetInventory,GadgetLoot,GrenadeState} from './gadgets.ts';
 import type {NearbyInteraction,MovementCheckpoint,Vec3,WeaponId} from './types.ts';
 import type {WeaponActionSnapshot} from './rules.ts';
 import type {WeatherPreset,WeatherState} from './weather.ts';
+export {PVP_ROOM_PLAYER_LIMIT,COOP_ROOM_PLAYER_LIMIT,DEFAULT_PVP_ROOM_PLAYERS,CLUSTER_PLAYER_LIMIT,ROOM_PLAYER_LIMITS,defaultRoomPlayers,roomPlayerLimit,clampRoomPlayers,roomPlayerChoices} from './room-limits.js';
 export type {Vec3,WeaponId} from './types.ts';
 export const PROTOCOL_VERSION='campus-mp-0.9.4' as const;
 export const RULE_VERSION='campus-mp-0.7.0' as const;
-export {COOP_RULE_VERSION} from './ranking.ts';
+export {COOP_RULE_VERSION} from './ranking.js';
 export const SIM_HZ=60, SNAPSHOT_HZ=20, INPUT_HZ=30;
 export type OnlineMode='coop'|'pvp';
 export type PvpVariant='tdm'|'ffa';
@@ -39,7 +40,7 @@ export interface GameEvent {serial:number;tick:number;type:GameEventType;actorId
 export interface MatchResult {resultId:string;mode:OnlineMode;variant?:PvpVariant;won:boolean;elapsed:number;teamScores:{blue:number;red:number};players:{id:string;nickname:string;kills:number;deaths:number;assists:number;downs:number;headshots:number;damage:number;rank:number;won:boolean}[];team?:{score:number;rating:string;tasks:number;eligible:boolean;reason?:string};}
 export interface RoomSnapshot {round?:number;rematchAvailable?:boolean;rematchStatus?:'ready'|'saving'|'unsupported'|'unavailable';weather?:WeatherState;gadgets?:GadgetLoot[];projectiles?:GrenadeState[];protocolVersion:typeof PROTOCOL_VERSION;roomId:string;inviteCode:string;hostId:string;mode:OnlineMode;variant:PvpVariant;difficulty:Difficulty;phase:RoomPhase;tick:number;elapsed:number;remaining:number;map:MapIdentity;players:PlayerState[];npcs:NpcState[];tasks:TaskState[];drops:DropState[];supplies:SupplyState[];smokes:SmokeState[];events:GameEvent[];eventSerial:number;maxPlayers:number;occupancy?:number;startedPlayers:number;extraction:{available:boolean;position:Vec3;progress:number;duration:number;blocked:'outside'|'contested'|null};teamScores:{blue:number;red:number};pauseVote:PauseVote|null;pauseLeft:number;pauseUses:number;countdown:number;result:MatchResult|null;maintenance:boolean;}
 export interface RoomListing {weather?:WeatherPreset;roomId:string;title:string;mode:OnlineMode;variant:PvpVariant;difficulty:Difficulty;players:number;maxPlayers:number;phase:RoomPhase;private:boolean;ping?:number;}
-export interface ServiceStatus {maintenance:boolean;rooms:number;players:number;queued:number;capacity:number;worker:number;}
+export interface ServiceStatus {maintenance:boolean;rooms:number;players:number;queued:number;capacity:number;worker:number;admission?:{canCreate:boolean;reason:'ready'|'maintenance'|'capacity'|'busy'|'warming';queued:number};roomLimits?:{coop:number;pvp:number;defaultPvp:number};}
 export interface LobbyView {status:'idle'|'connecting'|'lobby'|'playing'|'reconnecting'|'queued'|'error';rooms:RoomListing[];currentRoom:RoomSnapshot|null;error?:string;errorCode?:string;queuePosition?:number;reconnectLeft?:number;}
 export type ClientMessageMap={'client-capabilities':{rematch:true};rematch:{resultId:string};input:InputCommand|InputBatch;'input-rebase':InputRebaseCommand;loading:LoadingCommand;ready:{ready:boolean};consent:{consent:boolean};loadout:{weapon:WeaponId;avatar:AvatarId;team?:TeamId};start:{};pause:{agree?:boolean};resume:{};ping:{position:Vec3};preset:{id:'help'|'go'|'thanks'|'wait'};latency:{id:number;sentAt:number};'latency-ack':{nonce:string};spectate:{targetId:string|null};resync:{afterSeq?:number};leave:{}};
 export type ServerMessageMap={snapshot:RoomWireMessage;event:GameEvent;error:{code:string;message:string;retryable:boolean};latency:{id:number;sentAt:number;serverTick:number;nonce:string};queued:{position:number};result:MatchResult};

@@ -1,5 +1,6 @@
 import type { MapChunk, Vec3 } from "./types";
-import { withDeadline } from "./network.ts";
+import {waitForResource} from './resource-leases.ts';
+import {PreparationFailure,retryablePreparationFailure} from './preparation-lifecycle.ts';
 import {MapLodSelection,type LodPlan} from "./map-lod-selection.ts";
 export type StreamStatus = {
   blocked: boolean;
@@ -118,6 +119,9 @@ export class ChunkStreamer<T> {
     }
   >();
   private failures = new Map<string, number>();
+  private failureErrors = new Map<string, unknown>();
+  private failureAttempts = new Map<string, number>();
+  private retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private needed: MapChunk[] = [];
   private wanted: MapChunk[] = [];
   private alive = true;
@@ -221,6 +225,7 @@ export class ChunkStreamer<T> {
     private release: (asset: T) => void,
     private now = () => performance.now(),
     private changed = () => {},
+    private retryDelayMs = 5000,
   ) {
     this.index = new Map(chunks.map((c) => [c.url, c]));
     this.bounds = new Map(chunks.map((c) => [c.url, viewBounds(c)]));
@@ -269,11 +274,24 @@ export class ChunkStreamer<T> {
     if (!request) return;
     request.cancelled = true;
     this.counters.cancelled++;
-    if (failed) this.failures.set(url, this.now());
+    if (failed) this.recordFailure(url,new PreparationFailure('download','timeout'));
     this.pending.delete(url);
     this.requests.delete(url);
     request.controller.abort();
     this.cachedStatus=null;
+  }
+  private clearFailure(url:string){
+    this.cachedStatus=null;
+    this.failures.delete(url);this.failureErrors.delete(url);this.failureAttempts.delete(url);
+    const timer=this.retryTimers.get(url);if(timer!==undefined)clearTimeout(timer);this.retryTimers.delete(url);
+  }
+  private terminalFailure(url:string){return this.failures.has(url)&&((this.failureAttempts.get(url)??1)>=2||!retryablePreparationFailure(this.failureErrors.get(url)));}
+  private recordFailure(url:string,error:unknown){
+    this.cachedStatus=null;
+    this.failures.set(url,this.now());this.failureErrors.set(url,error);this.failureAttempts.set(url,(this.failureAttempts.get(url)??0)+1);
+    if(this.terminalFailure(url)||this.retryTimers.has(url))return;
+    const timer=setTimeout(()=>{this.retryTimers.delete(url);if(!this.alive)return;this.failures.set(url,this.now()-this.retryDelayMs);this.queueDirty=true;this.pump();for(const notify of [...this.listeners])notify();},this.retryDelayMs);
+    this.retryTimers.set(url,timer);
   }
   async initialize(
     point: Vec3,
@@ -322,11 +340,9 @@ export class ChunkStreamer<T> {
     } catch (error) {
       loading = Promise.reject(error);
     }
-    const work = withDeadline(loading, 30000, {
-      signal: controller.signal,
-      onTimeout: () => controller.abort(),
-      onLate: this.release,
-    })
+    // The loader owns active-transfer and decode/GPU budgets. Time in either
+    // shared queue must not turn an otherwise healthy chunk into a timeout.
+    const work = waitForResource(loading,controller.signal,asset=>this.release(asset))
       .then((asset) => {
         if (
           !this.alive ||
@@ -338,7 +354,7 @@ export class ChunkStreamer<T> {
         }
         this.assets.set(chunk.url, asset);
         this.counters.loads++;
-        this.failures.delete(chunk.url);
+        this.clearFailure(chunk.url);
         if (!this.lastWanted.has(chunk.url))
           this.lastWanted.set(chunk.url, this.now());
         this.revision++;
@@ -349,7 +365,7 @@ export class ChunkStreamer<T> {
           !request.cancelled &&
           this.requests.get(chunk.url) === request
         )
-          this.failures.set(chunk.url, this.now());
+          this.recordFailure(chunk.url,error);
         throw error;
       })
       .finally(() => {
@@ -393,8 +409,6 @@ export class ChunkStreamer<T> {
         message: "",
       };
     const now = this.now();
-    for (const [url, request] of this.requests)
-      if (now - request.started >= 30000) this.cancelRequest(url, true);
     // Full collision and navigation remain resident. Invisible NPCs do not need
     // another visual neighbourhood; expanding their anchors filled most of the map.
     const isDriving = driving?.isDriving ?? driving?.outdoorOnly ?? false,
@@ -602,11 +616,12 @@ export class ChunkStreamer<T> {
         if (
           this.assets.has(c.url) ||
           this.pending.has(c.url) || this.requests.has(c.url) ||
-          this.now() - (this.failures.get(c.url) ?? -Infinity) < 5000
+          this.terminalFailure(c.url) ||
+          this.now() - (this.failures.get(c.url) ?? -Infinity) < this.retryDelayMs
         )
           continue;
         const pendingBytes=[...this.requests.values()].reduce((n,r)=>n+r.bytes,0),cost=Math.max(1,c.bytes??1);
-        if(cost>this.pipelineByteBudget){this.failures.set(c.url,this.now());for(const notify of [...this.listeners])notify();continue;}
+        if(cost>this.pipelineByteBudget){this.recordFailure(c.url,new PreparationFailure('download','integrity'));for(const notify of [...this.listeners])notify();continue;}
         if(this.requests.size>=this.pipelineJobBudget||pendingBytes+cost>this.pipelineByteBudget)continue;
         if ([...this.requests.values()].filter(r=>!r.downloaded).length >= 2) {
           // An optional slow download must never hold up the ground under the player.
@@ -658,11 +673,11 @@ export class ChunkStreamer<T> {
     };
   }
   retry() {
-    for (const c of this.combatLeases.size&&!this.lodSelection.enabled?this.combatCore:this.needed) this.failures.delete(c.url);
+    for (const c of this.combatLeases.size&&!this.lodSelection.enabled?this.combatCore:this.needed) this.clearFailure(c.url);
     this.pump();
   }
   retryView() {
-    for (const c of this.viewNeeded) this.failures.delete(c.url);
+    for (const c of this.viewNeeded) this.clearFailure(c.url);
     this.pump();
   }
   private pinned(url: string) {
@@ -704,12 +719,13 @@ export class ChunkStreamer<T> {
     const key = Symbol(combat ? 'combat-campus' : 'prepared-views'),
       urls = new Set(selected.map((c) => c.url)),
       total = selected.reduce((n, c) => n + (c.bytes ?? 1), 0) || 1;
+    const alreadyPinned=new Set(this.pinnedUrls);
     this.leases.set(key, urls);
     if(combat){this.combatLeases.add(key);this.geometryDirty=true;this.cachedStatus=null;}
     this.rebuildPins();
     for (const c of selected) {
       this.lastWanted.set(c.url, this.now());
-      this.failures.delete(c.url);
+      if(!alreadyPinned.has(c.url))this.clearFailure(c.url);
     }
     let released = false;
     const release = () => {
@@ -761,11 +777,12 @@ export class ChunkStreamer<T> {
           lastProgress = progress;
           onProgress?.(progress);
         }
-        if (selected.some((c) => this.failures.has(c.url))) {
+        const failed=selected.find(c=>this.terminalFailure(c.url));
+        if (failed) {
           settled = true;
           cleanup();
           release();
-          reject(new Error("开场镜头资源未能载入，请重试。"));
+          reject(new Error("开场镜头资源未能载入，请重试。",{cause:this.failureErrors.get(failed.url)}));
           return;
         }
         if (selected.every((c) => this.assets.has(c.url))) {
@@ -829,6 +846,8 @@ export class ChunkStreamer<T> {
     if (!this.alive) return;
     if(typeof window!=='undefined')window.removeEventListener('qisheng:performance',this.memoryHint);
     this.alive = false;
+    for(const timer of this.retryTimers.values())clearTimeout(timer);
+    this.retryTimers.clear();this.failureErrors.clear();this.failureAttempts.clear();
     this.leases.clear();
     this.combatLeases.clear();
     this.cachedStatus=null;
